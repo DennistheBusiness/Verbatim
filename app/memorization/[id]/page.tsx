@@ -10,6 +10,7 @@ import { ButtonGroup } from "@/components/ui/button-group"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil } from "lucide-react"
+import { toast } from "sonner"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
@@ -42,7 +43,7 @@ interface MemorizationDetailPageProps {
 
 export default function MemorizationDetailPage({ params }: MemorizationDetailPageProps) {
   const { id } = use(params)
-  const { getSet, updateChunkMode, isLoaded } = useMemorization()
+  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore } = useMemorization()
   const set = getSet(id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
@@ -129,6 +130,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }
 
   const continueToEncode = () => {
+    markFamiliarizeComplete(id)
+    toast.success("Progress saved")
     setRecommendedStep("encode")
     setPageMode("chunk-select")
   }
@@ -438,6 +441,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         showBottomActions={false}
       >
         <FullFirstLetterTest 
+          setId={id}
           content={set.content}
           onBack={finishTesting}
         />
@@ -455,7 +459,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         onBack={exitTypingTest}
         showBottomActions={false}
       >
-        <TypingTest content={set.content} onBack={finishTesting} />
+        <TypingTest setId={id} content={set.content} onBack={finishTesting} />
       </SessionLayout>
     )
   }
@@ -478,6 +482,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           showBottomActions={false}
         >
           <ProgressiveChunkEncoder 
+            setId={id}
             chunk={set.content}
             chunkIndex={0}
             totalChunks={1}
@@ -545,6 +550,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         showBottomActions={false}
       >
         <ProgressiveChunkEncoder 
+          setId={id}
           chunk={currentChunk.text} 
           chunkIndex={practiceChunkIndex}
           totalChunks={chunks.length}

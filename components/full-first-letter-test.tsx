@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { Check, X, RotateCcw, Trophy, TrendingUp, BookOpen, FileText } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { useMemorization } from "@/lib/memorization-context"
+import { toast } from "sonner"
 
 interface FullFirstLetterTestProps {
+  setId: string
   content: string
   onRetry?: () => void
   onBack?: () => void
@@ -44,7 +47,8 @@ function getFeedback(accuracy: number): { label: string; color: string; icon: Re
   }
 }
 
-export function FullFirstLetterTest({ content, onRetry, onBack }: FullFirstLetterTestProps) {
+export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFirstLetterTestProps) {
+  const { updateTestScore } = useMemorization()
   const [words, setWords] = useState<WordStatus[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [correctCount, setCorrectCount] = useState(0)
@@ -141,6 +145,16 @@ export function FullFirstLetterTest({ content, onRetry, onBack }: FullFirstLette
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
+
+  // Save test score when completed
+  useEffect(() => {
+    if (isComplete && (correctCount > 0 || incorrectCount > 0)) {
+      const totalAttempts = correctCount + incorrectCount
+      const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
+      updateTestScore(setId, "firstLetter", accuracy)
+      toast.success("Progress saved")
+    }
+  }, [isComplete, correctCount, incorrectCount, setId, updateTestScore])
 
   const totalAttempts = correctCount + incorrectCount
   const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0

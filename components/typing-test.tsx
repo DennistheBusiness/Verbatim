@@ -7,8 +7,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { compareTexts, type ComparisonResult, type WordComparisonStatus } from "@/lib/text-utils"
 import { CheckCircle2, XCircle, AlertTriangle, Plus, RotateCcw, ArrowLeft, Trophy, TrendingUp, BookOpen, FileText } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { useMemorization } from "@/lib/memorization-context"
+import { toast } from "sonner"
 
 interface TypingTestProps {
+  setId: string
   content: string
   onBack: () => void
 }
@@ -51,7 +54,8 @@ function getFeedback(accuracy: number): { label: string; description: string; ic
   }
 }
 
-export function TypingTest({ content, onBack }: TypingTestProps) {
+export function TypingTest({ setId, content, onBack }: TypingTestProps) {
+  const { updateTestScore } = useMemorization()
   const [typedText, setTypedText] = useState("")
   const [result, setResult] = useState<ComparisonResult | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)
@@ -60,6 +64,10 @@ export function TypingTest({ content, onBack }: TypingTestProps) {
     const comparison = compareTexts(typedText, content)
     setResult(comparison)
     setIsSubmitted(true)
+    
+    // Save test score
+    updateTestScore(setId, "fullText", comparison.accuracy)
+    toast.success("Progress saved")
   }
 
   const handleRetry = () => {

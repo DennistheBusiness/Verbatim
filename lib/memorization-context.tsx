@@ -12,6 +12,39 @@ export interface Chunk {
   text: string
 }
 
+export interface Progress {
+  familiarizeCompleted: boolean
+  encode: {
+    stage1Completed: boolean
+    stage2Completed: boolean
+    stage3Completed: boolean
+    lastScore: number | null
+  }
+  review: {
+    completed: boolean
+    lastDifficulty: number | null
+  }
+  tests: {
+    firstLetter: {
+      bestScore: number | null
+      lastScore: number | null
+    }
+    fullText: {
+      bestScore: number | null
+      lastScore: number | null
+    }
+  }
+}
+
+export interface SessionState {
+  currentStep: "familiarize" | "encode" | "review" | "test" | null
+  currentChunkIndex: number | null
+  currentEncodeStage: 1 | 2 | 3 | null
+  lastVisitedAt: string | null
+}
+
+export type RecommendedStep = "familiarize" | "encode" | "review" | "test"
+
 export interface MemorizationSet {
   id: string
   title: string
@@ -20,6 +53,9 @@ export interface MemorizationSet {
   updatedAt: string
   chunkMode: ChunkMode
   chunks: Chunk[]
+  progress: Progress
+  sessionState: SessionState
+  recommendedStep: RecommendedStep
 }
 
 interface MemorizationContextType {
@@ -29,6 +65,11 @@ interface MemorizationContextType {
   getSet: (id: string) => MemorizationSet | undefined
   updateSet: (id: string, title: string, content: string) => void
   updateChunkMode: (id: string, mode: ChunkMode) => void
+  updateSessionState: (id: string, sessionState: Partial<SessionState>) => void
+  updateProgress: (id: string, updates: Partial<Progress>) => void
+  markFamiliarizeComplete: (id: string) => void
+  updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => void
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText", score: number) => void
   deleteSet: (id: string) => void
 }
 
@@ -36,6 +77,83 @@ const MemorizationContext = createContext<MemorizationContextType | undefined>(u
 
 function generateId(): string {
   return crypto.randomUUID()
+}
+
+function createInitialProgress(): Progress {
+  return {
+    familiarizeCompleted: false,
+    encode: {
+      stage1Completed: false,
+      stage2Completed: false,
+      stage3Completed: false,
+      lastScore: null,
+    },
+    review: {
+      completed: false,
+      lastDifficulty: null,
+    },
+    tests: {
+      firstLetter: {
+        bestScore: null,
+        lastScore: null,
+      },
+      fullText: {
+        bestScore: null,
+        lastScore: null,
+      },
+    },
+  }
+}
+
+function createInitialSessionState(): SessionState {
+  return {
+    currentStep: null,
+    currentChunkIndex: null,
+    currentEncodeStage: null,
+    lastVisitedAt: null,
+  }
+}
+
+/**
+ * Computes the recommended next step based on progress.
+ * Rules:
+ * - If familiarizeCompleted is false → "familiarize"
+ * - Else if any encode stage is incomplete → "encode"
+ * - Else if review.completed is false → "review"
+ * - Else → "test"
+ * 
+ * Additional rule:
+ * - If last test score < 70 → "review" instead of "test"
+ */
+function computeRecommendedStep(progress: Progress): RecommendedStep {
+  // Rule 1: Familiarize first
+  if (!progress.familiarizeCompleted) {
+    return "familiarize"
+  }
+  
+  // Rule 2: Complete all encode stages
+  if (!progress.encode.stage1Completed || 
+      !progress.encode.stage2Completed || 
+      !progress.encode.stage3Completed) {
+    return "encode"
+  }
+  
+  // Rule 3: Review needed if not completed
+  if (!progress.review.completed) {
+    return "review"
+  }
+  
+  // Rule 4: Check test scores - if any test has score < 70, recommend review
+  const firstLetterScore = progress.tests.firstLetter.lastScore
+  const fullTextScore = progress.tests.fullText.lastScore
+  
+  if ((firstLetterScore !== null && firstLetterScore < 70) || 
+      (fullTextScore !== null && fullTextScore < 70)) {
+    return "review"
+  }
+  
+  // Default: recommend test
+  return "test"
 }
 
 /**
@@ -114,16 +232,25 @@ function loadFromStorage(): MemorizationSet[] {
     const parsed = JSON.parse(stored)
     // Migrate old data format if needed
     return parsed.map((set: Partial<MemorizationSet> & { id: string; title: string; content: string; createdAt: string }) => {
-      if (!set.chunkMode || !set.chunks) {
-        const chunkMode: ChunkMode = "paragraph"
+      const needsChunkMigration = !set.chunkMode || !set.chunks
+      const needsProgressMigration = !set.progress
+      const needsSessionStateMigration = !set.sessionState
+      const needsRecommendationMigration = !set.recommendedStep
+      
+      if (needsChunkMigration || needsProgressMigration || needsSessionStateMigration || needsRecommendationMigration) {
+        const chunkMode: ChunkMode = set.chunkMode || "paragraph"
+        const progress = set.progress || createInitialProgress()
         return {
           ...set,
           updatedAt: set.updatedAt || set.createdAt,
           chunkMode,
-          chunks: generateChunks(set.content, chunkMode),
+          chunks: set.chunks || generateChunks(set.content, chunkMode),
+          progress,
+          sessionState: set.sessionState || createInitialSessionState(),
+          recommendedStep: set.recommendedStep || computeRecommendedStep(progress),
         }
       }
-      return set
+      return set as MemorizationSet
     })
   } catch {
     return []
@@ -157,6 +284,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   const addSet = useCallback((title: string, content: string, chunkMode: ChunkMode = "paragraph"): string => {
     const id = generateId()
     const now = new Date().toISOString()
+    const progress = createInitialProgress()
     
     const newSet: MemorizationSet = {
       id,
@@ -166,6 +294,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
       chunkMode,
       chunks: generateChunks(content, chunkMode),
+      progress,
+      sessionState: createInitialSessionState(),
+      recommendedStep: computeRecommendedStep(progress),
     }
     
     setSets((prev) => [newSet, ...prev])
@@ -208,12 +339,141 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
+  const updateSessionState = useCallback((id: string, sessionState: Partial<SessionState>) => {
+    setSets((prev) => prev.map((set) => {
+      if (set.id === id) {
+        return {
+          ...set,
+          sessionState: {
+            ...set.sessionState,
+            ...sessionState,
+            lastVisitedAt: new Date().toISOString(),
+          },
+          updatedAt: new Date().toISOString(),
+        }
+      }
+      return set
+    }))
+  }, [])
+
+  const updateProgress = useCallback((id: string, updates: Partial<Progress>) => {
+    setSets((prev) => prev.map((set) => {
+      if (set.id === id) {
+        const updatedProgress = {
+          ...set.progress,
+          ...updates,
+          // Deep merge for nested objects
+          encode: updates.encode ? { ...set.progress.encode, ...updates.encode } : set.progress.encode,
+          review: updates.review ? { ...set.progress.review, ...updates.review } : set.progress.review,
+          tests: updates.tests ? {
+            firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
+            fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,
+          } : set.progress.tests,
+        }
+        
+        return {
+          ...set,
+          progress: updatedProgress,
+          recommendedStep: computeRecommendedStep(updatedProgress),
+          updatedAt: new Date().toISOString(),
+          sessionState: {
+            ...set.sessionState,
+            lastVisitedAt: new Date().toISOString(),
+          },
+        }
+      }
+      return set
+    }))
+  }, [])
+
+  const markFamiliarizeComplete = useCallback((id: string) => {
+    updateProgress(id, { familiarizeCompleted: true })
+  }, [updateProgress])
+
+  const updateEncodeProgress = useCallback((id: string, stage: 1 | 2 | 3, score?: number) => {
+    setSets((prev) => prev.map((set) => {
+      if (set.id === id) {
+        const updates: Partial<Progress["encode"]> = {
+          [`stage${stage}Completed`]: true,
+        }
+        if (score !== undefined) {
+          updates.lastScore = score
+        }
+        
+        const updatedProgress = {
+          ...set.progress,
+          encode: {
+            ...set.progress.encode,
+            ...updates,
+          },
+        }
+        
+        return {
+          ...set,
+          progress: updatedProgress,
+          recommendedStep: computeRecommendedStep(updatedProgress),
+          updatedAt: new Date().toISOString(),
+          sessionState: {
+            ...set.sessionState,
+            lastVisitedAt: new Date().toISOString(),
+          },
+        }
+      }
+      return set
+    }))
+  }, [])
+
+  const updateTestScore = useCallback((id: string, testType: "firstLetter" | "fullText", score: number) => {
+    setSets((prev) => prev.map((set) => {
+      if (set.id === id) {
+        const currentBest = set.progress.tests[testType].bestScore
+        const newBest = currentBest === null ? score : Math.max(currentBest, score)
+        
+        const updatedProgress = {
+          ...set.progress,
+          tests: {
+            ...set.progress.tests,
+            [testType]: {
+              lastScore: score,
+              bestScore: newBest,
+            },
+          },
+        }
+        
+        return {
+          ...set,
+          progress: updatedProgress,
+          recommendedStep: computeRecommendedStep(updatedProgress),
+          updatedAt: new Date().toISOString(),
+          sessionState: {
+            ...set.sessionState,
+            lastVisitedAt: new Date().toISOString(),
+          },
+        }
+      }
+      return set
+    }))
+  }, [])
+
   const deleteSet = useCallback((id: string) => {
     setSets((prev) => prev.filter((set) => set.id !== id))
   }, [])
 
   return (
-    <MemorizationContext.Provider value={{ sets, isLoaded, addSet, getSet, updateSet, updateChunkMode, deleteSet }}>
+    <MemorizationContext.Provider value={{ 
+      sets, 
+      isLoaded, 
+      addSet, 
+      getSet, 
+      updateSet, 
+      updateChunkMode, 
+      updateSessionState,
+      updateProgress,
+      markFamiliarizeComplete,
+      updateEncodeProgress,
+      updateTestScore,
+      deleteSet 
+    }}>
       {children}
     </MemorizationContext.Provider>
   )
