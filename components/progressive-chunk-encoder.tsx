@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { Check, X, Trophy, ArrowRight, Sparkles, Target } from "lucide-react"
+import { useMemorization } from "@/lib/memorization-context"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 
 interface ProgressiveChunkEncoderProps {
+  setId: string
   chunk: string
   chunkIndex: number
   totalChunks: number
@@ -43,6 +46,7 @@ interface LevelResults {
 }
 
 export function ProgressiveChunkEncoder({
+  setId,
   chunk,
   chunkIndex,
   totalChunks,
@@ -52,6 +56,7 @@ export function ProgressiveChunkEncoder({
   onBackToDetail,
   hasNextChunk = false,
 }: ProgressiveChunkEncoderProps) {
+  const { updateEncodeProgress } = useMemorization()
   const [currentLevel, setCurrentLevel] = useState<Level>(1)
   const [words, setWords] = useState<WordStatus[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -251,6 +256,13 @@ export function ProgressiveChunkEncoder({
   }, [isLevelComplete, correctCount, incorrectCount, currentLevel])
 
   const handleContinueToNextLevel = () => {
+    // Save progress for the completed level
+    const completedLevelResult = levelResults[currentLevel]
+    if (completedLevelResult) {
+      updateEncodeProgress(setId, currentLevel, completedLevelResult.accuracy)
+      toast.success("Progress saved")
+    }
+    
     setShowSuccessDialog(false)
     if (currentLevel < 3) {
       setCurrentLevel(((currentLevel + 1) as Level))
