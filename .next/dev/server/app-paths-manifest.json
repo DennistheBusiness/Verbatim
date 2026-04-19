@@ -1,3 +1,6 @@
 {
+  "/create/page": "app/create/page.js",
+  "/edit/[id]/page": "app/edit/[id]/page.js",
+  "/memorization/[id]/page": "app/memorization/[id]/page.js",
   "/page": "app/page.js"
 }

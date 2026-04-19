@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil } from "lucide-react"
 
 import { ChunkEncoder } from "@/components/chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
@@ -519,7 +519,18 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   // View mode
   return (
     <div className="flex min-h-svh flex-col">
-      <Header title={set.title} showBack />
+      <Header 
+        title={set.title} 
+        showBack 
+        action={
+          <Button variant="ghost" size="icon-sm" asChild>
+            <Link href={`/edit/${set.id}`}>
+              <Pencil className="size-4" />
+              <span className="sr-only">Edit</span>
+            </Link>
+          </Button>
+        }
+      />
       
       <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
         {/* Stats Row */}

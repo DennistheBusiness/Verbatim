@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Plus, BookOpen, Layers, Calendar } from "lucide-react"
+import { Plus, BookOpen, Layers, Calendar, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
@@ -92,40 +92,55 @@ export default function HomePage() {
             {/* Sets list */}
             <div className="flex flex-col gap-3">
               {sets.map((set) => (
-                <Link key={set.id} href={`/memorization/${set.id}`} className="group">
-                  <Card className="transition-colors hover:bg-accent/50">
-                    <CardContent className="flex flex-col gap-3 py-4">
-                      {/* Title and date row */}
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold leading-snug text-foreground">
-                          {set.title}
-                        </h3>
-                        <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="size-3" />
-                          <span>{formatDate(set.updatedAt || set.createdAt)}</span>
+                <div key={set.id} className="group relative">
+                  <Link href={`/memorization/${set.id}`} className="block">
+                    <Card className="transition-colors hover:bg-accent/50">
+                      <CardContent className="flex flex-col gap-3 py-4">
+                        {/* Title and date row */}
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="font-semibold leading-snug text-foreground pr-8">
+                            {set.title}
+                          </h3>
+                          <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                            <Calendar className="size-3" />
+                            <span>{formatDate(set.updatedAt || set.createdAt)}</span>
+                          </div>
                         </div>
-                      </div>
-                      
-                      {/* Content preview */}
-                      <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
-                        {truncateContent(set.content)}
-                      </p>
-                      
-                      {/* Metadata row */}
-                      <div className="flex items-center gap-4 pt-1">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Layers className="size-3.5" />
-                          <span>
-                            {set.chunks.length} {set.chunks.length === 1 ? "chunk" : "chunks"}
+                        
+                        {/* Content preview */}
+                        <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+                          {truncateContent(set.content)}
+                        </p>
+                        
+                        {/* Metadata row */}
+                        <div className="flex items-center gap-4 pt-1">
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Layers className="size-3.5" />
+                            <span>
+                              {set.chunks.length} {set.chunks.length === 1 ? "chunk" : "chunks"}
+                            </span>
+                          </div>
+                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
+                            {set.chunkMode}
                           </span>
                         </div>
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
-                          {set.chunkMode}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  {/* Edit button - positioned absolutely */}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    asChild
+                    className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  >
+                    <Link href={`/edit/${set.id}`}>
+                      <Pencil className="size-4" />
+                      <span className="sr-only">Edit {set.title}</span>
+                    </Link>
+                  </Button>
+                </div>
               ))}
             </div>
           </>

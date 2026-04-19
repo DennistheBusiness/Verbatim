@@ -1,0 +1,234 @@
+"use client"
+
+import { use, useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
+import { Header } from "@/components/header"
+import { useMemorization } from "@/lib/memorization-context"
+import { FileText, Type, Trash2, AlertCircle } from "lucide-react"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { Spinner } from "@/components/ui/spinner"
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle,
+  AlertDialogTrigger 
+} from "@/components/ui/alert-dialog"
+import Link from "next/link"
+
+interface EditPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default function EditPage({ params }: EditPageProps) {
+  const { id } = use(params)
+  const router = useRouter()
+  const { getSet, updateSet, deleteSet, isLoaded } = useMemorization()
+  const set = getSet(id)
+  
+  const [title, setTitle] = useState("")
+  const [content, setContent] = useState("")
+  const [touched, setTouched] = useState({ title: false, content: false })
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Initialize form with existing data
+  useEffect(() => {
+    if (set) {
+      setTitle(set.title)
+      setContent(set.content)
+    }
+  }, [set])
+
+  // Live stats
+  const stats = useMemo(() => {
+    const trimmed = content.trim()
+    if (!trimmed) {
+      return { words: 0, paragraphs: 0 }
+    }
+    
+    const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
+    const paragraphs = trimmed
+      .split(/\n\s*\n|\n/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0).length
+    
+    return { words, paragraphs }
+  }, [content])
+
+  // Validation
+  const isTitleValid = title.trim().length > 0
+  const isContentValid = content.trim().length > 0
+  const isValid = isTitleValid && isContentValid
+
+  const handleSave = () => {
+    if (!isValid) return
+    
+    updateSet(id, title.trim(), content.trim())
+    router.push(`/memorization/${id}`)
+  }
+
+  const handleDelete = () => {
+    setIsDeleting(true)
+    deleteSet(id)
+    router.push("/")
+  }
+
+  const handleTitleBlur = () => setTouched((prev) => ({ ...prev, title: true }))
+  const handleContentBlur = () => setTouched((prev) => ({ ...prev, content: true }))
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-svh flex-col bg-background">
+        <Header title="Edit Memorization" showBack />
+        <main className="flex flex-1 flex-col items-center justify-center gap-3">
+          <Spinner className="size-8" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </main>
+      </div>
+    )
+  }
+
+  if (!set) {
+    return (
+      <div className="flex min-h-svh flex-col bg-background">
+        <Header title="Edit Memorization" showBack />
+        <main className="flex flex-1 flex-col items-center justify-center p-4">
+          <Empty className="max-w-sm border-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="size-14 rounded-full bg-muted text-muted-foreground [&_svg]:size-6">
+                <AlertCircle />
+              </EmptyMedia>
+              <EmptyTitle>Memorization not found</EmptyTitle>
+              <EmptyDescription>
+                This memorization set may have been deleted or the link is incorrect.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button asChild size="lg" className="w-full">
+                <Link href="/">Back to Library</Link>
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-svh flex-col bg-background">
+      <Header title="Edit Memorization" showBack />
+      
+      <main className="flex flex-1 flex-col p-4 pb-8">
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8">
+          {/* Form Fields */}
+          <FieldGroup>
+            <Field data-invalid={touched.title && !isTitleValid ? true : undefined}>
+              <FieldLabel htmlFor="title">Title</FieldLabel>
+              <Input
+                id="title"
+                placeholder="e.g., Hamlet Soliloquy, Periodic Table, Speech Opening..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                autoComplete="off"
+              />
+              {touched.title && !isTitleValid && (
+                <p className="text-sm text-destructive">Please enter a title</p>
+              )}
+            </Field>
+            
+            <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
+              <FieldLabel htmlFor="content">Content to Memorize</FieldLabel>
+              <Textarea
+                id="content"
+                placeholder="Paste or type the text you want to memorize. Line breaks will be used to separate paragraphs..."
+                className="min-h-[240px] resize-none leading-relaxed"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onBlur={handleContentBlur}
+              />
+              <FieldDescription>
+                Separate paragraphs with blank lines for better chunking
+              </FieldDescription>
+              {touched.content && !isContentValid && (
+                <p className="text-sm text-destructive">Please enter some content</p>
+              )}
+            </Field>
+          </FieldGroup>
+
+          {/* Live Stats */}
+          <div className="flex items-center gap-6 rounded-xl bg-muted/50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Type className="size-4 text-muted-foreground" />
+              <span className="text-sm">
+                <span className="font-medium tabular-nums">{stats.words}</span>
+                <span className="text-muted-foreground"> word{stats.words !== 1 ? "s" : ""}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <FileText className="size-4 text-muted-foreground" />
+              <span className="text-sm">
+                <span className="font-medium tabular-nums">{stats.paragraphs}</span>
+                <span className="text-muted-foreground"> paragraph{stats.paragraphs !== 1 ? "s" : ""}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1 min-h-4" />
+
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-3">
+            <Button 
+              onClick={handleSave} 
+              disabled={!isValid}
+              className="w-full"
+              size="lg"
+            >
+              Save Changes
+            </Button>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  size="lg"
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="size-4" />
+                  Delete Memorization
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Memorization?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete "{set.title}" and all associated progress. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDelete}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

@@ -131,6 +131,22 @@ function MemorizationProvider({ children }) {
     }, [
         sets
     ]);
+    const updateSet = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])((id, title, content)=>{
+        setSets((prev)=>prev.map((set)=>{
+                if (set.id === id) {
+                    const hasContentChanged = set.content !== content;
+                    const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks;
+                    return {
+                        ...set,
+                        title,
+                        content,
+                        chunks,
+                        updatedAt: new Date().toISOString()
+                    };
+                }
+                return set;
+            }));
+    }, []);
     const updateChunkMode = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])((id, mode)=>{
         setSets((prev)=>prev.map((set)=>{
                 if (set.id === id && set.chunkMode !== mode) {
@@ -153,13 +169,14 @@ function MemorizationProvider({ children }) {
             isLoaded,
             addSet,
             getSet,
+            updateSet,
             updateChunkMode,
             deleteSet
         },
         children: children
     }, void 0, false, {
         fileName: "[project]/lib/memorization-context.tsx",
-        lineNumber: 198,
+        lineNumber: 217,
         columnNumber: 5
     }, this);
 }

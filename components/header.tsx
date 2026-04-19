@@ -4,14 +4,16 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { type ReactNode } from "react"
 
 interface HeaderProps {
   title: string
   showBack?: boolean
   onBack?: () => void
+  action?: ReactNode
 }
 
-export function Header({ title, showBack = false, onBack }: HeaderProps) {
+export function Header({ title, showBack = false, onBack, action }: HeaderProps) {
   const pathname = usePathname()
   const isHome = pathname === "/"
 
@@ -33,7 +35,12 @@ export function Header({ title, showBack = false, onBack }: HeaderProps) {
             </Button>
           )
         )}
-        <h1 className="text-lg font-semibold truncate">{title}</h1>
+        <h1 className="text-lg font-semibold truncate flex-1">{title}</h1>
+        {action && (
+          <div className="shrink-0">
+            {action}
+          </div>
+        )}
       </div>
     </header>
   )
