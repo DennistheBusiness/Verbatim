@@ -20,10 +20,6 @@ export interface Progress {
     stage3Completed: boolean
     lastScore: number | null
   }
-  review: {
-    completed: boolean
-    lastDifficulty: number | null
-  }
   tests: {
     firstLetter: {
       bestScore: number | null
@@ -37,13 +33,13 @@ export interface Progress {
 }
 
 export interface SessionState {
-  currentStep: "familiarize" | "encode" | "review" | "test" | null
+  currentStep: "familiarize" | "encode" | "test" | null
   currentChunkIndex: number | null
   currentEncodeStage: 1 | 2 | 3 | null
   lastVisitedAt: string | null
 }
 
-export type RecommendedStep = "familiarize" | "encode" | "review" | "test"
+export type RecommendedStep = "familiarize" | "encode" | "test"
 
 export interface MemorizationSet {
   id: string
@@ -88,10 +84,6 @@ function createInitialProgress(): Progress {
       stage3Completed: false,
       lastScore: null,
     },
-    review: {
-      completed: false,
-      lastDifficulty: null,
-    },
     tests: {
       firstLetter: {
         bestScore: null,
@@ -119,11 +111,10 @@ function createInitialSessionState(): SessionState {
  * Rules:
  * - If familiarizeCompleted is false → "familiarize"
  * - Else if any encode stage is incomplete → "encode"
- * - Else if review.completed is false → "review"
  * - Else → "test"
  * 
  * Additional rule:
- * - If last test score < 70 → "review" instead of "test"
+ * - If last test score < 70 → "encode" instead of "test"
  */
 function computeRecommendedStep(progress: Progress): RecommendedStep {
   // Rule 1: Familiarize first
@@ -138,18 +129,13 @@ function computeRecommendedStep(progress: Progress): RecommendedStep {
     return "encode"
   }
   
-  // Rule 3: Review needed if not completed
-  if (!progress.review.completed) {
-    return "review"
-  }
-  
-  // Rule 4: Check test scores - if any test has score < 70, recommend review
+  // Rule 3: Check test scores - if any test has score < 70, recommend encode again
   const firstLetterScore = progress.tests.firstLetter.lastScore
   const fullTextScore = progress.tests.fullText.lastScore
   
   if ((firstLetterScore !== null && firstLetterScore < 70) || 
       (fullTextScore !== null && fullTextScore < 70)) {
-    return "review"
+    return "encode"
   }
   
   // Default: recommend test
@@ -364,7 +350,6 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           ...updates,
           // Deep merge for nested objects
           encode: updates.encode ? { ...set.progress.encode, ...updates.encode } : set.progress.encode,
-          review: updates.review ? { ...set.progress.review, ...updates.review } : set.progress.review,
           tests: updates.tests ? {
             firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
             fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,

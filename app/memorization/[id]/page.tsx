@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
-import { GuidedFlow, type FlowStep } from "@/components/guided-flow"
 import { SessionLayout } from "@/components/session-layout"
 
 type PageMode = "view" | "familiarize" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test"
@@ -43,11 +44,10 @@ interface MemorizationDetailPageProps {
 
 export default function MemorizationDetailPage({ params }: MemorizationDetailPageProps) {
   const { id } = use(params)
-  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore } = useMemorization()
+  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState } = useMemorization()
   const set = getSet(id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
-  const [recommendedStep, setRecommendedStep] = useState<FlowStep>("familiarize")
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
 
   const handleChunkModeChange = (mode: ChunkMode) => {
@@ -101,6 +101,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const startPractice = (index: number) => {
     setPracticeChunkIndex(index)
     setPageMode("practice")
+    updateSessionState(id, {
+      currentStep: "encode",
+      currentChunkIndex: index,
+    })
   }
 
   const exitPractice = () => {
@@ -111,33 +115,47 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const finishEncoding = () => {
     setPracticeChunkIndex(null)
     setPageMode("view")
-    setRecommendedStep("test")
+    updateSessionState(id, {
+      currentStep: null,
+      currentChunkIndex: null,
+      currentEncodeStage: null,
+    })
   }
 
   const continueFromEncodeToTest = () => {
     setPracticeChunkIndex(null)
-    setRecommendedStep("test")
     setPageMode("test-select")
   }
 
   const handleFamiliarize = () => {
     setPageMode("familiarize")
+    updateSessionState(id, {
+      currentStep: "familiarize",
+      currentChunkIndex: null,
+      currentEncodeStage: null,
+    })
   }
 
   const exitFamiliarize = () => {
     setPageMode("view")
-    setRecommendedStep("encode")
+    updateSessionState(id, {
+      currentStep: null,
+    })
   }
 
   const continueToEncode = () => {
     markFamiliarizeComplete(id)
     toast.success("Progress saved")
-    setRecommendedStep("encode")
     setPageMode("chunk-select")
   }
 
   const handleEncode = () => {
     setPageMode("chunk-select")
+    updateSessionState(id, {
+      currentStep: "encode",
+      currentChunkIndex: null,
+      currentEncodeStage: null,
+    })
   }
 
   const exitChunkSelect = () => {
@@ -146,6 +164,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const handleTest = () => {
     setPageMode("test-select")
+    updateSessionState(id, {
+      currentStep: "test",
+      currentChunkIndex: null,
+      currentEncodeStage: null,
+    })
   }
 
   const exitTestSelect = () => {
@@ -154,6 +177,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const startFirstLetterTest = () => {
     setPageMode("first-letter-test")
+    updateSessionState(id, {
+      currentStep: "test",
+    })
   }
 
   const exitFirstLetterTest = () => {
@@ -162,15 +188,156 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const finishTesting = () => {
     setPageMode("view")
-    setRecommendedStep("familiarize")
+    updateSessionState(id, {
+      currentStep: null,
+    })
   }
 
   const startTypingTest = () => {
     setPageMode("typing-test")
+    updateSessionState(id, {
+      currentStep: "test",
+    })
   }
 
   const exitTypingTest = () => {
     setPageMode("test-select")
+  }
+
+  // Helper functions for progress hub
+  type StepStatus = "not-started" | "in-progress" | "complete"
+
+  const getFamiliarizeStatus = (): StepStatus => {
+    return set.progress.familiarizeCompleted ? "complete" : "not-started"
+  }
+
+  const getEncodeStatus = (): StepStatus => {
+    const { stage1Completed, stage2Completed, stage3Completed } = set.progress.encode
+    if (stage1Completed && stage2Completed && stage3Completed) return "complete"
+    if (stage1Completed || stage2Completed || stage3Completed) return "in-progress"
+    return "not-started"
+  }
+
+  const getEncodeProgress = (): string => {
+    const { stage1Completed, stage2Completed, stage3Completed } = set.progress.encode
+    const completed = [stage1Completed, stage2Completed, stage3Completed].filter(Boolean).length
+    return `${completed}/3 levels`
+  }
+
+  const getTestStatus = (): StepStatus => {
+    const { firstLetter, fullText } = set.progress.tests
+    const hasFirstLetter = firstLetter.lastScore !== null
+    const hasFullText = fullText.lastScore !== null
+    
+    if (hasFirstLetter && hasFullText) return "complete"
+    if (hasFirstLetter || hasFullText) return "in-progress"
+    return "not-started"
+  }
+
+  const getTestProgress = (): string => {
+    const { firstLetter, fullText } = set.progress.tests
+    const completed = [firstLetter.lastScore !== null, fullText.lastScore !== null].filter(Boolean).length
+    return `${completed}/2 tests`
+  }
+
+  /**
+   * Calculates overall completion percentage.
+   * Each step contributes 33.33% to the total:
+   * - Familiarize: 33.33% (complete when familiarizeCompleted = true)
+   * - Encode: 33.33% (complete when all 3 stages done)
+   * - Test: 33.33% (complete when both tests taken)
+   */
+  const getOverallCompletion = (): number => {
+    let completed = 0
+    let total = 3
+
+    if (set.progress.familiarizeCompleted) completed++
+    if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
+    
+    const { firstLetter, fullText } = set.progress.tests
+    if (firstLetter.lastScore !== null && fullText.lastScore !== null) completed++
+
+    return Math.round((completed / total) * 100)
+  }
+
+  const getLastPracticedDate = (): string | null => {
+    return set.sessionState.lastVisitedAt
+  }
+
+  const getStatusBadge = (status: StepStatus) => {
+    switch (status) {
+      case "complete":
+        return (
+          <Badge variant="default" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20">
+            Complete
+          </Badge>
+        )
+      case "in-progress":
+        return (
+          <Badge variant="default" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20">
+            In Progress
+          </Badge>
+        )
+      case "not-started":
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            Not Started
+          </Badge>
+        )
+    }
+  }
+
+  const hasResumePoint = (): boolean => {
+    const { currentStep, lastVisitedAt } = set.sessionState
+    return currentStep !== null && lastVisitedAt !== null
+  }
+
+  const handleResume = () => {
+    const { currentStep, currentChunkIndex, currentEncodeStage } = set.sessionState
+
+    if (!currentStep) {
+      // Fallback to recommended path
+      handleRecommendedPath()
+      return
+    }
+
+    switch (currentStep) {
+      case "familiarize":
+        setPageMode("familiarize")
+        break
+      
+      case "encode":
+        if (currentChunkIndex !== null) {
+          // Resume specific chunk
+          setPracticeChunkIndex(currentChunkIndex)
+          setPageMode("practice")
+        } else {
+          // Go to chunk selection
+          setPageMode("chunk-select")
+        }
+        break
+      
+      case "test":
+        setPageMode("test-select")
+        break
+      
+      default:
+        setPageMode("view")
+    }
+  }
+
+  const handleRecommendedPath = () => {
+    switch (set.recommendedStep) {
+      case "familiarize":
+        handleFamiliarize()
+        break
+      case "encode":
+        handleEncode()
+        break
+      case "test":
+        handleTest()
+        break
+    }
   }
 
   // Familiarize mode
@@ -531,7 +698,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     
     const handleNextChunk = () => {
       if (hasNextChunk) {
-        setPracticeChunkIndex(practiceChunkIndex + 1)
+        const newIndex = practiceChunkIndex + 1
+        setPracticeChunkIndex(newIndex)
+        updateSessionState(id, {
+          currentChunkIndex: newIndex,
+        })
       }
     }
 
@@ -564,7 +735,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     )
   }
 
-  // View mode
+  // View mode - Progress Hub
   return (
     <div className="flex min-h-svh flex-col">
       <Header 
@@ -581,84 +752,244 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       />
       
       <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-2">
-          <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
-            <Type className="size-4 text-muted-foreground" />
-            <span className="text-lg font-semibold tabular-nums">{wordCount}</span>
-            <span className="text-xs text-muted-foreground">Words</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
-            <Layers className="size-4 text-muted-foreground" />
-            <span className="text-lg font-semibold tabular-nums">{chunks.length}</span>
-            <span className="text-xs text-muted-foreground">Chunks</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
-            <FileText className="size-4 text-muted-foreground" />
-            <span className="text-lg font-semibold capitalize">{set.chunkMode}</span>
-            <span className="text-xs text-muted-foreground">Mode</span>
-          </div>
-        </div>
-
-        {/* Content Preview Section */}
+        {/* Overview Section */}
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Content</h2>
-            <ButtonGroup>
-              <Button
-                variant={set.chunkMode === "paragraph" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleChunkModeChange("paragraph")}
-              >
-                Paragraphs
-              </Button>
-              <Button
-                variant={set.chunkMode === "sentence" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleChunkModeChange("sentence")}
-              >
-                Sentences
-              </Button>
-            </ButtonGroup>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            {chunks.slice(0, 3).map((chunk) => (
-              <div 
-                key={chunk.id} 
-                className="flex gap-3 rounded-lg border bg-card p-4"
-              >
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                  {chunk.orderIndex + 1}
-                </span>
-                <div className="flex flex-1 flex-col gap-2">
-                  <p className="text-sm leading-relaxed line-clamp-3">{chunk.text}</p>
+          {/* Completion Progress */}
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+            <CardContent className="flex flex-col gap-4 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-medium text-muted-foreground">Overall Progress</p>
+                  <p className="text-3xl font-bold text-primary">{getOverallCompletion()}%</p>
+                </div>
+                <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+                  <Trophy className="size-8 text-primary" />
                 </div>
               </div>
-            ))}
-            {chunks.length > 3 && (
-              <p className="py-2 text-center text-sm text-muted-foreground">
-                +{chunks.length - 3} more {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length - 3 !== 1 ? "s" : ""}
-              </p>
-            )}
-          </div>
+              <Progress value={getOverallCompletion()} className="h-2" />
+            </CardContent>
+          </Card>
 
-          {/* Metadata */}
-          <p className="text-xs text-muted-foreground">
-            Created {formatDate(set.createdAt)}
-            {set.updatedAt !== set.createdAt && (
-              <> · Updated {formatDate(set.updatedAt)}</>
-            )}
-          </p>
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
+              <Type className="size-4 text-muted-foreground" />
+              <span className="text-lg font-semibold tabular-nums">{wordCount}</span>
+              <span className="text-xs text-muted-foreground">Words</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
+              <Layers className="size-4 text-muted-foreground" />
+              <span className="text-lg font-semibold tabular-nums">{chunks.length}</span>
+              <span className="text-xs text-muted-foreground">Chunks</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
+              <Clock className="size-4 text-muted-foreground" />
+              <span className="text-xs font-semibold tabular-nums">
+                {getLastPracticedDate() ? formatDate(getLastPracticedDate()!) : "Never"}
+              </span>
+              <span className="text-xs text-muted-foreground">Last practiced</span>
+            </div>
+          </div>
         </div>
 
-        {/* Practice Section */}
-        <GuidedFlow
-          recommendedStep={recommendedStep}
-          onFamiliarize={handleFamiliarize}
-          onEncode={handleEncode}
-          onTest={handleTest}
-        />
+        {/* Resume/Continue CTA */}
+        {hasResumePoint() ? (
+          <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/20">
+                  <ArrowRight className="size-6 text-primary" />
+                </div>
+                <div className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-semibold text-primary">Resume where you left off</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Last practiced {formatDate(set.sessionState.lastVisitedAt!)}
+                    </p>
+                  </div>
+                  <Button onClick={handleResume} className="w-full sm:w-auto">
+                    <ArrowRight className="size-4" />
+                    Continue Learning
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/20">
+                  <Target className="size-6 text-primary" />
+                </div>
+                <div className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-semibold text-primary">Ready to start?</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Begin with the recommended path
+                    </p>
+                  </div>
+                  <Button onClick={handleRecommendedPath} className="w-full sm:w-auto">
+                    <Target className="size-4" />
+                    Start Learning
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step Cards */}
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Learning Steps</h2>
+          
+          {/* Step 1: Familiarize */}
+          <Card className={set.recommendedStep === "familiarize" ? "border-primary ring-2 ring-primary/20" : ""}>
+            <CardContent className="flex items-start gap-4 p-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                <BookOpen className="size-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">Familiarize</h3>
+                      {getStatusBadge(getFamiliarizeStatus())}
+                    </div>
+                    <p className="text-sm text-muted-foreground">Read and absorb the content</p>
+                  </div>
+                  {getFamiliarizeStatus() === "complete" && (
+                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  )}
+                  {getFamiliarizeStatus() === "not-started" && (
+                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {getFamiliarizeStatus() === "not-started" && (
+                    <Button onClick={handleFamiliarize} size="sm" className="w-full sm:w-auto">
+                      Start
+                    </Button>
+                  )}
+                  {getFamiliarizeStatus() === "complete" && (
+                    <Button onClick={handleFamiliarize} size="sm" variant="outline" className="w-full sm:w-auto">
+                      Review Again
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Step 2: Encode */}
+          <Card className={set.recommendedStep === "encode" ? "border-primary ring-2 ring-primary/20" : ""}>
+            <CardContent className="flex items-start gap-4 p-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+                <Sparkles className="size-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">Encode</h3>
+                      {getStatusBadge(getEncodeStatus())}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Practice first-letter encoding in 3 levels
+                      {getEncodeStatus() === "in-progress" && (
+                        <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getEncodeProgress()}</span>
+                      )}
+                    </p>
+                  </div>
+                  {getEncodeStatus() === "complete" && (
+                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  )}
+                  {getEncodeStatus() === "in-progress" && (
+                    <div className="flex size-5 shrink-0 items-center justify-center">
+                      <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                    </div>
+                  )}
+                  {getEncodeStatus() === "not-started" && (
+                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {getEncodeStatus() === "not-started" && (
+                    <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
+                      Start
+                    </Button>
+                  )}
+                  {getEncodeStatus() === "in-progress" && (
+                    <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
+                      Continue
+                    </Button>
+                  )}
+                  {getEncodeStatus() === "complete" && (
+                    <Button onClick={handleEncode} size="sm" variant="outline" className="w-full sm:w-auto">
+                      Practice Again
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Step 3: Test */}
+          <Card className={set.recommendedStep === "test" ? "border-primary ring-2 ring-primary/20" : ""}>
+            <CardContent className="flex items-start gap-4 p-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                <Target className="size-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">Test</h3>
+                      {getStatusBadge(getTestStatus())}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Validate your recall ability
+                      {getTestStatus() === "in-progress" && (
+                        <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getTestProgress()}</span>
+                      )}
+                    </p>
+                  </div>
+                  {getTestStatus() === "complete" && (
+                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  )}
+                  {getTestStatus() === "in-progress" && (
+                    <div className="flex size-5 shrink-0 items-center justify-center">
+                      <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                    </div>
+                  )}
+                  {getTestStatus() === "not-started" && (
+                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {getTestStatus() === "not-started" && (
+                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
+                      Start Test
+                    </Button>
+                  )}
+                  {(getTestStatus() === "in-progress" || getTestStatus() === "complete") && (
+                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
+                      {getTestStatus() === "complete" ? "Test Again" : "Continue"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Metadata */}
+        <p className="text-xs text-center text-muted-foreground">
+          Created {formatDate(set.createdAt)}
+          {set.updatedAt !== set.createdAt && (
+            <> · Updated {formatDate(set.updatedAt)}</>
+          )}
+        </p>
       </main>
     </div>
   )
