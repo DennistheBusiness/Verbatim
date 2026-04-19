@@ -594,14 +594,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </div>
         </div>
 
-        {/* Practice Section */}
-        <GuidedFlow
-          recommendedStep={recommendedStep}
-          onFamiliarize={handleFamiliarize}
-          onEncode={handleEncode}
-          onTest={handleTest}
-        />
-
         {/* Content Preview Section */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -653,6 +645,14 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             )}
           </p>
         </div>
+
+        {/* Practice Section */}
+        <GuidedFlow
+          recommendedStep={recommendedStep}
+          onFamiliarize={handleFamiliarize}
+          onEncode={handleEncode}
+          onTest={handleTest}
+        />
       </main>
     </div>
   )

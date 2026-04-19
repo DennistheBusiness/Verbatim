@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
-import { useMemorization } from "@/lib/memorization-context"
-import { FileText, Type, Trash2, AlertCircle } from "lucide-react"
+import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
+import { FileText, Type, Trash2, AlertCircle, Layers } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { 
@@ -31,11 +33,12 @@ interface EditPageProps {
 export default function EditPage({ params }: EditPageProps) {
   const { id } = use(params)
   const router = useRouter()
-  const { getSet, updateSet, deleteSet, isLoaded } = useMemorization()
+  const { getSet, updateSet, deleteSet, isLoaded, updateChunkMode } = useMemorization()
   const set = getSet(id)
   
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
+  const [chunkMode, setChunkMode] = useState<ChunkMode>("paragraph")
   const [touched, setTouched] = useState({ title: false, content: false })
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -44,6 +47,7 @@ export default function EditPage({ params }: EditPageProps) {
     if (set) {
       setTitle(set.title)
       setContent(set.content)
+      setChunkMode(set.chunkMode)
     }
   }, [set])
 
@@ -51,7 +55,7 @@ export default function EditPage({ params }: EditPageProps) {
   const stats = useMemo(() => {
     const trimmed = content.trim()
     if (!trimmed) {
-      return { words: 0, paragraphs: 0 }
+      return { words: 0, paragraphs: 0, sentences: 0, chunks: 0 }
     }
     
     const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
@@ -60,8 +64,13 @@ export default function EditPage({ params }: EditPageProps) {
       .map((p) => p.trim())
       .filter((p) => p.length > 0).length
     
-    return { words, paragraphs }
-  }, [content])
+    const normalized = trimmed.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ")
+    const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0).length
+    
+    const chunks = chunkMode === "paragraph" ? paragraphs : sentences
+    
+    return { words, paragraphs, sentences, chunks }
+  }, [content, chunkMode])
 
   // Validation
   const isTitleValid = title.trim().length > 0
@@ -72,6 +81,9 @@ export default function EditPage({ params }: EditPageProps) {
     if (!isValid) return
     
     updateSet(id, title.trim(), content.trim())
+    if (set && chunkMode !== set.chunkMode) {
+      updateChunkMode(id, chunkMode)
+    }
     router.push(`/memorization/${id}`)
   }
 
@@ -162,6 +174,31 @@ export default function EditPage({ params }: EditPageProps) {
                 <p className="text-sm text-destructive">Please enter some content</p>
               )}
             </Field>
+            
+            <Field>
+              <FieldLabel>Chunking Method</FieldLabel>
+              <RadioGroup value={chunkMode} onValueChange={(value) => setChunkMode(value as ChunkMode)}>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="paragraph" id="edit-paragraph" />
+                    <Label htmlFor="edit-paragraph" className="flex-1 cursor-pointer font-normal">
+                      <div className="font-medium">By Paragraph</div>
+                      <div className="text-xs text-muted-foreground">Split on line breaks</div>
+                    </Label>
+                  </div>
+                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="sentence" id="edit-sentence" />
+                    <Label htmlFor="edit-sentence" className="flex-1 cursor-pointer font-normal">
+                      <div className="font-medium">By Sentence</div>
+                      <div className="text-xs text-muted-foreground">Split on punctuation</div>
+                    </Label>
+                  </div>
+                </div>
+              </RadioGroup>
+              <FieldDescription>
+                Choose how to divide the content into practice chunks
+              </FieldDescription>
+            </Field>
           </FieldGroup>
 
           {/* Live Stats */}
@@ -174,10 +211,10 @@ export default function EditPage({ params }: EditPageProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <FileText className="size-4 text-muted-foreground" />
+              <Layers className="size-4 text-muted-foreground" />
               <span className="text-sm">
-                <span className="font-medium tabular-nums">{stats.paragraphs}</span>
-                <span className="text-muted-foreground"> paragraph{stats.paragraphs !== 1 ? "s" : ""}</span>
+                <span className="font-medium tabular-nums">{stats.chunks}</span>
+                <span className="text-muted-foreground"> {chunkMode === "paragraph" ? "paragraph" : "sentence"}{stats.chunks !== 1 ? "s" : ""}</span>
               </span>
             </div>
           </div>

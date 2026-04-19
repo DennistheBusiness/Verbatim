@@ -25,7 +25,7 @@ export interface MemorizationSet {
 interface MemorizationContextType {
   sets: MemorizationSet[]
   isLoaded: boolean
-  addSet: (title: string, content: string) => string
+  addSet: (title: string, content: string, chunkMode?: ChunkMode) => string
   getSet: (id: string) => MemorizationSet | undefined
   updateSet: (id: string, title: string, content: string) => void
   updateChunkMode: (id: string, mode: ChunkMode) => void
@@ -154,10 +154,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [sets, isLoaded])
 
-  const addSet = useCallback((title: string, content: string): string => {
+  const addSet = useCallback((title: string, content: string, chunkMode: ChunkMode = "paragraph"): string => {
     const id = generateId()
     const now = new Date().toISOString()
-    const chunkMode: ChunkMode = "paragraph"
     
     const newSet: MemorizationSet = {
       id,

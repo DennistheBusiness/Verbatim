@@ -6,22 +6,25 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
-import { useMemorization } from "@/lib/memorization-context"
-import { FileText, Type } from "lucide-react"
+import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
+import { FileText, Type, Layers } from "lucide-react"
 
 export default function CreatePage() {
   const router = useRouter()
   const { addSet } = useMemorization()
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
+  const [chunkMode, setChunkMode] = useState<ChunkMode>("paragraph")
   const [touched, setTouched] = useState({ title: false, content: false })
 
   // Live stats
   const stats = useMemo(() => {
     const trimmed = content.trim()
     if (!trimmed) {
-      return { words: 0, paragraphs: 0 }
+      return { words: 0, paragraphs: 0, sentences: 0, chunks: 0 }
     }
     
     const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
@@ -30,8 +33,13 @@ export default function CreatePage() {
       .map((p) => p.trim())
       .filter((p) => p.length > 0).length
     
-    return { words, paragraphs }
-  }, [content])
+    const normalized = trimmed.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ")
+    const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0).length
+    
+    const chunks = chunkMode === "paragraph" ? paragraphs : sentences
+    
+    return { words, paragraphs, sentences, chunks }
+  }, [content, chunkMode])
 
   // Validation
   const isTitleValid = title.trim().length > 0
@@ -41,7 +49,7 @@ export default function CreatePage() {
   const handleSave = () => {
     if (!isValid) return
     
-    const id = addSet(title.trim(), content.trim())
+    const id = addSet(title.trim(), content.trim(), chunkMode)
     router.push(`/memorization/${id}`)
   }
 
@@ -88,6 +96,31 @@ export default function CreatePage() {
                 <p className="text-sm text-destructive">Please enter some content</p>
               )}
             </Field>
+            
+            <Field>
+              <FieldLabel>Chunking Method</FieldLabel>
+              <RadioGroup value={chunkMode} onValueChange={(value) => setChunkMode(value as ChunkMode)}>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="paragraph" id="paragraph" />
+                    <Label htmlFor="paragraph" className="flex-1 cursor-pointer font-normal">
+                      <div className="font-medium">By Paragraph</div>
+                      <div className="text-xs text-muted-foreground">Split on line breaks</div>
+                    </Label>
+                  </div>
+                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="sentence" id="sentence" />
+                    <Label htmlFor="sentence" className="flex-1 cursor-pointer font-normal">
+                      <div className="font-medium">By Sentence</div>
+                      <div className="text-xs text-muted-foreground">Split on punctuation</div>
+                    </Label>
+                  </div>
+                </div>
+              </RadioGroup>
+              <FieldDescription>
+                Choose how to divide the content into practice chunks
+              </FieldDescription>
+            </Field>
           </FieldGroup>
 
           {/* Live Stats */}
@@ -100,10 +133,10 @@ export default function CreatePage() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <FileText className="size-4 text-muted-foreground" />
+              <Layers className="size-4 text-muted-foreground" />
               <span className="text-sm">
-                <span className="font-medium tabular-nums">{stats.paragraphs}</span>
-                <span className="text-muted-foreground"> paragraph{stats.paragraphs !== 1 ? "s" : ""}</span>
+                <span className="font-medium tabular-nums">{stats.chunks}</span>
+                <span className="text-muted-foreground"> {chunkMode === "paragraph" ? "paragraph" : "sentence"}{stats.chunks !== 1 ? "s" : ""}</span>
               </span>
             </div>
           </div>
