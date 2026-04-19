@@ -662,6 +662,10 @@
     top: calc(var(--spacing) * 2);
   }
 
+  .top-3 {
+    top: calc(var(--spacing) * 3);
+  }
+
   .top-3\.5 {
     top: calc(var(--spacing) * 3.5);
   }
@@ -3238,6 +3242,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-destructive:hover {
+      background-color: var(--destructive);
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-destructive\/90:hover {
       background-color: var(--destructive);
     }
@@ -3306,6 +3316,12 @@
   @media (hover: hover) {
     .hover\:text-accent-foreground:hover {
       color: var(--accent-foreground);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-destructive-foreground:hover {
+      color: var(--destructive-foreground);
     }
   }
 

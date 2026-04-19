@@ -27,6 +27,7 @@ interface MemorizationContextType {
   isLoaded: boolean
   addSet: (title: string, content: string) => string
   getSet: (id: string) => MemorizationSet | undefined
+  updateSet: (id: string, title: string, content: string) => void
   updateChunkMode: (id: string, mode: ChunkMode) => void
   deleteSet: (id: string) => void
 }
@@ -176,6 +177,24 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     return sets.find((set) => set.id === id)
   }, [sets])
 
+  const updateSet = useCallback((id: string, title: string, content: string) => {
+    setSets((prev) => prev.map((set) => {
+      if (set.id === id) {
+        const hasContentChanged = set.content !== content
+        const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks
+        
+        return {
+          ...set,
+          title,
+          content,
+          chunks,
+          updatedAt: new Date().toISOString(),
+        }
+      }
+      return set
+    }))
+  }, [])
+
   const updateChunkMode = useCallback((id: string, mode: ChunkMode) => {
     setSets((prev) => prev.map((set) => {
       if (set.id === id && set.chunkMode !== mode) {
@@ -195,7 +214,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <MemorizationContext.Provider value={{ sets, isLoaded, addSet, getSet, updateChunkMode, deleteSet }}>
+    <MemorizationContext.Provider value={{ sets, isLoaded, addSet, getSet, updateSet, updateChunkMode, deleteSet }}>
       {children}
     </MemorizationContext.Provider>
   )

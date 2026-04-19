@@ -144,6 +144,28 @@ function MemorizationProvider({ children }) {
     }["MemorizationProvider.useCallback[getSet]"], [
         sets
     ]);
+    const updateSet = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
+        "MemorizationProvider.useCallback[updateSet]": (id, title, content)=>{
+            setSets({
+                "MemorizationProvider.useCallback[updateSet]": (prev)=>prev.map({
+                        "MemorizationProvider.useCallback[updateSet]": (set)=>{
+                            if (set.id === id) {
+                                const hasContentChanged = set.content !== content;
+                                const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks;
+                                return {
+                                    ...set,
+                                    title,
+                                    content,
+                                    chunks,
+                                    updatedAt: new Date().toISOString()
+                                };
+                            }
+                            return set;
+                        }
+                    }["MemorizationProvider.useCallback[updateSet]"])
+            }["MemorizationProvider.useCallback[updateSet]"]);
+        }
+    }["MemorizationProvider.useCallback[updateSet]"], []);
     const updateChunkMode = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
         "MemorizationProvider.useCallback[updateChunkMode]": (id, mode)=>{
             setSets({
@@ -178,17 +200,18 @@ function MemorizationProvider({ children }) {
             isLoaded,
             addSet,
             getSet,
+            updateSet,
             updateChunkMode,
             deleteSet
         },
         children: children
     }, void 0, false, {
         fileName: "[project]/lib/memorization-context.tsx",
-        lineNumber: 198,
+        lineNumber: 217,
         columnNumber: 5
     }, this);
 }
-_s(MemorizationProvider, "7ti3OxsWWY/1vv1A+oKCjh6dGyk=");
+_s(MemorizationProvider, "C5D8bXoysLR8P1DnKo2Mi/frVuU=");
 _c = MemorizationProvider;
 function useMemorization() {
     _s1();
