@@ -15,7 +15,6 @@ import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { GuidedFlow, type FlowStep } from "@/components/guided-flow"
-import { FirstLetterPreview } from "@/components/first-letter-display"
 import { SessionLayout } from "@/components/session-layout"
 
 type PageMode = "view" | "familiarize" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test"
@@ -318,6 +317,22 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
             {/* Chunk List */}
             <div className="flex flex-col gap-3">
+              {/* Practice Entire Selection */}
+              <button
+                onClick={() => startPractice(-1)}
+                className="flex gap-3 rounded-lg border-2 border-primary/20 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                  <Layers className="size-4" />
+                </span>
+                <div className="flex flex-1 flex-col gap-1">
+                  <p className="font-medium text-primary">Practice Entire Selection</p>
+                  <p className="text-sm text-muted-foreground">
+                    Train all {chunks.length} {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""} • {wordCount} word{wordCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              </button>
+
               {chunks.map((chunk) => (
                 <button
                   key={chunk.id}
@@ -328,8 +343,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     {chunk.orderIndex + 1}
                   </span>
                   <div className="flex flex-1 flex-col gap-2">
-                    <p className="text-sm leading-relaxed line-clamp-2">{chunk.text}</p>
-                    <FirstLetterPreview text={chunk.text} />
+                    <p className="text-sm leading-relaxed line-clamp-3">{chunk.text}</p>
                   </div>
                 </button>
               ))}
@@ -448,6 +462,34 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   // Practice mode
   if (pageMode === "practice" && practiceChunkIndex !== null) {
+    // Handle entire selection mode
+    if (practiceChunkIndex === -1) {
+      const handleRetryEntireSelection = () => {
+        setPracticeChunkIndex(null)
+        setTimeout(() => setPracticeChunkIndex(-1), 0)
+      }
+
+      return (
+        <SessionLayout
+          step="Step 2"
+          title="Encode · Entire Selection"
+          setTitle={set.title}
+          onBack={exitPractice}
+          showBottomActions={false}
+        >
+          <ProgressiveChunkEncoder 
+            chunk={set.content}
+            chunkIndex={0}
+            totalChunks={1}
+            onRetryChunk={handleRetryEntireSelection}
+            onContinueToTest={continueFromEncodeToTest}
+            onBackToDetail={finishEncoding}
+            hasNextChunk={false}
+          />
+        </SessionLayout>
+      )
+    }
+
     const currentChunk = chunks[practiceChunkIndex]
     
     // Guard against invalid chunk index
@@ -592,8 +634,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   {chunk.orderIndex + 1}
                 </span>
                 <div className="flex flex-1 flex-col gap-2">
-                  <p className="text-sm leading-relaxed">{chunk.text}</p>
-                  <FirstLetterPreview text={chunk.text} />
+                  <p className="text-sm leading-relaxed line-clamp-3">{chunk.text}</p>
                 </div>
               </div>
             ))}
