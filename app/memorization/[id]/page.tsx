@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil } from "lucide-react"
 
-import { ChunkEncoder } from "@/components/chunk-encoder"
+import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { GuidedFlow, type FlowStep } from "@/components/guided-flow"
@@ -502,7 +502,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         onBack={exitPractice}
         showBottomActions={false}
       >
-        <ChunkEncoder 
+        <ProgressiveChunkEncoder 
           chunk={currentChunk.text} 
           chunkIndex={practiceChunkIndex}
           totalChunks={chunks.length}
