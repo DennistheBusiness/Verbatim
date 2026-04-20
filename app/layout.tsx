@@ -1,33 +1,39 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Montserrat, Poppins, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { MemorizationProvider } from '@/lib/memorization-context'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const montserrat = Montserrat({ 
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-montserrat"
+});
+
+const poppins = Poppins({ 
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins"
+});
+
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: "--font-inter"
+});
 
 export const metadata: Metadata = {
-  title: 'Memorize',
-  description: 'A simple app to create and manage memorization sets',
-  generator: 'v0.app',
+  title: 'Verbatim',
+  description: 'Master any text through progressive memorization techniques',
+  generator: 'Verbatim by Squared Thought',
   icons: {
     icon: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: '/verbatim-logo-icon.png',
+        type: 'image/png',
       },
     ],
-    apple: '/apple-icon.png',
+    apple: '/verbatim-logo-icon.png',
   },
 }
 
@@ -45,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background">
+    <html lang="en" className={`bg-background ${montserrat.variable} ${poppins.variable} ${inter.variable}`}>
       <body className="font-sans antialiased">
         <MemorizationProvider>
           {children}

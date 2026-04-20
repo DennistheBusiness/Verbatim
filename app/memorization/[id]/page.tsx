@@ -349,7 +349,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitFamiliarize}
         primaryAction={hasContent ? {
-          label: "Continue to Encode",
+          label: "Continue to Training",
           onClick: continueToEncode,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
@@ -551,9 +551,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <LetterText className="size-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold">First Letter Test</h3>
+                  <h3 className="font-semibold">First Letter Recall</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Type the first letter of each word to reveal it.
+                    Type first letters to reveal each word
                   </p>
                 </div>
               </div>
@@ -563,7 +563,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 </p>
               </div>
               <Button onClick={startFirstLetterTest} className="w-full">
-                Start First Letter Test
+                Begin Test
               </Button>
             </CardContent>
           </Card>
@@ -576,9 +576,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <Keyboard className="size-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold">Full Passage Test</h3>
+                  <h3 className="font-semibold">Full Recall</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Type the entire passage from memory in one go.
+                    Type the complete passage from memory
                   </p>
                 </div>
               </div>
@@ -588,7 +588,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 </p>
               </div>
               <Button onClick={startTypingTest} className="w-full">
-                Start Full Passage Test
+                Begin Test
               </Button>
             </CardContent>
           </Card>
@@ -602,7 +602,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     return (
       <SessionLayout
         step="Step 3"
-        title="First Letter Test"
+        title="First Letter Recall Test"
         setTitle={set.title}
         onBack={exitFirstLetterTest}
         showBottomActions={false}
@@ -621,7 +621,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     return (
       <SessionLayout
         step="Step 3"
-        title="Full Passage Test"
+        title="Full Recall Test"
         setTitle={set.title}
         onBack={exitTypingTest}
         showBottomActions={false}
@@ -669,7 +669,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       return (
         <SessionLayout
           step="Step 2"
-          title="Encode"
+          title="Train Your Recall"
           setTitle={set.title}
           onBack={exitPractice}
           showBottomActions={false}
@@ -868,12 +868,12 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getFamiliarizeStatus() === "not-started" && (
                     <Button onClick={handleFamiliarize} size="sm" className="w-full sm:w-auto">
-                      Start
+                      Begin Reading
                     </Button>
                   )}
                   {getFamiliarizeStatus() === "complete" && (
                     <Button onClick={handleFamiliarize} size="sm" variant="outline" className="w-full sm:w-auto">
-                      Review Again
+                      Read Again
                     </Button>
                   )}
                 </div>
@@ -891,11 +891,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Encode</h3>
+                      <h3 className="font-semibold">Train Your Recall</h3>
                       {getStatusBadge(getEncodeStatus())}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Practice first-letter encoding in 3 levels
+                      Build memory through 3 progressive levels
                       {getEncodeStatus() === "in-progress" && (
                         <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getEncodeProgress()}</span>
                       )}
@@ -916,17 +916,17 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getEncodeStatus() === "not-started" && (
                     <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      Start
+                      Begin Training
                     </Button>
                   )}
                   {getEncodeStatus() === "in-progress" && (
                     <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      Continue
+                      Continue Training
                     </Button>
                   )}
                   {getEncodeStatus() === "complete" && (
                     <Button onClick={handleEncode} size="sm" variant="outline" className="w-full sm:w-auto">
-                      Practice Again
+                      Train Again
                     </Button>
                   )}
                 </div>
@@ -944,11 +944,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Test</h3>
+                      <h3 className="font-semibold">Test Your Recall</h3>
                       {getStatusBadge(getTestStatus())}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Validate your recall ability
+                      Validate complete recall from memory
                       {getTestStatus() === "in-progress" && (
                         <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getTestProgress()}</span>
                       )}
@@ -969,12 +969,12 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getTestStatus() === "not-started" && (
                     <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      Start Test
+                      Begin Test
                     </Button>
                   )}
                   {(getTestStatus() === "in-progress" || getTestStatus() === "complete") && (
                     <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      {getTestStatus() === "complete" ? "Test Again" : "Continue"}
+                      {getTestStatus() === "complete" ? "Retest" : "Continue Testing"}
                     </Button>
                   )}
                 </div>
