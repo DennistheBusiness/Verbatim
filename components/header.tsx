@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,9 +12,10 @@ interface HeaderProps {
   showBack?: boolean
   onBack?: () => void
   action?: ReactNode
+  showBranding?: boolean
 }
 
-export function Header({ title, showBack = false, onBack, action }: HeaderProps) {
+export function Header({ title, showBack = false, onBack, action, showBranding = false }: HeaderProps) {
   const pathname = usePathname()
   const isHome = pathname === "/"
 
@@ -35,7 +37,29 @@ export function Header({ title, showBack = false, onBack, action }: HeaderProps)
             </Button>
           )
         )}
-        <h1 className="text-lg font-semibold truncate flex-1">{title}</h1>
+        
+        {showBranding ? (
+          <div className="flex items-center gap-2 flex-1">
+            <Image 
+              src="/verbatim-logo-icon.png" 
+              alt="Verbatim" 
+              width={32} 
+              height={32}
+              className="shrink-0"
+            />
+            <div className="flex flex-col">
+              <h1 className="text-lg font-bold tracking-tight leading-none bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
+                Verbatim
+              </h1>
+              <span className="text-[10px] text-muted-foreground leading-none">
+                by Squared Thought
+              </span>
+            </div>
+          </div>
+        ) : (
+          <h1 className="text-lg font-semibold truncate flex-1">{title}</h1>
+        )}
+        
         {action && (
           <div className="shrink-0">
             {action}

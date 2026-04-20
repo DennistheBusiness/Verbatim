@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, BookOpen, Layers, Calendar, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
+import { SplashScreen } from "@/components/splash-screen"
 import { useMemorization } from "@/lib/memorization-context"
 
 function formatDate(dateString: string): string {
@@ -33,11 +35,50 @@ function truncateContent(content: string, maxLength: number = 100): string {
 
 export default function HomePage() {
   const { sets, isLoaded } = useMemorization()
+  const [showSplash, setShowSplash] = useState(true)
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false)
+
+  // Check if user has seen splash this session
+  useEffect(() => {
+    const hasSeenSplash = sessionStorage.getItem("verbatim-splash-seen")
+    if (hasSeenSplash) {
+      setShowSplash(false)
+    }
+  }, [])
+
+  const handleSplashComplete = () => {
+    sessionStorage.setItem("verbatim-splash-seen", "true")
+    setShowSplash(false)
+    
+    // Check if first-time user
+    const hasSeenOnboarding = localStorage.getItem("hasSeenOnboarding")
+    if (!hasSeenOnboarding) {
+      setIsCheckingOnboarding(true)
+      // Navigate to onboarding for first-time users
+      window.location.href = "/onboarding"
+    }
+  }
+
+  // Show splash screen on first visit
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} duration={2000} />
+  }
+
+  // Show loading while checking/navigating to onboarding
+  if (isCheckingOnboarding) {
+    return (
+      <div className="flex min-h-svh flex-col bg-background">
+        <main className="flex flex-1 flex-col items-center justify-center gap-3">
+          <Spinner size="lg" />
+        </main>
+      </div>
+    )
+  }
 
   if (!isLoaded) {
     return (
       <div className="flex min-h-svh flex-col bg-background">
-        <Header title="Library" />
+        <Header title="Library" showBranding={true} />
         <main className="flex flex-1 flex-col items-center justify-center gap-3">
           <Spinner size="lg" />
           <p className="text-sm text-muted-foreground">Loading your library...</p>
@@ -48,7 +89,7 @@ export default function HomePage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <Header title="Library" />
+      <Header title="Library" showBranding={true} />
       
       <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
         {sets.length === 0 ? (
@@ -57,16 +98,19 @@ export default function HomePage() {
               <EmptyMedia variant="icon" className="size-14 rounded-full bg-primary/10 text-primary [&_svg]:size-7">
                 <BookOpen />
               </EmptyMedia>
-              <EmptyTitle className="text-xl">No memorization sets yet</EmptyTitle>
+              <EmptyTitle className="text-xl">Create your first memorization</EmptyTitle>
               <EmptyDescription className="text-base">
-                Build your memory with structured practice. Create your first set to start encoding information into long-term recall.
+                Add text and start building recall using Verbatim's system.
               </EmptyDescription>
+              <p className="text-sm text-muted-foreground/80 mt-2">
+                Works best with speeches, scripts, or structured content
+              </p>
             </EmptyHeader>
             <EmptyContent>
               <Button asChild size="lg" className="w-full max-w-xs gap-2">
                 <Link href="/create">
                   <Plus className="size-5" />
-                  Create New Memorization
+                  New Memorization
                 </Link>
               </Button>
             </EmptyContent>
