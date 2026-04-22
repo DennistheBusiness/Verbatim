@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,9 +84,30 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>Enter your information to get started</CardDescription>
+        <CardHeader className="space-y-4 text-center">
+          {/* Logo Section */}
+          <div className="flex flex-col items-center gap-3">
+            <Image 
+              src="/verbatim-logo-icon.png" 
+              alt="Verbatim Logo" 
+              width={64} 
+              height={64}
+              className="shrink-0"
+            />
+            <div className="flex flex-col gap-1">
+              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
+                Verbatim
+              </h1>
+              <span className="text-xs text-muted-foreground">
+                by Squared Thought
+              </span>
+            </div>
+          </div>
+          
+          <div className="space-y-1">
+            <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
+            <CardDescription>Enter your information to get started</CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleEmailSignup} className="space-y-4">
