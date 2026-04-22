@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
 import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
-import { FileText, Type, Layers } from "lucide-react"
+import { FileText, Type, Layers, X } from "lucide-react"
 
 export default function CreatePage() {
   const router = useRouter()
@@ -18,7 +19,28 @@ export default function CreatePage() {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [chunkMode, setChunkMode] = useState<ChunkMode>("paragraph")
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState("")
   const [touched, setTouched] = useState({ title: false, content: false })
+
+  const addTag = () => {
+    const trimmedTag = tagInput.trim()
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      setTags([...tags, trimmedTag])
+      setTagInput("")
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter((tag) => tag !== tagToRemove))
+  }
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      addTag()
+    }
+  }
 
   // Live stats
   const stats = useMemo(() => {
@@ -46,11 +68,16 @@ export default function CreatePage() {
   const isContentValid = content.trim().length > 0
   const isValid = isTitleValid && isContentValid
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) return
     
-    const id = addSet(title.trim(), content.trim(), chunkMode)
-    router.push(`/memorization/${id}`)
+    try {
+      const id = await addSet(title.trim(), content.trim(), chunkMode, tags)
+      router.push(`/memorization/${id}`)
+    } catch (error) {
+      console.error('Failed to create memorization set:', error)
+      // Toast error is already shown in addSet
+    }
   }
 
   const handleTitleBlur = () => setTouched((prev) => ({ ...prev, title: true }))
@@ -77,6 +104,42 @@ export default function CreatePage() {
               {touched.title && !isTitleValid && (
                 <p className="text-sm text-destructive">Please enter a title</p>
               )}
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="tags">Tags (optional)</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="tags"
+                  placeholder="Add tags..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  autoComplete="off"
+                />
+                <Button type="button" onClick={addTag} variant="secondary">
+                  Add
+                </Button>
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="gap-1">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="ml-0.5 hover:text-destructive"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <FieldDescription>
+                Press Enter or click Add to create a tag
+              </FieldDescription>
             </Field>
             
             <Field data-invalid={touched.content && !isContentValid ? true : undefined}>

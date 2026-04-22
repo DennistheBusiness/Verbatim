@@ -1,8 +1,9 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
-
-const STORAGE_KEY = "memorization-sets"
+import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
+import type { Database } from "@/lib/supabase/types"
 
 export type ChunkMode = "paragraph" | "sentence"
 
@@ -52,21 +53,27 @@ export interface MemorizationSet {
   progress: Progress
   sessionState: SessionState
   recommendedStep: RecommendedStep
+  tags: string[]
 }
 
 interface MemorizationContextType {
   sets: MemorizationSet[]
   isLoaded: boolean
-  addSet: (title: string, content: string, chunkMode?: ChunkMode) => string
+  isLoading: boolean
+  error: string | null
+  addSet: (title: string, content: string, chunkMode?: ChunkMode, tags?: string[]) => Promise<string>
   getSet: (id: string) => MemorizationSet | undefined
-  updateSet: (id: string, title: string, content: string) => void
-  updateChunkMode: (id: string, mode: ChunkMode) => void
-  updateSessionState: (id: string, sessionState: Partial<SessionState>) => void
-  updateProgress: (id: string, updates: Partial<Progress>) => void
-  markFamiliarizeComplete: (id: string) => void
-  updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => void
-  updateTestScore: (id: string, testType: "firstLetter" | "fullText", score: number) => void
-  deleteSet: (id: string) => void
+  updateSet: (id: string, title: string, content: string, tags?: string[]) => Promise<void>
+  updateChunkMode: (id: string, mode: ChunkMode) => Promise<void>
+  updateSessionState: (id: string, sessionState: Partial<SessionState>) => Promise<void>
+  updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
+  markFamiliarizeComplete: (id: string) => Promise<void>
+  updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => Promise<void>
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText", score: number) => Promise<void>
+  updateTags: (id: string, tags: string[]) => Promise<void>
+  deleteSet: (id: string) => Promise<void>
+  getAllTags: () => string[]
+  refreshSets: () => Promise<void>
 }
 
 const MemorizationContext = createContext<MemorizationContextType | undefined>(undefined)
@@ -209,245 +216,611 @@ function generateChunks(content: string, mode: ChunkMode): Chunk[] {
   }))
 }
 
-function loadFromStorage(): MemorizationSet[] {
-  if (typeof window === "undefined") return []
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return []
-    
-    const parsed = JSON.parse(stored)
-    // Migrate old data format if needed
-    return parsed.map((set: Partial<MemorizationSet> & { id: string; title: string; content: string; createdAt: string }) => {
-      const needsChunkMigration = !set.chunkMode || !set.chunks
-      const needsProgressMigration = !set.progress
-      const needsSessionStateMigration = !set.sessionState
-      const needsRecommendationMigration = !set.recommendedStep
-      
-      if (needsChunkMigration || needsProgressMigration || needsSessionStateMigration || needsRecommendationMigration) {
-        const chunkMode: ChunkMode = set.chunkMode || "paragraph"
-        const progress = set.progress || createInitialProgress()
-        return {
-          ...set,
-          updatedAt: set.updatedAt || set.createdAt,
-          chunkMode,
-          chunks: set.chunks || generateChunks(set.content, chunkMode),
-          progress,
-          sessionState: set.sessionState || createInitialSessionState(),
-          recommendedStep: set.recommendedStep || computeRecommendedStep(progress),
-        }
-      }
-      return set as MemorizationSet
-    })
-  } catch {
-    return []
-  }
-}
-
-function saveToStorage(sets: MemorizationSet[]) {
-  if (typeof window === "undefined") return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sets))
-  } catch {
-    // Silently fail if localStorage is unavailable
-  }
-}
-
 export function MemorizationProvider({ children }: { children: ReactNode }) {
   const [sets, setSets] = useState<MemorizationSet[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = createClient()
 
-  useEffect(() => {
-    setSets(loadFromStorage())
-    setIsLoaded(true)
-  }, [])
+  // Fetch sets from Supabase
+  const fetchSets = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
 
-  useEffect(() => {
-    if (isLoaded) {
-      saveToStorage(sets)
+      // Get current user and session
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('🔍 fetchSets - User:', user?.id, user?.email)
+      console.log('🔑 Session exists:', !!session)
+      
+      if (!user) {
+        console.log('❌ No user found in session')
+        setSets([])
+        setIsLoaded(true)
+        setIsLoading(false)
+        return
+      }
+
+      // Fetch memorization sets with chunks and tags
+      const { data: setsData, error: setsError } = await supabase
+        .from('memorization_sets')
+        .select(`
+          *,
+          chunks (id, order_index, text),
+          set_tags (
+            tag:tags (name)
+          )
+        `)
+        .order('created_at', { ascending: false })
+
+      if (setsError) throw setsError
+
+      // Transform database format to app format
+      const transformedSets: MemorizationSet[] = (setsData || []).map((set: any) => ({
+        id: set.id,
+        title: set.title,
+        content: set.content,
+        createdAt: set.created_at,
+        updatedAt: set.updated_at,
+        chunkMode: set.chunk_mode as ChunkMode,
+        chunks: (set.chunks || [])
+          .sort((a: any, b: any) => a.order_index - b.order_index)
+          .map((chunk: any) => ({
+            id: chunk.id,
+            orderIndex: chunk.order_index,
+            text: chunk.text,
+          })),
+        progress: (set.progress || createInitialProgress()) as Progress,
+        sessionState: (set.session_state || createInitialSessionState()) as SessionState,
+        recommendedStep: set.recommended_step as RecommendedStep,
+        tags: (set.set_tags || []).map((st: any) => st.tag.name),
+      }))
+
+      console.log('✅ Transformed sets:', transformedSets.length, 'sets')
+      console.log('📦 Sets data:', JSON.stringify(transformedSets, null, 2))
+      setSets(transformedSets)
+    } catch (err) {
+      console.error('Error fetching sets:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load memorization sets')
+      toast.error('Failed to load your memorization sets')
+    } finally {
+      setIsLoaded(true)
+      setIsLoading(false)
     }
-  }, [sets, isLoaded])
+  }, [supabase])
 
-  const addSet = useCallback((title: string, content: string, chunkMode: ChunkMode = "paragraph"): string => {
-    const id = generateId()
-    const now = new Date().toISOString()
-    const progress = createInitialProgress()
-    
-    const newSet: MemorizationSet = {
-      id,
-      title,
-      content,
-      createdAt: now,
-      updatedAt: now,
-      chunkMode,
-      chunks: generateChunks(content, chunkMode),
-      progress,
-      sessionState: createInitialSessionState(),
-      recommendedStep: computeRecommendedStep(progress),
+  // Initial fetch
+  useEffect(() => {
+    fetchSets()
+  }, [fetchSets])
+
+  const addSet = useCallback(async (title: string, content: string, chunkMode: ChunkMode = "paragraph", tags: string[] = []): Promise<string> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      console.log('🔍 addSet - User:', user?.id, user?.email)
+      if (!user) throw new Error('Not authenticated')
+
+      const id = generateId()
+      const now = new Date().toISOString()
+      const progress = createInitialProgress()
+      const chunks = generateChunks(content, chunkMode)
+
+      // Insert memorization set
+      const { error: setError } = await supabase
+        .from('memorization_sets')
+        .insert({
+          id,
+          user_id: user.id,
+          title,
+          content,
+          chunk_mode: chunkMode,
+          progress: progress as any,
+          session_state: createInitialSessionState() as any,
+          recommended_step: computeRecommendedStep(progress),
+          created_at: now,
+          updated_at: now,
+        })
+
+      if (setError) {
+        console.error('❌ Insert failed:', setError)
+        throw setError
+      }
+
+      // Insert chunks
+      if (chunks.length > 0) {
+        const { error: chunksError } = await supabase
+          .from('chunks')
+          .insert(
+            chunks.map(chunk => ({
+              id: chunk.id,
+              set_id: id,
+              order_index: chunk.orderIndex,
+              text: chunk.text,
+            }))
+          )
+
+        if (chunksError) throw chunksError
+      }
+
+      // Handle tags
+      if (tags.length > 0) {
+        // Get or create tags
+        for (const tagName of tags) {
+          const { data: existingTag } = await supabase
+            .from('tags')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('name', tagName)
+            .single()
+
+          let tagId: string
+
+          if (existingTag) {
+            tagId = existingTag.id
+          } else {
+            const { data: newTag, error: tagError } = await supabase
+              .from('tags')
+              .insert({ user_id: user.id, name: tagName })
+              .select('id')
+              .single()
+
+            if (tagError) throw tagError
+            tagId = newTag.id
+          }
+
+          // Create set_tag relationship
+          const { error: setTagError } = await supabase
+            .from('set_tags')
+            .insert({ set_id: id, tag_id: tagId })
+
+          if (setTagError) throw setTagError
+        }
+      }
+
+      // Refresh sets
+      await fetchSets()
+      toast.success('Memorization set created')
+      return id
+    } catch (err) {
+      console.error('Error adding set:', err)
+      toast.error('Failed to create memorization set')
+      throw err
     }
-    
-    setSets((prev) => [newSet, ...prev])
-    return id
-  }, [])
+  }, [supabase, fetchSets])
 
   const getSet = useCallback((id: string): MemorizationSet | undefined => {
     return sets.find((set) => set.id === id)
   }, [sets])
 
-  const updateSet = useCallback((id: string, title: string, content: string) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id) {
-        const hasContentChanged = set.content !== content
-        const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks
-        
-        return {
-          ...set,
+  const updateSet = useCallback(async (id: string, title: string, content: string, tags?: string[]) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const hasContentChanged = set.content !== content
+      const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks
+
+      // Update memorization set
+      const { error: updateError } = await supabase
+        .from('memorization_sets')
+        .update({
           title,
           content,
-          chunks,
-          updatedAt: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (updateError) throw updateError
+
+      // Update chunks if content changed
+      if (hasContentChanged) {
+        // Delete old chunks
+        const { error: deleteError } = await supabase
+          .from('chunks')
+          .delete()
+          .eq('set_id', id)
+
+        if (deleteError) throw deleteError
+
+        // Insert new chunks
+        if (chunks.length > 0) {
+          const { error: chunksError } = await supabase
+            .from('chunks')
+            .insert(
+              chunks.map(chunk => ({
+                id: chunk.id,
+                set_id: id,
+                order_index: chunk.orderIndex,
+                text: chunk.text,
+              }))
+            )
+
+          if (chunksError) throw chunksError
         }
       }
-      return set
-    }))
-  }, [])
 
-  const updateChunkMode = useCallback((id: string, mode: ChunkMode) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id && set.chunkMode !== mode) {
-        return {
-          ...set,
-          chunkMode: mode,
-          chunks: generateChunks(set.content, mode),
-          updatedAt: new Date().toISOString(),
+      // Update tags if provided
+      if (tags !== undefined) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('Not authenticated')
+
+        // Delete existing set_tags
+        const { error: deleteTagsError } = await supabase
+          .from('set_tags')
+          .delete()
+          .eq('set_id', id)
+
+        if (deleteTagsError) throw deleteTagsError
+
+        // Insert new tags
+        for (const tagName of tags) {
+          const { data: existingTag } = await supabase
+            .from('tags')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('name', tagName)
+            .single()
+
+          let tagId: string
+
+          if (existingTag) {
+            tagId = existingTag.id
+          } else {
+            const { data: newTag, error: tagError } = await supabase
+              .from('tags')
+              .insert({ user_id: user.id, name: tagName })
+              .select('id')
+              .single()
+
+            if (tagError) throw tagError
+            tagId = newTag.id
+          }
+
+          const { error: setTagError } = await supabase
+            .from('set_tags')
+            .insert({ set_id: id, tag_id: tagId })
+
+          if (setTagError) throw setTagError
         }
       }
-      return set
-    }))
-  }, [])
 
-  const updateSessionState = useCallback((id: string, sessionState: Partial<SessionState>) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id) {
-        return {
-          ...set,
-          sessionState: {
-            ...set.sessionState,
-            ...sessionState,
-            lastVisitedAt: new Date().toISOString(),
-          },
-          updatedAt: new Date().toISOString(),
-        }
+      await fetchSets()
+      toast.success('Memorization set updated')
+    } catch (err) {
+      console.error('Error updating set:', err)
+      toast.error('Failed to update memorization set')
+      throw err
+    }
+  }, [supabase, getSet, fetchSets])
+
+  const updateChunkMode = useCallback(async (id: string, mode: ChunkMode) => {
+    try {
+      const set = getSet(id)
+      if (!set || set.chunkMode === mode) return
+
+      const chunks = generateChunks(set.content, mode)
+
+      // Update chunk mode
+      const { error: updateError } = await supabase
+        .from('memorization_sets')
+        .update({
+          chunk_mode: mode,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (updateError) throw updateError
+
+      // Delete old chunks
+      const { error: deleteError } = await supabase
+        .from('chunks')
+        .delete()
+        .eq('set_id', id)
+
+      if (deleteError) throw deleteError
+
+      // Insert new chunks
+      if (chunks.length > 0) {
+        const { error: chunksError } = await supabase
+          .from('chunks')
+          .insert(
+            chunks.map(chunk => ({
+              id: chunk.id,
+              set_id: id,
+              order_index: chunk.orderIndex,
+              text: chunk.text,
+            }))
+          )
+
+        if (chunksError) throw chunksError
       }
-      return set
-    }))
-  }, [])
 
-  const updateProgress = useCallback((id: string, updates: Partial<Progress>) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id) {
-        const updatedProgress = {
-          ...set.progress,
-          ...updates,
-          // Deep merge for nested objects
-          encode: updates.encode ? { ...set.progress.encode, ...updates.encode } : set.progress.encode,
-          tests: updates.tests ? {
-            firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
-            fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,
-          } : set.progress.tests,
-        }
-        
-        return {
-          ...set,
-          progress: updatedProgress,
-          recommendedStep: computeRecommendedStep(updatedProgress),
-          updatedAt: new Date().toISOString(),
-          sessionState: {
-            ...set.sessionState,
-            lastVisitedAt: new Date().toISOString(),
-          },
-        }
+      await fetchSets()
+      toast.success('Chunk mode updated')
+    } catch (err) {
+      console.error('Error updating chunk mode:', err)
+      toast.error('Failed to update chunk mode')
+      throw err
+    }
+  }, [supabase, getSet, fetchSets])
+
+  const updateSessionState = useCallback(async (id: string, sessionState: Partial<SessionState>) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const updatedSessionState = {
+        ...set.sessionState,
+        ...sessionState,
+        lastVisitedAt: new Date().toISOString(),
       }
-      return set
-    }))
-  }, [])
 
-  const markFamiliarizeComplete = useCallback((id: string) => {
-    updateProgress(id, { familiarizeCompleted: true })
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          session_state: updatedSessionState as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? { ...s, sessionState: updatedSessionState } : s))
+    } catch (err) {
+      console.error('Error updating session state:', err)
+      // Silent fail for session state updates
+    }
+  }, [supabase, getSet])
+
+  const updateProgress = useCallback(async (id: string, updates: Partial<Progress>) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const updatedProgress = {
+        ...set.progress,
+        ...updates,
+        // Deep merge for nested objects
+        encode: updates.encode ? { ...set.progress.encode, ...updates.encode } : set.progress.encode,
+        tests: updates.tests ? {
+          firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
+          fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,
+        } : set.progress.tests,
+      }
+
+      const updatedSessionState = {
+        ...set.sessionState,
+        lastVisitedAt: new Date().toISOString(),
+      }
+
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          progress: updatedProgress as any,
+          session_state: updatedSessionState as any,
+          recommended_step: computeRecommendedStep(updatedProgress),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? {
+        ...s,
+        progress: updatedProgress,
+        sessionState: updatedSessionState,
+        recommendedStep: computeRecommendedStep(updatedProgress),
+      } : s))
+    } catch (err) {
+      console.error('Error updating progress:', err)
+      toast.error('Failed to update progress')
+      throw err
+    }
+  }, [supabase, getSet])
+
+  const markFamiliarizeComplete = useCallback(async (id: string) => {
+    await updateProgress(id, { familiarizeCompleted: true })
   }, [updateProgress])
 
-  const updateEncodeProgress = useCallback((id: string, stage: 1 | 2 | 3, score?: number) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id) {
-        const updates: Partial<Progress["encode"]> = {
-          [`stage${stage}Completed`]: true,
-        }
-        if (score !== undefined) {
-          updates.lastScore = score
-        }
-        
-        const updatedProgress = {
-          ...set.progress,
-          encode: {
-            ...set.progress.encode,
-            ...updates,
-          },
-        }
-        
-        return {
-          ...set,
-          progress: updatedProgress,
-          recommendedStep: computeRecommendedStep(updatedProgress),
-          updatedAt: new Date().toISOString(),
-          sessionState: {
-            ...set.sessionState,
-            lastVisitedAt: new Date().toISOString(),
-          },
-        }
-      }
-      return set
-    }))
-  }, [])
+  const updateEncodeProgress = useCallback(async (id: string, stage: 1 | 2 | 3, score?: number) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
 
-  const updateTestScore = useCallback((id: string, testType: "firstLetter" | "fullText", score: number) => {
-    setSets((prev) => prev.map((set) => {
-      if (set.id === id) {
-        const currentBest = set.progress.tests[testType].bestScore
-        const newBest = currentBest === null ? score : Math.max(currentBest, score)
-        
-        const updatedProgress = {
-          ...set.progress,
-          tests: {
-            ...set.progress.tests,
-            [testType]: {
-              lastScore: score,
-              bestScore: newBest,
-            },
-          },
-        }
-        
-        return {
-          ...set,
-          progress: updatedProgress,
-          recommendedStep: computeRecommendedStep(updatedProgress),
-          updatedAt: new Date().toISOString(),
-          sessionState: {
-            ...set.sessionState,
-            lastVisitedAt: new Date().toISOString(),
-          },
-        }
+      const updates: Partial<Progress["encode"]> = {
+        [`stage${stage}Completed`]: true,
+      } as any
+      if (score !== undefined) {
+        updates.lastScore = score
       }
-      return set
-    }))
-  }, [])
 
-  const deleteSet = useCallback((id: string) => {
-    setSets((prev) => prev.filter((set) => set.id !== id))
-  }, [])
+      const updatedProgress = {
+        ...set.progress,
+        encode: {
+          ...set.progress.encode,
+          ...updates,
+        },
+      }
+
+      const updatedSessionState = {
+        ...set.sessionState,
+        lastVisitedAt: new Date().toISOString(),
+      }
+
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          progress: updatedProgress as any,
+          session_state: updatedSessionState as any,
+          recommended_step: computeRecommendedStep(updatedProgress),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? {
+        ...s,
+        progress: updatedProgress,
+        sessionState: updatedSessionState,
+        recommendedStep: computeRecommendedStep(updatedProgress),
+      } : s))
+    } catch (err) {
+      console.error('Error updating encode progress:', err)
+      toast.error('Failed to update progress')
+      throw err
+    }
+  }, [supabase, getSet])
+
+  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText", score: number) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const currentBest = set.progress.tests[testType].bestScore
+      const newBest = currentBest === null ? score : Math.max(currentBest, score)
+
+      const updatedProgress = {
+        ...set.progress,
+        tests: {
+          ...set.progress.tests,
+          [testType]: {
+            lastScore: score,
+            bestScore: newBest,
+          },
+        },
+      }
+
+      const updatedSessionState = {
+        ...set.sessionState,
+        lastVisitedAt: new Date().toISOString(),
+      }
+
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          progress: updatedProgress as any,
+          session_state: updatedSessionState as any,
+          recommended_step: computeRecommendedStep(updatedProgress),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? {
+        ...s,
+        progress: updatedProgress,
+        sessionState: updatedSessionState,
+        recommendedStep: computeRecommendedStep(updatedProgress),
+      } : s))
+    } catch (err) {
+      console.error('Error updating test score:', err)
+      toast.error('Failed to update test score')
+      throw err
+    }
+  }, [supabase, getSet])
+
+  const deleteSet = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('memorization_sets')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      await fetchSets()
+      toast.success('Memorization set deleted')
+    } catch (err) {
+      console.error('Error deleting set:', err)
+      toast.error('Failed to delete memorization set')
+      throw err
+    }
+  }, [supabase, fetchSets])
+
+  const updateTags = useCallback(async (id: string, tags: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      // Delete existing set_tags
+      const { error: deleteError } = await supabase
+        .from('set_tags')
+        .delete()
+        .eq('set_id', id)
+
+      if (deleteError) throw deleteError
+
+      // Insert new tags
+      for (const tagName of tags) {
+        const { data: existingTag } = await supabase
+          .from('tags')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('name', tagName)
+          .single()
+
+        let tagId: string
+
+        if (existingTag) {
+          tagId = existingTag.id
+        } else {
+          const { data: newTag, error: tagError } = await supabase
+            .from('tags')
+            .insert({ user_id: user.id, name: tagName })
+            .select('id')
+            .single()
+
+          if (tagError) throw tagError
+          tagId = newTag.id
+        }
+
+        const { error: setTagError } = await supabase
+          .from('set_tags')
+          .insert({ set_id: id, tag_id: tagId })
+
+        if (setTagError) throw setTagError
+      }
+
+      await supabase
+        .from('memorization_sets')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', id)
+
+      await fetchSets()
+      toast.success('Tags updated')
+    } catch (err) {
+      console.error('Error updating tags:', err)
+      toast.error('Failed to update tags')
+      throw err
+    }
+  }, [supabase, fetchSets])
+
+  const getAllTags = useCallback((): string[] => {
+    const tagSet = new Set<string>()
+    sets.forEach((set) => {
+      set.tags.forEach((tag) => tagSet.add(tag))
+    })
+    return Array.from(tagSet).sort()
+  }, [sets])
+
+  const refreshSets = useCallback(async () => {
+    await fetchSets()
+  }, [fetchSets])
 
   return (
     <MemorizationContext.Provider value={{ 
       sets, 
-      isLoaded, 
+      isLoaded,
+      isLoading,
+      error,
       addSet, 
       getSet, 
       updateSet, 
@@ -457,7 +830,10 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       markFamiliarizeComplete,
       updateEncodeProgress,
       updateTestScore,
-      deleteSet 
+      updateTags,
+      getAllTags,
+      deleteSet,
+      refreshSets,
     }}>
       {children}
     </MemorizationContext.Provider>

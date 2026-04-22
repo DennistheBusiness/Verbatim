@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
-import { Plus, BookOpen, Layers, Calendar, Pencil } from "lucide-react"
+import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
@@ -34,9 +36,50 @@ function truncateContent(content: string, maxLength: number = 100): string {
 }
 
 export default function HomePage() {
-  const { sets, isLoaded } = useMemorization()
+  const { sets, isLoaded, getAllTags } = useMemorization()
   const [showSplash, setShowSplash] = useState(true)
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+
+  // Get all available tags
+  const allTags = useMemo(() => getAllTags(), [getAllTags])
+
+  // Filter sets based on search query and selected tags
+  const filteredSets = useMemo(() => {
+    let filtered = sets
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((set) =>
+        set.title.toLowerCase().includes(query) ||
+        set.content.toLowerCase().includes(query)
+      )
+    }
+
+    // Filter by selected tags
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter((set) =>
+        selectedTags.every((tag) => set.tags.includes(tag))
+      )
+    }
+
+    return filtered
+  }, [sets, searchQuery, selectedTags])
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : [...prev, tag]
+    )
+  }
+
+  const clearFilters = () => {
+    setSearchQuery("")
+    setSelectedTags([])
+  }
 
   // Check if user has seen splash this session
   useEffect(() => {
@@ -132,10 +175,78 @@ export default function HomePage() {
                 </Link>
               </Button>
             </div>
-            
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search memorizations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Tag Filters */}
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Filter by tag:</span>
+                {allTags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.includes(tag) ? "default" : "outline"}
+                    className="cursor-pointer transition-colors"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+                {(searchQuery || selectedTags.length > 0) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-7 gap-1 text-xs"
+                  >
+                    <X className="size-3" />
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+            )}
+
             {/* Sets list */}
-            <div className="flex flex-col gap-3">
-              {sets.map((set) => (
+            {filteredSets.length === 0 ? (
+              <Empty className="flex-1 border bg-muted/30">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon" className="size-12 rounded-full bg-muted text-muted-foreground [&_svg]:size-5">
+                    <Search />
+                  </EmptyMedia>
+                  <EmptyTitle>No memorizations found</EmptyTitle>
+                  <EmptyDescription>
+                    {searchQuery || selectedTags.length > 0
+                      ? "Try adjusting your search or filters"
+                      : "No memorizations match your criteria"}
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button onClick={clearFilters} variant="outline">
+                    Clear filters
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filteredSets.map((set) => (
                 <div key={set.id} className="group relative">
                   <Link href={`/memorization/${set.id}`} className="block">
                     <Card className="transition-colors hover:bg-accent/50">
@@ -168,6 +279,17 @@ export default function HomePage() {
                             {set.chunkMode}
                           </span>
                         </div>
+
+                        {/* Tags */}
+                        {set.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {set.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   </Link>
@@ -187,6 +309,7 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
+            )}
           </>
         )}
       </main>
