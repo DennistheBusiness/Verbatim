@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
 
-export type ChunkMode = "paragraph" | "sentence"
+export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
+export type InputMethod = "text" | "voice"
 
 export interface Chunk {
   id: string
@@ -56,6 +57,9 @@ export interface MemorizationSet {
   sessionState: SessionState
   recommendedStep: RecommendedStep
   tags: string[]
+  audioFilePath?: string | null
+  originalFilename?: string | null
+  createdFrom: InputMethod
 }
 
 interface MemorizationContextType {
@@ -63,9 +67,17 @@ interface MemorizationContextType {
   isLoaded: boolean
   isLoading: boolean
   error: string | null
-  addSet: (title: string, content: string, chunkMode?: ChunkMode, tags?: string[]) => Promise<string>
+  addSet: (
+    title: string, 
+    content: string, 
+    chunkMode?: ChunkMode, 
+    tags?: string[],
+    audioBlob?: Blob | null,
+    originalFilename?: string | null,
+    createdFrom?: InputMethod
+  ) => Promise<string>
   getSet: (id: string) => MemorizationSet | undefined
-  updateSet: (id: string, title: string, content: string, tags?: string[]) => Promise<void>
+  updateSet: (id: string, title: string, content: string, tags?: string[], audioBlob?: Blob | null, originalFilename?: string | null, createdFrom?: InputMethod) => Promise<void>
   updateChunkMode: (id: string, mode: ChunkMode) => Promise<void>
   updateSessionState: (id: string, sessionState: Partial<SessionState>) => Promise<void>
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
@@ -76,6 +88,7 @@ interface MemorizationContextType {
   updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateTags: (id: string, tags: string[]) => Promise<void>
   deleteSet: (id: string) => Promise<void>
+  deleteAudioFile: (audioFilePath: string) => Promise<void>
   getAllTags: () => string[]
   refreshSets: () => Promise<void>
 }
@@ -282,6 +295,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         sessionState: (set.session_state || createInitialSessionState()) as SessionState,
         recommendedStep: set.recommended_step as RecommendedStep,
         tags: (set.set_tags || []).map((st: any) => st.tag.name),
+        audioFilePath: set.audio_file_path || null,
+        originalFilename: set.original_filename || null,
+        createdFrom: (set.created_from || 'text') as InputMethod,
       }))
 
       console.log('✅ Transformed sets:', transformedSets.length, 'sets')
@@ -302,7 +318,15 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     fetchSets()
   }, [fetchSets])
 
-  const addSet = useCallback(async (title: string, content: string, chunkMode: ChunkMode = "paragraph", tags: string[] = []): Promise<string> => {
+  const addSet = useCallback(async (
+    title: string, 
+    content: string, 
+    chunkMode: ChunkMode = "paragraph", 
+    tags: string[] = [],
+    audioBlob: Blob | null = null,
+    originalFilename: string | null = null,
+    createdFrom: InputMethod = "text"
+  ): Promise<string> => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       console.log('🔍 addSet - User:', user?.id, user?.email)
@@ -312,6 +336,41 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const now = new Date().toISOString()
       const progress = createInitialProgress()
       const chunks = generateChunks(content, chunkMode)
+
+      let audioFilePath: string | null = null
+
+      // Upload audio file if provided
+      if (audioBlob && createdFrom === 'voice') {
+        console.log('🎙️ Attempting to upload audio:', {
+          blobSize: audioBlob.size,
+          blobType: audioBlob.type,
+          userId: user.id,
+          setId: id
+        })
+        
+        const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'mp4'
+        const fileName = `${user.id}/${id}.${fileExtension}`
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('audio-recordings')
+          .upload(fileName, audioBlob, {
+            contentType: audioBlob.type,
+            upsert: false,
+          })
+
+        if (uploadError) {
+          console.error('❌ Audio upload failed:', {
+            error: uploadError,
+            message: uploadError.message,
+            statusCode: uploadError.statusCode
+          })
+          toast.error(`Failed to upload audio: ${uploadError.message}`)
+          throw new Error(`Failed to upload audio file: ${uploadError.message}`)
+        }
+
+        audioFilePath = fileName
+        console.log('✅ Audio uploaded successfully:', { fileName, data: uploadData })
+      }
 
       // Insert memorization set
       const { error: setError } = await supabase
@@ -327,10 +386,17 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           recommended_step: computeRecommendedStep(progress),
           created_at: now,
           updated_at: now,
+          audio_file_path: audioFilePath,
+          original_filename: originalFilename,
+          created_from: createdFrom,
         })
 
       if (setError) {
         console.error('❌ Insert failed:', setError)
+        // Clean up uploaded audio if DB insert failed
+        if (audioFilePath) {
+          await supabase.storage.from('audio-recordings').remove([audioFilePath])
+        }
         throw setError
       }
 
@@ -400,13 +466,77 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     return sets.find((set) => set.id === id)
   }, [sets])
 
-  const updateSet = useCallback(async (id: string, title: string, content: string, tags?: string[]) => {
+  const updateSet = useCallback(async (
+    id: string, 
+    title: string, 
+    content: string, 
+    tags?: string[], 
+    audioBlob?: Blob | null, 
+    originalFilename?: string | null, 
+    createdFrom?: InputMethod
+  ) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
       const set = getSet(id)
       if (!set) throw new Error('Set not found')
 
       const hasContentChanged = set.content !== content
       const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks
+
+      // Handle audio file operations
+      let audioFilePath = set.audioFilePath
+      let audioOriginalFilename = set.originalFilename
+      let audioCreatedFrom = set.createdFrom
+
+      // If new audio is provided
+      if (audioBlob && createdFrom === 'voice') {
+        // Delete old audio file if it exists
+        if (set.audioFilePath) {
+          await deleteAudioFile(set.audioFilePath)
+        }
+
+        // Upload new audio
+        const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'mp4'
+        const fileName = `${user.id}/${id}.${fileExtension}`
+        
+        console.log('[updateSet] Uploading audio:', {
+          fileName,
+          blobType: audioBlob.type,
+          blobSize: audioBlob.size,
+          createdFrom
+        })
+
+        const { data, error: uploadError } = await supabase.storage
+          .from('audio-recordings')
+          .upload(fileName, audioBlob, {
+            contentType: audioBlob.type,
+            upsert: true
+          })
+
+        if (uploadError) {
+          console.error('[updateSet] Audio upload failed:', uploadError)
+          toast.error('Failed to upload audio recording')
+          throw uploadError
+        }
+
+        console.log('[updateSet] Audio uploaded successfully:', data)
+        audioFilePath = fileName
+        audioOriginalFilename = originalFilename || 'voice-recording.webm'
+        audioCreatedFrom = 'voice'
+      } 
+      // If switching from voice to text (no new audio, but createdFrom is text)
+      else if (createdFrom === 'text' && set.audioFilePath) {
+        await deleteAudioFile(set.audioFilePath)
+        audioFilePath = null
+        audioOriginalFilename = null
+        audioCreatedFrom = 'text'
+      }
+      // Update createdFrom if provided without audio changes
+      else if (createdFrom) {
+        audioCreatedFrom = createdFrom
+      }
 
       // Update memorization set
       const { error: updateError } = await supabase
@@ -414,6 +544,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         .update({
           title,
           content,
+          audio_file_path: audioFilePath,
+          original_filename: audioOriginalFilename,
+          created_from: audioCreatedFrom,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -799,6 +932,20 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
   const deleteSet = useCallback(async (id: string) => {
     try {
+      // Get the set to check for audio file
+      const set = sets.find(s => s.id === id)
+      
+      // Delete audio file if exists
+      if (set?.audioFilePath) {
+        const { error: storageError } = await supabase.storage
+          .from('audio-recordings')
+          .remove([set.audioFilePath])
+        
+        if (storageError) {
+          console.error('Failed to delete audio file:', storageError)
+        }
+      }
+
       const { error } = await supabase
         .from('memorization_sets')
         .delete()
@@ -813,7 +960,23 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       toast.error('Failed to delete memorization set')
       throw err
     }
-  }, [supabase, fetchSets])
+  }, [supabase, fetchSets, sets])
+
+  const deleteAudioFile = useCallback(async (audioFilePath: string) => {
+    try {
+      const { error } = await supabase.storage
+        .from('audio-recordings')
+        .remove([audioFilePath])
+
+      if (error) throw error
+
+      toast.success('Audio file deleted')
+    } catch (err) {
+      console.error('Error deleting audio file:', err)
+      toast.error('Failed to delete audio file')
+      throw err
+    }
+  }, [supabase])
 
   const updateTags = useCallback(async (id: string, tags: string[]) => {
     try {
@@ -905,6 +1068,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       updateTags,
       getAllTags,
       deleteSet,
+      deleteAudioFile,
       refreshSets,
     }}>
       {children}

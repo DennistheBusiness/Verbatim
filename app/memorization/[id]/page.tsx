@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { useMemorization, countWords, type ChunkMode } from "@/lib/memorization-context"
@@ -11,8 +11,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones } from "lucide-react"
 import { toast } from "sonner"
+import { AudioPlayer } from "@/components/audio-player"
+import { createClient } from "@/lib/supabase/client"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
@@ -50,6 +52,57 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const supabase = createClient()
+
+  // Fetch audio URL if available
+  useEffect(() => {
+    const fetchAudioUrl = async () => {
+      if (set?.audioFilePath) {
+        const { data } = await supabase.storage
+          .from('audio-recordings')
+          .createSignedUrl(set.audioFilePath, 60 * 60) // 1 hour expiry
+        
+        if (data?.signedUrl) {
+          setAudioUrl(data.signedUrl)
+        }
+      }
+    }
+    fetchAudioUrl()
+  }, [set?.audioFilePath, supabase])
+
+  // Text-to-speech handler
+  const handleTextToSpeech = () => {
+    if (!set?.content) return
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      return
+    }
+
+    const utterance = new SpeechSynthesisUtterance(set.content)
+    utterance.rate = 0.9
+    utterance.pitch = 1
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => {
+      setIsSpeaking(false)
+      toast.error('Text-to-speech failed')
+    }
+    
+    window.speechSynthesis.speak(utterance)
+    setIsSpeaking(true)
+  }
+
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      if (isSpeaking) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [isSpeaking])
 
   const handleChunkModeChange = (mode: ChunkMode) => {
     if (set) {
@@ -405,6 +458,58 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <p className="text-sm text-muted-foreground">
                     Take your time reading through the content. Focus on understanding the flow, key phrases, and structure.
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Audio Playback */}
+            {audioUrl && (
+              <Card className="border-blue-500/20 bg-blue-500/5">
+                <CardContent className="flex flex-col gap-3 py-4">
+                  <div className="flex items-center gap-2">
+                    <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
+                  </div>
+                  <AudioPlayer 
+                    audioUrl={audioUrl} 
+                    mode="full"
+                    onDelete={undefined}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Text-to-Speech */}
+            <Card className="border-purple-500/20 bg-purple-500/5">
+              <CardContent className="flex gap-4 py-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+                  {isSpeaking ? <VolumeX className="size-5 text-purple-600 dark:text-purple-400" /> : <Volume2 className="size-5 text-purple-600 dark:text-purple-400" />}
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-1">
+                    <h3 className="font-medium text-foreground">Listen Instead</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Have the computer read the content aloud to you. Great for auditory learners.
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handleTextToSpeech} 
+                    className="w-full sm:w-auto" 
+                    size="sm"
+                    variant={isSpeaking ? "outline" : "default"}
+                  >
+                    {isSpeaking ? (
+                      <>
+                        <VolumeX className="size-4 mr-2" />
+                        Stop Reading
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="size-4 mr-2" />
+                        Read Aloud
+                      </>
+                    )}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -830,10 +935,15 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title={set.title} 
         showBack 
         action={
-          <Button variant="ghost" size="icon-sm" asChild>
+          <Button 
+            variant="outline"
+            size="sm" 
+            className="gap-1.5"
+            asChild
+          >
             <Link href={`/edit/${set.id}`}>
-              <Pencil className="size-4" />
-              <span className="sr-only">Edit</span>
+              <Edit3 className="size-3.5" />
+              <span className="text-sm">Edit</span>
             </Link>
           </Button>
         }
@@ -956,12 +1066,14 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getFamiliarizeStatus() === "not-started" && (
                     <Button onClick={handleFamiliarize} size="sm" className="w-full sm:w-auto">
-                      Begin Reading
+                      <BookOpen className="size-4 mr-2" />
+                      Dive In
                     </Button>
                   )}
                   {getFamiliarizeStatus() === "complete" && (
                     <Button onClick={handleFamiliarize} size="sm" variant="outline" className="w-full sm:w-auto">
-                      Read Again
+                      <BookOpen className="size-4 mr-2" />
+                      Review Again
                     </Button>
                   )}
                 </div>
@@ -1004,17 +1116,20 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getEncodeStatus() === "not-started" && (
                     <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      Begin Training
+                      <Sparkles className="size-4 mr-2" />
+                      Start Training
                     </Button>
                   )}
                   {getEncodeStatus() === "in-progress" && (
                     <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      Continue Training
+                      <Sparkles className="size-4 mr-2" />
+                      Resume Training
                     </Button>
                   )}
                   {getEncodeStatus() === "complete" && (
                     <Button onClick={handleEncode} size="sm" variant="outline" className="w-full sm:w-auto">
-                      Train Again
+                      <Sparkles className="size-4 mr-2" />
+                      Practice More
                     </Button>
                   )}
                 </div>
@@ -1057,12 +1172,20 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex items-center gap-2">
                   {getTestStatus() === "not-started" && (
                     <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      Begin Test
+                      <Target className="size-4 mr-2" />
+                      Take the Test
                     </Button>
                   )}
-                  {(getTestStatus() === "in-progress" || getTestStatus() === "complete") && (
+                  {getTestStatus() === "in-progress" && (
                     <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      {getTestStatus() === "complete" ? "Retest" : "Continue Testing"}
+                      <Target className="size-4 mr-2" />
+                      Finish Testing
+                    </Button>
+                  )}
+                  {getTestStatus() === "complete" && (
+                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
+                      <Target className="size-4 mr-2" />
+                      Test Again
                     </Button>
                   )}
                 </div>
