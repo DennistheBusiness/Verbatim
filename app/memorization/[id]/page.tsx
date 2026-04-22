@@ -11,15 +11,16 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked } from "lucide-react"
 import { toast } from "sonner"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { SessionLayout } from "@/components/session-layout"
+import { FlashcardViewer } from "@/components/flashcard-viewer"
 
-type PageMode = "view" | "familiarize" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test"
+type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -44,7 +45,7 @@ interface MemorizationDetailPageProps {
 
 export default function MemorizationDetailPage({ params }: MemorizationDetailPageProps) {
   const { id } = use(params)
-  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState } = useMemorization()
+  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks } = useMemorization()
   const set = getSet(id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
@@ -144,6 +145,27 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }
 
   const continueToEncode = () => {
+    markFamiliarizeComplete(id)
+    toast.success("Progress saved")
+    setPageMode("chunk-select")
+  }
+
+  const handleFlashcards = () => {
+    setPageMode("flashcards")
+    updateSessionState(id, {
+      currentStep: "familiarize",
+      currentChunkIndex: 0,
+    })
+  }
+
+  const exitFlashcards = () => {
+    setPageMode("familiarize")
+    updateSessionState(id, {
+      currentChunkIndex: null,
+    })
+  }
+
+  const continueFromFlashcards = () => {
     markFamiliarizeComplete(id)
     toast.success("Progress saved")
     setPageMode("chunk-select")
@@ -387,6 +409,28 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </CardContent>
             </Card>
 
+            {/* Flashcard Mode CTA */}
+            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+              <CardContent className="flex gap-4 py-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                  <BookMarked className="size-5 text-primary" />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-1">
+                    <h3 className="font-medium text-foreground">Try Flashcard Mode</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
+                      {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
+                    </p>
+                  </div>
+                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
+                    Start Flashcards
+                    <ArrowRight className="size-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* View Toggle and Stats */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-center">
@@ -438,6 +482,50 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </div>
             )}
           </>
+        )}
+      </SessionLayout>
+    )
+  }
+
+  // Flashcard mode
+  if (pageMode === "flashcards") {
+    return (
+      <SessionLayout
+        step="Step 1"
+        title="Flashcards"
+        setTitle={set.title}
+        onBack={exitFlashcards}
+        primaryAction={hasContent ? {
+          label: "Continue to Training",
+          onClick: continueFromFlashcards,
+          icon: <ArrowRight className="size-4" />,
+        } : undefined}
+        secondaryAction={{
+          label: "Back to Reading",
+          onClick: exitFlashcards,
+        }}
+      >
+        {!hasContent ? (
+          <Empty className="flex-1 border-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="size-12 rounded-full bg-muted text-muted-foreground [&_svg]:size-5">
+                <FileText />
+              </EmptyMedia>
+              <EmptyTitle>No content to display</EmptyTitle>
+              <EmptyDescription>
+                This memorization set appears to be empty. Try editing the content or creating a new set.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <FlashcardViewer
+            chunks={chunks}
+            initialIndex={set.sessionState.currentChunkIndex ?? 0}
+            reviewedChunks={set.progress.reviewedChunks ?? []}
+            markedChunks={set.progress.markedChunks ?? []}
+            onUpdateReviewed={(chunkIds) => updateReviewedChunks(id, chunkIds)}
+            onUpdateMarked={(chunkIds) => updateMarkedChunks(id, chunkIds)}
+          />
         )}
       </SessionLayout>
     )

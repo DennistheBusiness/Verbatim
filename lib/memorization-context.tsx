@@ -15,6 +15,8 @@ export interface Chunk {
 
 export interface Progress {
   familiarizeCompleted: boolean
+  reviewedChunks?: string[] // Chunk IDs reviewed in flashcard mode
+  markedChunks?: string[] // Chunk IDs marked for later review
   encode: {
     stage1Completed: boolean
     stage2Completed: boolean
@@ -70,6 +72,8 @@ interface MemorizationContextType {
   markFamiliarizeComplete: (id: string) => Promise<void>
   updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => Promise<void>
   updateTestScore: (id: string, testType: "firstLetter" | "fullText", score: number) => Promise<void>
+  updateReviewedChunks: (id: string, chunkIds: string[]) => Promise<void>
+  updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateTags: (id: string, tags: string[]) => Promise<void>
   deleteSet: (id: string) => Promise<void>
   getAllTags: () => string[]
@@ -85,6 +89,8 @@ function generateId(): string {
 function createInitialProgress(): Progress {
   return {
     familiarizeCompleted: false,
+    reviewedChunks: [],
+    markedChunks: [],
     encode: {
       stage1Completed: false,
       stage2Completed: false,
@@ -727,6 +733,70 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase, getSet])
 
+  const updateReviewedChunks = useCallback(async (id: string, chunkIds: string[]) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const updatedProgress = {
+        ...set.progress,
+        reviewedChunks: chunkIds,
+      }
+
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          progress: updatedProgress as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? {
+        ...s,
+        progress: updatedProgress,
+      } : s))
+    } catch (err) {
+      console.error('Error updating reviewed chunks:', err)
+      toast.error('Failed to update reviewed chunks')
+      throw err
+    }
+  }, [supabase, getSet])
+
+  const updateMarkedChunks = useCallback(async (id: string, chunkIds: string[]) => {
+    try {
+      const set = getSet(id)
+      if (!set) throw new Error('Set not found')
+
+      const updatedProgress = {
+        ...set.progress,
+        markedChunks: chunkIds,
+      }
+
+      const { error } = await supabase
+        .from('memorization_sets')
+        .update({
+          progress: updatedProgress as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state optimistically
+      setSets(prev => prev.map(s => s.id === id ? {
+        ...s,
+        progress: updatedProgress,
+      } : s))
+    } catch (err) {
+      console.error('Error updating marked chunks:', err)
+      toast.error('Failed to update marked chunks')
+      throw err
+    }
+  }, [supabase, getSet])
+
   const deleteSet = useCallback(async (id: string) => {
     try {
       const { error } = await supabase
@@ -830,6 +900,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       markFamiliarizeComplete,
       updateEncodeProgress,
       updateTestScore,
+      updateReviewedChunks,
+      updateMarkedChunks,
       updateTags,
       getAllTags,
       deleteSet,
