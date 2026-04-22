@@ -10,8 +10,11 @@ import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
+import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
+import { VoiceRecorder } from "@/components/voice-recorder"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
-import { FileText, Type, Trash2, AlertCircle, Layers, X } from "lucide-react"
+import { FileText, Type, Trash2, AlertCircle, Layers, X, AlertTriangle, Wand2 } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { 
@@ -44,6 +47,11 @@ export default function EditPage({ params }: EditPageProps) {
   const [tagInput, setTagInput] = useState("")
   const [touched, setTouched] = useState({ title: false, content: false })
   const [isDeleting, setIsDeleting] = useState(false)
+  const [inputMethod, setInputMethod] = useState<InputMethod>("text")
+  const [contentSource, setContentSource] = useState<InputMethod>("text")
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [originalFilename, setOriginalFilename] = useState<string | null>(null)
+  const [hasExistingAudio, setHasExistingAudio] = useState(false)
 
   const addTag = () => {
     const trimmedTag = tagInput.trim()
@@ -64,6 +72,15 @@ export default function EditPage({ params }: EditPageProps) {
     }
   }
 
+  const handleVoiceRecording = (blob: Blob, transcription: string) => {
+    setContent(transcription)
+    setAudioBlob(blob)
+    setOriginalFilename("voice-recording.webm")
+    setContentSource("voice")
+    setInputMethod("text") // Switch to text tab to show content
+    setTouched((prev) => ({ ...prev, content: true }))
+  }
+
   // Initialize form with existing data
   useEffect(() => {
     if (set) {
@@ -71,6 +88,9 @@ export default function EditPage({ params }: EditPageProps) {
       setContent(set.content)
       setChunkMode(set.chunkMode)
       setTags(set.tags || [])
+      setContentSource(set.createdFrom)
+      setHasExistingAudio(!!set.audioFilePath)
+      setOriginalFilename(set.originalFilename)
     }
   }, [set])
 
@@ -100,10 +120,18 @@ export default function EditPage({ params }: EditPageProps) {
   const isContentValid = content.trim().length > 0
   const isValid = isTitleValid && isContentValid
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) return
     
-    updateSet(id, title.trim(), content.trim(), tags)
+    await updateSet(
+      id, 
+      title.trim(), 
+      content.trim(), 
+      tags,
+      audioBlob,
+      originalFilename,
+      contentSource
+    )
     if (set && chunkMode !== set.chunkMode) {
       updateChunkMode(id, chunkMode)
     }
@@ -179,24 +207,6 @@ export default function EditPage({ params }: EditPageProps) {
                 <p className="text-sm text-destructive">Please enter a title</p>
               )}
             </Field>
-            
-            <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
-              <FieldLabel htmlFor="content">Content to Memorize</FieldLabel>
-              <Textarea
-                id="content"
-                placeholder="Paste or type the text you want to memorize. Line breaks will be used to separate paragraphs..."
-                className="min-h-[240px] resize-none leading-relaxed"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onBlur={handleContentBlur}
-              />
-              <FieldDescription>
-                Separate paragraphs with blank lines for better chunking
-              </FieldDescription>
-              {touched.content && !isContentValid && (
-                <p className="text-sm text-destructive">Please enter some content</p>
-              )}
-            </Field>
 
             <Field>
               <FieldLabel htmlFor="tags">Tags (optional)</FieldLabel>
@@ -234,22 +244,98 @@ export default function EditPage({ params }: EditPageProps) {
               </FieldDescription>
             </Field>
             
+            <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
+              <FieldLabel>Content to Memorize</FieldLabel>
+              
+              {/* Show warning if replacing existing audio */}
+              {hasExistingAudio && audioBlob && (
+                <Alert className="mb-3 border-amber-500/50 bg-amber-500/10">
+                  <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-sm">
+                    You're about to replace the existing audio recording with a new one. The old recording will be permanently deleted.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <ContentInputTabs
+                activeTab={inputMethod}
+                onTabChange={(method) => {
+                  setInputMethod(method)
+                  // Clear audio if switching away from voice without saving
+                  if (method === "text" && audioBlob && !hasExistingAudio) {
+                    setAudioBlob(null)
+                    setOriginalFilename(null)
+                  }
+                }}
+                textContent={
+                  <>
+                    <Textarea
+                      id="content"
+                      placeholder="Paste or type the text you want to memorize..."
+                      className="min-h-[240px] resize-none leading-relaxed"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      onBlur={handleContentBlur}
+                    />
+                    <FieldDescription>
+                      Separate paragraphs with blank lines or use --- to create custom chunks
+                    </FieldDescription>
+                  </>
+                }
+                voiceContent={
+                  <VoiceRecorder onRecordingComplete={handleVoiceRecording} />
+                }
+              />
+              {touched.content && !isContentValid && (
+                <p className="text-sm text-destructive">Please enter some content</p>
+              )}
+            </Field>
+            
             <Field>
               <FieldLabel>Chunking Method</FieldLabel>
               <RadioGroup value={chunkMode} onValueChange={(value) => setChunkMode(value as ChunkMode)}>
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="paragraph" id="edit-paragraph" />
-                    <Label htmlFor="edit-paragraph" className="flex-1 cursor-pointer font-normal">
-                      <div className="font-medium">By Paragraph</div>
-                      <div className="text-xs text-muted-foreground">Split on line breaks</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="line" id="line" />
+                    <Label htmlFor="line" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2">
+                        <Type className="size-4" />
+                        <span className="font-medium">By Line</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Split on line breaks</div>
                     </Label>
                   </div>
-                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="sentence" id="edit-sentence" />
-                    <Label htmlFor="edit-sentence" className="flex-1 cursor-pointer font-normal">
-                      <div className="font-medium">By Sentence</div>
-                      <div className="text-xs text-muted-foreground">Split on punctuation</div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="paragraph" id="paragraph" />
+                    <Label htmlFor="paragraph" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2">
+                        <FileText className="size-4" />
+                        <span className="font-medium">By Paragraph</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Split on blank lines</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="sentence" id="sentence" />
+                    <Label htmlFor="sentence" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2">
+                        <Layers className="size-4" />
+                        <span className="font-medium">By Sentence</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Split on punctuation</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="custom" id="custom" />
+                    <Label htmlFor="custom" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2">
+                        <Wand2 className="size-4" />
+                        <span className="font-medium">Custom</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Use --- separator</div>
                     </Label>
                   </div>
                 </div>

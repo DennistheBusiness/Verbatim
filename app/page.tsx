@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
-import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X } from "lucide-react"
+import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X, Edit3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
@@ -33,6 +34,20 @@ function formatDate(dateString: string): string {
 function truncateContent(content: string, maxLength: number = 100): string {
   if (content.length <= maxLength) return content
   return content.slice(0, maxLength).trim() + "..."
+}
+
+function calculateProgress(set: any): number {
+  let completed = 0
+  let total = 6 // familiarize (1) + encode stages (3) + tests (2)
+  
+  if (set.progress.familiarizeCompleted) completed++
+  if (set.progress.encode.stage1Completed) completed++
+  if (set.progress.encode.stage2Completed) completed++
+  if (set.progress.encode.stage3Completed) completed++
+  if (set.progress.tests.firstLetter.bestScore !== null) completed++
+  if (set.progress.tests.fullText.bestScore !== null) completed++
+  
+  return Math.round((completed / total) * 100)
 }
 
 export default function HomePage() {
@@ -246,69 +261,88 @@ export default function HomePage() {
               </Empty>
             ) : (
               <div className="flex flex-col gap-3">
-                {filteredSets.map((set) => (
-                <div key={set.id} className="group relative">
-                  <Link href={`/memorization/${set.id}`} className="block">
-                    <Card className="transition-colors hover:bg-accent/50">
-                      <CardContent className="flex flex-col gap-3 py-4">
-                        {/* Title and date row */}
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="font-semibold leading-snug text-foreground pr-8">
-                            {set.title}
-                          </h3>
-                          <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                            <Calendar className="size-3" />
-                            <span>{formatDate(set.updatedAt || set.createdAt)}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Content preview */}
-                        <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
-                          {truncateContent(set.content)}
-                        </p>
-                        
-                        {/* Metadata row */}
-                        <div className="flex items-center gap-4 pt-1">
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Layers className="size-3.5" />
-                            <span>
-                              {set.chunks.length} {set.chunks.length === 1 ? "chunk" : "chunks"}
+                {filteredSets.map((set) => {
+                  const progressPercentage = calculateProgress(set)
+                  
+                  return (
+                    <Card key={set.id} className="group relative transition-colors hover:bg-accent/50">
+                      <Link href={`/memorization/${set.id}`} className="block">
+                        <CardContent className="flex flex-col gap-3 py-4">
+                          {/* Progress bar at top */}
+                          <div className="flex items-center gap-3">
+                            <Progress 
+                              value={progressPercentage} 
+                              className="h-1.5 flex-1"
+                            />
+                            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                              {progressPercentage}%
                             </span>
                           </div>
-                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
-                            {set.chunkMode}
-                          </span>
-                        </div>
-
-                        {/* Tags */}
-                        {set.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {set.tags.map((tag) => (
-                              <Badge key={tag} variant="secondary" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
+                          
+                          {/* Title and date row */}
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="font-semibold leading-snug text-foreground">
+                              {set.title}
+                            </h3>
+                            <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                              <Calendar className="size-3" />
+                              <span className="hidden sm:inline">{formatDate(set.updatedAt || set.createdAt)}</span>
+                              <span className="sm:hidden">{formatDate(set.updatedAt || set.createdAt).split(' ')[0]}</span>
+                            </div>
                           </div>
-                        )}
-                      </CardContent>
+                          
+                          {/* Content preview */}
+                          <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+                            {truncateContent(set.content)}
+                          </p>
+                          
+                          {/* Metadata and Edit button row */}
+                          <div className="flex items-center justify-between gap-3 pt-1">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Layers className="size-3.5" />
+                                <span className="tabular-nums">
+                                  {set.chunks.length}
+                                </span>
+                              </div>
+                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
+                                {set.chunkMode}
+                              </span>
+                            </div>
+                            
+                            {/* Mobile-visible edit button */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0 gap-1.5 h-8 -mr-2 opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                              asChild
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation()
+                              }}
+                            >
+                              <Link href={`/edit/${set.id}`}>
+                                <Edit3 className="size-3.5" />
+                                <span className="text-xs">Edit</span>
+                              </Link>
+                            </Button>
+                          </div>
+
+                          {/* Tags */}
+                          {set.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {set.tags.map((tag) => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Link>
                     </Card>
-                  </Link>
-                  {/* Edit button - positioned absolutely */}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    asChild
-                    className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                  >
-                    <Link href={`/edit/${set.id}`}>
-                      <Pencil className="size-4" />
-                      <span className="sr-only">Edit {set.title}</span>
-                    </Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
             )}
           </>
         )}
