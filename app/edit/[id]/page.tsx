@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
 import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
-import { FileText, Type, Trash2, AlertCircle, Layers } from "lucide-react"
+import { FileText, Type, Trash2, AlertCircle, Layers, X } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { 
@@ -39,8 +40,29 @@ export default function EditPage({ params }: EditPageProps) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [chunkMode, setChunkMode] = useState<ChunkMode>("paragraph")
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState("")
   const [touched, setTouched] = useState({ title: false, content: false })
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const addTag = () => {
+    const trimmedTag = tagInput.trim()
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      setTags([...tags, trimmedTag])
+      setTagInput("")
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter((tag) => tag !== tagToRemove))
+  }
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      addTag()
+    }
+  }
 
   // Initialize form with existing data
   useEffect(() => {
@@ -48,6 +70,7 @@ export default function EditPage({ params }: EditPageProps) {
       setTitle(set.title)
       setContent(set.content)
       setChunkMode(set.chunkMode)
+      setTags(set.tags || [])
     }
   }, [set])
 
@@ -80,7 +103,7 @@ export default function EditPage({ params }: EditPageProps) {
   const handleSave = () => {
     if (!isValid) return
     
-    updateSet(id, title.trim(), content.trim())
+    updateSet(id, title.trim(), content.trim(), tags)
     if (set && chunkMode !== set.chunkMode) {
       updateChunkMode(id, chunkMode)
     }
@@ -173,6 +196,42 @@ export default function EditPage({ params }: EditPageProps) {
               {touched.content && !isContentValid && (
                 <p className="text-sm text-destructive">Please enter some content</p>
               )}
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="tags">Tags (optional)</FieldLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="tags"
+                  placeholder="Add tags..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  autoComplete="off"
+                />
+                <Button type="button" onClick={addTag} variant="secondary">
+                  Add
+                </Button>
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="gap-1">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="ml-0.5 hover:text-destructive"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <FieldDescription>
+                Press Enter or click Add to create a tag
+              </FieldDescription>
             </Field>
             
             <Field>
