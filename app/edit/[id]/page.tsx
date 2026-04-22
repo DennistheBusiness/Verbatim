@@ -10,8 +10,9 @@ import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
-import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
-import { FileText, Type, Trash2, AlertCircle, Layers, X } from "lucide-react"
+import { ChunkPreview } from "@/components/chunk-preview"
+import { useMemorization, type ChunkMode, type Chunk } from "@/lib/memorization-context"
+import { FileText, Type, Trash2, AlertCircle, Layers, X, Wand2 } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { 
@@ -26,6 +27,97 @@ import {
   AlertDialogTrigger 
 } from "@/components/ui/alert-dialog"
 import Link from "next/link"
+
+// Import generateChunks helper
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+}
+
+function parseIntoLines(content: string): string[] {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split(/\n/)
+    .map((p) => p.trim().replace(/\s+/g, " "))
+    .filter((p) => p.length > 0)
+}
+
+function parseIntoParagraphs(content: string): string[] {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n+/)
+    .map((p) => p.trim().replace(/\s+/g, " "))
+    .filter((p) => p.length > 0)
+}
+
+function parseIntoSentences(content: string): string[] {
+  const COMMON_ABBREVIATIONS = [
+    'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sr', 'Jr',
+    'W.M', 'S.W', 'J.W', 'S.D', 'J.D', 'Sec', 'Treas',
+    'U.S', 'U.K', 'etc', 'vs', 'e.g', 'i.e', 'a.m', 'p.m'
+  ]
+  
+  let normalized = content
+    .replace(/\r\n/g, "\n")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  
+  const abbrevMap = new Map<string, string>()
+  COMMON_ABBREVIATIONS.forEach((abbr, i) => {
+    const placeholder = `__ABBR${i}__`
+    const pattern = new RegExp(`\\b${abbr.replace(/\./g, '\\.')}`, 'gi')
+    normalized = normalized.replace(pattern, placeholder)
+    abbrevMap.set(placeholder, abbr)
+  })
+  
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => {
+      let restored = s
+      abbrevMap.forEach((abbr, placeholder) => {
+        restored = restored.replace(new RegExp(placeholder, 'gi'), abbr)
+      })
+      return restored.trim()
+    })
+    .filter((s) => s.length > 0)
+  
+  return sentences
+}
+
+function parseCustomChunks(content: string): string[] {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*---\s*\n/)
+    .map((chunk) => chunk.trim().replace(/\n+/g, " ").replace(/\s+/g, " "))
+    .filter((chunk) => chunk.length > 0)
+}
+
+function generatePreviewChunks(content: string, mode: ChunkMode): Chunk[] {
+  let texts: string[]
+  
+  switch (mode) {
+    case "line":
+      texts = parseIntoLines(content)
+      break
+    case "paragraph":
+      texts = parseIntoParagraphs(content)
+      break
+    case "sentence":
+      texts = parseIntoSentences(content)
+      break
+    case "custom":
+      texts = parseCustomChunks(content)
+      break
+    default:
+      texts = parseIntoParagraphs(content)
+  }
+  
+  return texts.map((text, index) => ({
+    id: generateId(),
+    orderIndex: index,
+    text,
+  }))
+}
 
 interface EditPageProps {
   params: Promise<{ id: string }>
@@ -74,26 +166,30 @@ export default function EditPage({ params }: EditPageProps) {
     }
   }, [set])
 
-  // Live stats
+  // Live stats and preview chunks
   const stats = useMemo(() => {
     const trimmed = content.trim()
     if (!trimmed) {
-      return { words: 0, paragraphs: 0, sentences: 0, chunks: 0 }
+      return { words: 0, lines: 0, paragraphs: 0, sentences: 0, customChunks: 0 }
     }
     
     const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
-    const paragraphs = trimmed
-      .split(/\n\s*\n|\n/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0).length
+    const lines = trimmed.split(/\n/).filter((l) => l.trim().length > 0).length
+    const paragraphs = trimmed.split(/\n\s*\n+/).map((p) => p.trim()).filter((p) => p.length > 0).length
     
     const normalized = trimmed.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ")
     const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0).length
     
-    const chunks = chunkMode === "paragraph" ? paragraphs : sentences
+    const customChunks = trimmed.split(/\n\s*---\s*\n/).filter((c) => c.trim().length > 0).length
     
-    return { words, paragraphs, sentences, chunks }
+    return { words, lines, paragraphs, sentences, customChunks }
+  }, [content])
+  
+  const previewChunks = useMemo(() => {
+    return generatePreviewChunks(content, chunkMode)
   }, [content, chunkMode])
+  
+  const chunks = previewChunks.length
 
   // Validation
   const isTitleValid = title.trim().length > 0
@@ -179,24 +275,6 @@ export default function EditPage({ params }: EditPageProps) {
                 <p className="text-sm text-destructive">Please enter a title</p>
               )}
             </Field>
-            
-            <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
-              <FieldLabel htmlFor="content">Content to Memorize</FieldLabel>
-              <Textarea
-                id="content"
-                placeholder="Paste or type the text you want to memorize. Line breaks will be used to separate paragraphs..."
-                className="min-h-[240px] resize-none leading-relaxed"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onBlur={handleContentBlur}
-              />
-              <FieldDescription>
-                Separate paragraphs with blank lines for better chunking
-              </FieldDescription>
-              {touched.content && !isContentValid && (
-                <p className="text-sm text-destructive">Please enter some content</p>
-              )}
-            </Field>
 
             <Field>
               <FieldLabel htmlFor="tags">Tags (optional)</FieldLabel>
@@ -234,30 +312,108 @@ export default function EditPage({ params }: EditPageProps) {
               </FieldDescription>
             </Field>
             
+            <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
+              <FieldLabel htmlFor="content">Content to Memorize</FieldLabel>
+              <Textarea
+                id="content"
+                placeholder="Paste or type the text you want to memorize. Line breaks will be used to separate paragraphs..."
+                className="min-h-[240px] resize-none leading-relaxed"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onBlur={handleContentBlur}
+              />
+              <FieldDescription>
+                Separate paragraphs with blank lines for better chunking
+              </FieldDescription>
+              {touched.content && !isContentValid && (
+                <p className="text-sm text-destructive">Please enter some content</p>
+              )}
+            </Field>
+            
             <Field>
               <FieldLabel>Chunking Method</FieldLabel>
               <RadioGroup value={chunkMode} onValueChange={(value) => setChunkMode(value as ChunkMode)}>
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="paragraph" id="edit-paragraph" />
-                    <Label htmlFor="edit-paragraph" className="flex-1 cursor-pointer font-normal">
-                      <div className="font-medium">By Paragraph</div>
-                      <div className="text-xs text-muted-foreground">Split on line breaks</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="line" id="edit-line" />
+                    <Label htmlFor="edit-line" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2 font-medium">
+                        <Type className="size-4" />
+                        By Line
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Each line break creates a chunk</div>
                     </Label>
                   </div>
-                  <div className="flex flex-1 items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                  
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="paragraph" id="edit-paragraph" />
+                    <Label htmlFor="edit-paragraph" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2 font-medium">
+                        <FileText className="size-4" />
+                        By Paragraph
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Blank lines create chunks (double Enter)</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
                     <RadioGroupItem value="sentence" id="edit-sentence" />
                     <Label htmlFor="edit-sentence" className="flex-1 cursor-pointer font-normal">
-                      <div className="font-medium">By Sentence</div>
-                      <div className="text-xs text-muted-foreground">Split on punctuation</div>
+                      <div className="flex items-center gap-2 font-medium">
+                        <Layers className="size-4" />
+                        By Sentence
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Split on . ! ? punctuation</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                    <RadioGroupItem value="custom" id="edit-custom" />
+                    <Label htmlFor="edit-custom" className="flex-1 cursor-pointer font-normal">
+                      <div className="flex items-center gap-2 font-medium">
+                        <Wand2 className="size-4" />
+                        Custom
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Use --- separator to define chunks</div>
                     </Label>
                   </div>
                 </div>
               </RadioGroup>
+              
+              {set && chunkMode !== set.chunkMode && (
+                <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 p-3 text-sm">
+                  <AlertCircle className="size-4 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
+                  <p className="text-amber-900 dark:text-amber-200">
+                    Changing chunk mode will regenerate all chunks. Any progress will be preserved.
+                  </p>
+                </div>
+              )}
+              
+              {chunkMode === "sentence" && (
+                <div className="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/20 p-3 text-sm">
+                  <AlertCircle className="size-4 text-blue-600 dark:text-blue-500 mt-0.5 shrink-0" />
+                  <p className="text-blue-900 dark:text-blue-200">
+                    Handles abbreviations like Mr., Dr., W.M., S.W., etc.
+                  </p>
+                </div>
+              )}
+              
+              {chunkMode === "custom" && (
+                <div className="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/20 p-3 text-sm">
+                  <AlertCircle className="size-4 text-blue-600 dark:text-blue-500 mt-0.5 shrink-0" />
+                  <p className="text-blue-900 dark:text-blue-200">
+                    Type <code className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 font-mono text-xs">---</code> on its own line to manually define chunk boundaries
+                  </p>
+                </div>
+              )}
+              
               <FieldDescription>
-                Choose how to divide the content into practice chunks
+                Preview your chunks below to see how content will be divided
               </FieldDescription>
             </Field>
+            
+            {/* Chunk Preview */}
+            <ChunkPreview chunks={previewChunks} mode={chunkMode} />
           </FieldGroup>
 
           {/* Live Stats */}
@@ -272,8 +428,8 @@ export default function EditPage({ params }: EditPageProps) {
             <div className="flex items-center gap-2">
               <Layers className="size-4 text-muted-foreground" />
               <span className="text-sm">
-                <span className="font-medium tabular-nums">{stats.chunks}</span>
-                <span className="text-muted-foreground"> {chunkMode === "paragraph" ? "paragraph" : "sentence"}{stats.chunks !== 1 ? "s" : ""}</span>
+                <span className="font-medium tabular-nums">{chunks}</span>
+                <span className="text-muted-foreground"> chunk{chunks !== 1 ? "s" : ""}</span>
               </span>
             </div>
           </div>

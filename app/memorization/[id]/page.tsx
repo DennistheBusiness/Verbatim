@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
@@ -50,6 +50,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
+  const [reviewMarkedOnly, setReviewMarkedOnly] = useState(false)
 
   const handleChunkModeChange = (mode: ChunkMode) => {
     if (set) {
@@ -151,6 +152,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }
 
   const handleFlashcards = () => {
+    setReviewMarkedOnly(false)
     setPageMode("flashcards")
     updateSessionState(id, {
       currentStep: "familiarize",
@@ -169,6 +171,15 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     markFamiliarizeComplete(id)
     toast.success("Progress saved")
     setPageMode("chunk-select")
+  }
+
+  const handleReviewMarked = () => {
+    setReviewMarkedOnly(true)
+    setPageMode("flashcards")
+    updateSessionState(id, {
+      currentStep: "familiarize",
+      currentChunkIndex: 0,
+    })
   }
 
   const handleEncode = () => {
@@ -423,10 +434,18 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                       {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
                     </p>
                   </div>
-                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
-                    Start Flashcards
-                    <ArrowRight className="size-4 ml-2" />
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button onClick={handleFlashcards} className="w-full sm:flex-1" size="sm">
+                      Start Flashcards
+                      <ArrowRight className="size-4 ml-2" />
+                    </Button>
+                    {(set.progress.markedChunks?.length ?? 0) > 0 && (
+                      <Button onClick={handleReviewMarked} variant="outline" className="w-full sm:flex-1" size="sm">
+                        <BookMarked className="size-4 mr-2" />
+                        Review Marked ({set.progress.markedChunks.length})
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -525,6 +544,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             markedChunks={set.progress.markedChunks ?? []}
             onUpdateReviewed={(chunkIds) => updateReviewedChunks(id, chunkIds)}
             onUpdateMarked={(chunkIds) => updateMarkedChunks(id, chunkIds)}
+            markedOnly={reviewMarkedOnly}
           />
         )}
       </SessionLayout>
@@ -840,6 +860,34 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       />
       
       <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
+        {/* Chunk Mode Indicator */}
+        <div className="flex items-center gap-2 -mb-4">
+          {set.chunkMode === 'line' && (
+            <>
+              <Type className="size-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Chunked by line</span>
+            </>
+          )}
+          {set.chunkMode === 'paragraph' && (
+            <>
+              <FileText className="size-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Chunked by paragraph</span>
+            </>
+          )}
+          {set.chunkMode === 'sentence' && (
+            <>
+              <Layers className="size-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Chunked by sentence</span>
+            </>
+          )}
+          {set.chunkMode === 'custom' && (
+            <>
+              <Wand2 className="size-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Custom chunks</span>
+            </>
+          )}
+        </div>
+        
         {/* Overview Section */}
         <div className="flex flex-col gap-4">
           {/* Completion Progress */}

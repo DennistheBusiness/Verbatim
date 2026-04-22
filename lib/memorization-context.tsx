@@ -5,7 +5,14 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
 
-export type ChunkMode = "paragraph" | "sentence"
+export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
+
+// Common abbreviations that shouldn't trigger sentence breaks
+const COMMON_ABBREVIATIONS = [
+  'Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'Sr', 'Jr',
+  'W.M', 'S.W', 'J.W', 'S.D', 'J.D', 'Sec', 'Treas', // Masonic
+  'U.S', 'U.K', 'etc', 'vs', 'e.g', 'i.e', 'a.m', 'p.m'
+]
 
 export interface Chunk {
   id: string
@@ -156,8 +163,27 @@ function computeRecommendedStep(progress: Progress): RecommendedStep {
 }
 
 /**
+ * Parses content into lines.
+ * - Splits on any single line break
+ * - Trims whitespace from each line
+ * - Normalizes internal whitespace (multiple spaces become single space)
+ * - Ignores empty chunks
+ */
+function parseIntoLines(content: string): string[] {
+  return content
+    // Normalize line endings
+    .replace(/\r\n/g, "\n")
+    // Split on any line break
+    .split(/\n/)
+    // Trim and normalize internal whitespace
+    .map((p) => p.trim().replace(/\s+/g, " "))
+    // Filter out empty chunks
+    .filter((p) => p.length > 0)
+}
+
+/**
  * Parses content into paragraphs.
- * - Splits on one or more line breaks
+ * - Splits on blank lines (two or more line breaks)
  * - Trims whitespace from each paragraph
  * - Normalizes internal whitespace (multiple spaces become single space)
  * - Ignores empty chunks
@@ -166,8 +192,8 @@ function parseIntoParagraphs(content: string): string[] {
   return content
     // Normalize line endings
     .replace(/\r\n/g, "\n")
-    // Split on one or more line breaks (with optional whitespace between)
-    .split(/\n\s*\n|\n/)
+    // Split on blank lines (two or more line breaks with optional whitespace)
+    .split(/\n\s*\n+/)
     // Trim and normalize internal whitespace
     .map((p) => p.trim().replace(/\s+/g, " "))
     // Filter out empty chunks
@@ -177,6 +203,7 @@ function parseIntoParagraphs(content: string): string[] {
 /**
  * Parses content into sentences.
  * - Splits on sentence-ending punctuation (. ? !)
+ * - Handles common abbreviations (Mr., Dr., W.M., etc.)
  * - Preserves the punctuation with the sentence
  * - Trims whitespace from each sentence
  * - Normalizes internal whitespace
@@ -184,19 +211,59 @@ function parseIntoParagraphs(content: string): string[] {
  */
 function parseIntoSentences(content: string): string[] {
   // Normalize whitespace first (replace line breaks and multiple spaces with single space)
-  const normalized = content
+  let normalized = content
     .replace(/\r\n/g, "\n")
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
   
+  // Temporarily replace abbreviations with placeholders to avoid splitting on them
+  const abbrevMap = new Map<string, string>()
+  COMMON_ABBREVIATIONS.forEach((abbr, i) => {
+    const placeholder = `__ABBR${i}__`
+    const pattern = new RegExp(`\\b${abbr.replace(/\./g, '\\.')}`, 'gi')
+    normalized = normalized.replace(pattern, placeholder)
+    abbrevMap.set(placeholder, abbr)
+  })
+  
   // Split on sentence-ending punctuation, keeping the punctuation with the sentence
   const sentences = normalized
     .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
+    .map((s) => {
+      // Restore abbreviations
+      let restored = s
+      abbrevMap.forEach((abbr, placeholder) => {
+        restored = restored.replace(new RegExp(placeholder, 'gi'), abbr)
+      })
+      return restored.trim()
+    })
     .filter((s) => s.length > 0)
   
   return sentences
+}
+
+/**
+ * Parses content into custom chunks using --- separator.
+ * - Splits on lines containing only ---
+ * - Trims whitespace from each chunk
+ * - Normalizes internal whitespace (line breaks become spaces)
+ * - Ignores empty chunks
+ */
+function parseCustomChunks(content: string): string[] {
+  return content
+    // Normalize line endings
+    .replace(/\r\n/g, "\n")
+    // Split on separator lines (--- with optional surrounding whitespace)
+    .split(/\n\s*---\s*\n/)
+    // For each chunk, normalize whitespace (convert line breaks to spaces)
+    .map((chunk) => {
+      return chunk
+        .trim()
+        .replace(/\n+/g, " ")
+        .replace(/\s+/g, " ")
+    })
+    // Filter out empty chunks
+    .filter((chunk) => chunk.length > 0)
 }
 
 /**
@@ -211,9 +278,24 @@ export function countWords(content: string): number {
 }
 
 function generateChunks(content: string, mode: ChunkMode): Chunk[] {
-  const texts = mode === "paragraph" 
-    ? parseIntoParagraphs(content) 
-    : parseIntoSentences(content)
+  let texts: string[]
+  
+  switch (mode) {
+    case "line":
+      texts = parseIntoLines(content)
+      break
+    case "paragraph":
+      texts = parseIntoParagraphs(content)
+      break
+    case "sentence":
+      texts = parseIntoSentences(content)
+      break
+    case "custom":
+      texts = parseCustomChunks(content)
+      break
+    default:
+      texts = parseIntoParagraphs(content)
+  }
   
   return texts.map((text, index) => ({
     id: generateId(),
@@ -322,6 +404,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           title,
           content,
           chunk_mode: chunkMode,
+          is_custom_chunked: chunkMode === 'custom',
           progress: progress as any,
           session_state: createInitialSessionState() as any,
           recommended_step: computeRecommendedStep(progress),
@@ -513,6 +596,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         .from('memorization_sets')
         .update({
           chunk_mode: mode,
+          is_custom_chunked: mode === 'custom',
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

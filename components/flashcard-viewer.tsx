@@ -14,6 +14,7 @@ export interface FlashcardViewerProps {
   markedChunks: string[]
   onUpdateReviewed: (chunkIds: string[]) => void
   onUpdateMarked: (chunkIds: string[]) => void
+  markedOnly?: boolean // If true, only show marked chunks
 }
 
 export function FlashcardViewer({
@@ -23,7 +24,13 @@ export function FlashcardViewer({
   markedChunks,
   onUpdateReviewed,
   onUpdateMarked,
+  markedOnly = false,
 }: FlashcardViewerProps) {
+  // Filter chunks if markedOnly mode
+  const filteredChunks = markedOnly 
+    ? chunks.filter(chunk => markedChunks.includes(chunk.id))
+    : chunks
+  
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [flashcardMode, setFlashcardMode] = useState<"simple" | "partial">("simple")
   const [touchStart, setTouchStart] = useState<number | null>(null)
@@ -35,9 +42,9 @@ export function FlashcardViewer({
     new Set(markedChunks)
   )
 
-  const currentChunk = chunks[currentIndex]
+  const currentChunk = filteredChunks[currentIndex]
   const canGoPrevious = currentIndex > 0
-  const canGoNext = currentIndex < chunks.length - 1
+  const canGoNext = currentIndex < filteredChunks.length - 1
 
   // Mark current chunk as reviewed when viewed
   useEffect(() => {
@@ -125,7 +132,8 @@ export function FlashcardViewer({
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-3">
           <span className="font-medium">
-            Chunk {currentIndex + 1} of {chunks.length}
+            Chunk {currentIndex + 1} of {filteredChunks.length}
+            {markedOnly && <span className="text-primary ml-1">(Marked)</span>}
           </span>
           <span className="text-muted-foreground">•</span>
           <span className="text-muted-foreground">
