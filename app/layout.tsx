@@ -3,6 +3,7 @@ import { Montserrat, Poppins, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { MemorizationProvider } from '@/lib/memorization-context'
 import { PostHogProvider } from '@/components/posthog-provider'
+import { SessionHandler } from '@/components/session-handler'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
@@ -55,6 +56,7 @@ export default function RootLayout({
     <html lang="en" className={`bg-background ${montserrat.variable} ${poppins.variable} ${inter.variable}`}>
       <body className="font-sans antialiased">
         <PostHogProvider>
+          <SessionHandler />
           <MemorizationProvider>
             {children}
           </MemorizationProvider>
