@@ -58,20 +58,21 @@ export function SessionHandler() {
 
         case 'PASSWORD_RECOVERY':
           console.log('🔑 Password recovery initiated')
-          // User clicked password reset link - they'll be on reset-password page
+          // Redirect to reset password page when user clicks email link
+          router.push('/auth/reset-password')
           break
 
         case 'SIGNED_IN':
           console.log('✅ User signed in')
-          // Refresh the page to load user data
-          if (pathname.startsWith('/auth/')) {
+          // Redirect to home after login, but keep user on reset-password page
+          if (pathname.startsWith('/auth/') && pathname !== '/auth/reset-password') {
             router.push('/')
           }
           break
       }
     })
 
-    // Set up session refresh interval (every 5 minutes)
+    // Set up session refresh interval (every 20 minutes)
     const refreshInterval = setInterval(async () => {
       const { data: { session }, error } = await supabase.auth.getSession()
       
@@ -83,7 +84,7 @@ export function SessionHandler() {
         toast.error('Your session has expired. Please sign in again.')
         router.push('/auth/login')
       }
-    }, 5 * 60 * 1000) // 5 minutes
+    }, 20 * 60 * 1000) // 20 minutes
 
     return () => {
       subscription.unsubscribe()
