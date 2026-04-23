@@ -244,7 +244,7 @@ function parseIntoLines(content: string): string[] {
 function parseCustomChunks(content: string): string[] {
   return content
     .replace(/\r\n/g, "\n")
-    .split(/\n\s*\/\s*\n/)
+    .split(/\/+/)
     .map((chunk) => chunk.trim())
     .filter((chunk) => chunk.length > 0)
 }

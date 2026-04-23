@@ -94,25 +94,53 @@ export default function EditPage({ params }: EditPageProps) {
     }
   }, [set])
 
+  // Helper functions for chunking
+  const parseIntoLines = (text: string) => {
+    return text.split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+  }
+
+  const parseIntoParagraphs = (text: string) => {
+    return text
+      .replace(/\r\n/g, "\n")
+      .split(/\n\s*\n+/)
+      .map((para) => para.trim())
+      .filter((para) => para.length > 0)
+  }
+
+  const parseIntoSentences = (text: string) => {
+    let normalized = text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
+    if (!normalized) return []
+    const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0)
+    return sentences
+  }
+
+  const parseCustomChunks = (text: string) => {
+    return text
+      .replace(/\r\n/g, "\n")
+      .split(/\/+/)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0)
+  }
+
   // Live stats
   const stats = useMemo(() => {
     const trimmed = content.trim()
     if (!trimmed) {
-      return { words: 0, paragraphs: 0, sentences: 0, chunks: 0 }
+      return { words: 0, lines: 0, paragraphs: 0, sentences: 0, customChunks: 0, chunks: 0 }
     }
     
     const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
-    const paragraphs = trimmed
-      .split(/\n\s*\n|\n/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0).length
+    const lines = parseIntoLines(trimmed).length
+    const paragraphs = parseIntoParagraphs(trimmed).length
+    const sentences = parseIntoSentences(trimmed).length
+    const customChunks = parseCustomChunks(trimmed).length
     
-    const normalized = trimmed.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ")
-    const sentences = normalized.split(/(?<=[.!?])\s+/).filter((s) => s.length > 0).length
+    let chunks = paragraphs
+    if (chunkMode === "line") chunks = lines
+    else if (chunkMode === "sentence") chunks = sentences
+    else if (chunkMode === "custom") chunks = customChunks
     
-    const chunks = chunkMode === "paragraph" ? paragraphs : sentences
-    
-    return { words, paragraphs, sentences, chunks }
+    return { words, lines, paragraphs, sentences, customChunks, chunks }
   }, [content, chunkMode])
 
   // Validation
@@ -338,7 +366,7 @@ export default function EditPage({ params }: EditPageProps) {
                         <Wand2 className="size-4" />
                         <span className="font-medium">Custom</span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Use --- separator</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Use / separator</div>
                     </Label>
                   </div>
                 </div>
@@ -362,7 +390,12 @@ export default function EditPage({ params }: EditPageProps) {
               <Layers className="size-4 text-muted-foreground" />
               <span className="text-sm">
                 <span className="font-medium tabular-nums">{stats.chunks}</span>
-                <span className="text-muted-foreground"> {chunkMode === "paragraph" ? "paragraph" : "sentence"}{stats.chunks !== 1 ? "s" : ""}</span>
+                <span className="text-muted-foreground"> 
+                  {chunkMode === "line" && `line${stats.chunks !== 1 ? "s" : ""}`}
+                  {chunkMode === "paragraph" && `paragraph${stats.chunks !== 1 ? "s" : ""}`}
+                  {chunkMode === "sentence" && `sentence${stats.chunks !== 1 ? "s" : ""}`}
+                  {chunkMode === "custom" && `chunk${stats.chunks !== 1 ? "s" : ""}`}
+                </span>
               </span>
             </div>
           </div>

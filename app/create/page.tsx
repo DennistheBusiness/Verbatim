@@ -71,8 +71,8 @@ export default function CreatePage() {
 
   const parseIntoParagraphs = (text: string) => {
     return text
-      .split(/\n\s*\/\s*\n/) // First split on "/" separator
-      .flatMap((section) => section.split(/\n\s*\n+/)) // Then split on blank lines
+      .replace(/\r\n/g, "\n")
+      .split(/\n\s*\n+/)
       .map((para) => para.trim())
       .filter((para) => para.length > 0)
   }
@@ -85,6 +85,8 @@ export default function CreatePage() {
 
   const parseIntoSentences = (text: string) => {
     let normalized = text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
+    
+    if (!normalized) return []
     
     COMMON_ABBREVIATIONS.forEach((abbr, idx) => {
       const placeholder = `__ABBR${idx}__`
@@ -102,15 +104,31 @@ export default function CreatePage() {
       return restored.trim()
     }).filter((s) => s.length > 0)
     
+    console.log('🔍 parseIntoSentences:', { 
+      inputLength: text.length, 
+      normalizedLength: normalized.length,
+      rawSentencesCount: rawSentences.length,
+      sentencesCount: sentences.length,
+      sentences: sentences.slice(0, 3) // First 3 for debugging
+    })
+    
     return sentences
   }
 
   const parseCustomChunks = (text: string) => {
-    return text
+    const result = text
       .replace(/\r\n/g, "\n")
-      .split(/\n\s*\/\s*\n/)
+      .split(/\/+/)
       .map((chunk) => chunk.trim())
       .filter((chunk) => chunk.length > 0)
+    
+    console.log('🔍 parseCustomChunks:', {
+      inputLength: text.length,
+      chunksCount: result.length,
+      chunks: result.slice(0, 3) // First 3 for debugging
+    })
+    
+    return result
   }
 
   const generatePreviewChunks = (text: string, mode: ChunkMode) => {
@@ -147,6 +165,16 @@ export default function CreatePage() {
     if (chunkMode === "line") chunks = lines
     else if (chunkMode === "sentence") chunks = sentences
     else if (chunkMode === "custom") chunks = customChunks
+    
+    console.log('📊 Stats calculated:', {
+      chunkMode,
+      words,
+      lines,
+      paragraphs,
+      sentences,
+      customChunks,
+      finalChunks: chunks
+    })
     
     return { words, lines, paragraphs, sentences, customChunks, chunks }
   }, [content, chunkMode])
@@ -352,7 +380,7 @@ export default function CreatePage() {
                 <Alert className="mt-3">
                   <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
-                    Type / on its own line to manually separate chunks in your text
+                    Use / anywhere in your text to manually separate chunks
                   </AlertDescription>
                 </Alert>
               )}
@@ -361,35 +389,37 @@ export default function CreatePage() {
                 Choose how to divide the content into practice chunks
               </FieldDescription>
             </Field>
-
-            {/* Chunk Preview */}
-            {content.trim() && (
-              <ChunkPreview chunks={previewChunks} mode={chunkMode} />
-            )}
           </FieldGroup>
 
           {/* Live Stats */}
-          <div className="flex items-center gap-6 rounded-xl bg-muted/50 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Type className="size-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="font-medium tabular-nums">{stats.words}</span>
-                <span className="text-muted-foreground"> word{stats.words !== 1 ? "s" : ""}</span>
-              </span>
+          {content.trim() && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-6 rounded-xl bg-muted/50 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Type className="size-4 text-muted-foreground" />
+                  <span className="text-sm">
+                    <span className="font-medium tabular-nums">{stats.words}</span>
+                    <span className="text-muted-foreground"> word{stats.words !== 1 ? "s" : ""}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Layers className="size-4 text-muted-foreground" />
+                  <span className="text-sm">
+                    <span className="font-medium tabular-nums">{stats.chunks}</span>
+                    <span className="text-muted-foreground"> 
+                      {chunkMode === "line" && `line${stats.chunks !== 1 ? "s" : ""}`}
+                      {chunkMode === "paragraph" && `paragraph${stats.chunks !== 1 ? "s" : ""}`}
+                      {chunkMode === "sentence" && `sentence${stats.chunks !== 1 ? "s" : ""}`}
+                      {chunkMode === "custom" && `chunk${stats.chunks !== 1 ? "s" : ""}`}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Chunk Preview */}
+              <ChunkPreview chunks={previewChunks} mode={chunkMode} />
             </div>
-            <div className="flex items-center gap-2">
-              <Layers className="size-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="font-medium tabular-nums">{stats.chunks}</span>
-                <span className="text-muted-foreground"> 
-                  {chunkMode === "line" && `line${stats.chunks !== 1 ? "s" : ""}`}
-                  {chunkMode === "paragraph" && `paragraph${stats.chunks !== 1 ? "s" : ""}`}
-                  {chunkMode === "sentence" && `sentence${stats.chunks !== 1 ? "s" : ""}`}
-                  {chunkMode === "custom" && `chunk${stats.chunks !== 1 ? "s" : ""}`}
-                </span>
-              </span>
-            </div>
-          </div>
+          )}
 
           {/* Spacer */}
           <div className="flex-1 min-h-4" />

@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 import { AudioPlayer } from "@/components/audio-player"
 import { createClient } from "@/lib/supabase/client"
@@ -495,6 +495,47 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   </Button>
                 </ButtonGroup>
               </div>
+
+              {/* Chunk Mode Selector - Only visible in chunk view */}
+              {familiarizeView === "chunks" && (
+                <div className="flex items-center justify-center">
+                  <ButtonGroup>
+                    <Button
+                      variant={set.chunkMode === "line" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "line")}
+                    >
+                      <Type className="size-3.5 mr-1.5" />
+                      Line
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "paragraph" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "paragraph")}
+                    >
+                      <FileText className="size-3.5 mr-1.5" />
+                      Paragraph
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "sentence" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "sentence")}
+                    >
+                      <Layers className="size-3.5 mr-1.5" />
+                      Sentence
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "custom" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "custom")}
+                    >
+                      <Wand2 className="size-3.5 mr-1.5" />
+                      Custom
+                    </Button>
+                  </ButtonGroup>
+                </div>
+              )}
+
               <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
                 <span>{wordCount} words</span>
                 <span className="size-1 rounded-full bg-muted-foreground/30" />
