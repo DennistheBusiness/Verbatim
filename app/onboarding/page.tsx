@@ -97,7 +97,7 @@ export default function OnboardingPage() {
     </div>
   )
 
-  // Step 0: Welcome
+  // Step 0: Welcome + Target Audiences
   if (step === 0) {
     return (
       <div 
@@ -106,8 +106,8 @@ export default function OnboardingPage() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8">
-          <div className="w-full max-w-md flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8 overflow-y-auto">
+          <div className="w-full max-w-3xl flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700 py-8">
             
             <ProgressDots />
             
@@ -126,13 +126,76 @@ export default function OnboardingPage() {
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">
                 Welcome to Verbatim
               </h1>
-              <p className="text-base text-muted-foreground leading-relaxed">
+              <p className="text-base text-muted-foreground leading-relaxed max-w-2xl mx-auto">
                 Master any text with a proven 3-step memorization system designed to make recall effortless.
               </p>
             </div>
 
+            {/* Target Audiences Section */}
+            <div className="flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-center">Perfect For</h2>
+              
+              <div className="grid sm:grid-cols-2 gap-4">
+                {/* Performers */}
+                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-pink-500/5 p-6 transition-all hover:shadow-lg hover:shadow-pink-500/10 hover:border-pink-500/30">
+                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-pink-500/10 to-purple-500/10 blur-2xl transition-all group-hover:scale-150" />
+                  <div className="relative flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🎭</span>
+                      <h3 className="text-lg font-semibold">Performers</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Actors, speakers, and presenters memorizing scripts and speeches
+                    </p>
+                  </div>
+                </div>
+
+                {/* Students */}
+                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-blue-500/5 via-cyan-500/5 to-blue-500/5 p-6 transition-all hover:shadow-lg hover:shadow-blue-500/10 hover:border-blue-500/30">
+                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-blue-500/10 to-cyan-500/10 blur-2xl transition-all group-hover:scale-150" />
+                  <div className="relative flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">📚</span>
+                      <h3 className="text-lg font-semibold">Students</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Learning poems, historical documents, or presentation material
+                    </p>
+                  </div>
+                </div>
+
+                {/* Public Speakers */}
+                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-orange-500/5 via-red-500/5 to-orange-500/5 p-6 transition-all hover:shadow-lg hover:shadow-orange-500/10 hover:border-orange-500/30">
+                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-orange-500/10 to-red-500/10 blur-2xl transition-all group-hover:scale-150" />
+                  <div className="relative flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">🎤</span>
+                      <h3 className="text-lg font-semibold">Public Speakers</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Mastering keynotes, toasts, and important addresses
+                    </p>
+                  </div>
+                </div>
+
+                {/* Professionals */}
+                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-green-500/5 p-6 transition-all hover:shadow-lg hover:shadow-green-500/10 hover:border-green-500/30">
+                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-green-500/10 to-emerald-500/10 blur-2xl transition-all group-hover:scale-150" />
+                  <div className="relative flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">⚖️</span>
+                      <h3 className="text-lg font-semibold">Professionals</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Lawyers, teachers, and anyone who needs word-perfect recall
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Actions */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 pt-4">
               <Button 
                 size="lg" 
                 className="w-full gap-2"

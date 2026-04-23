@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
 import { getEffectiveUserId } from "@/lib/impersonation"
+import { getSupabaseErrorMessage } from "@/components/error-display"
+import { identifyUser, trackSessionStart, updateUserProperties, trackEvent } from "@/lib/analytics"
+import * as AnalyticsEvents from "@/lib/analytics-events"
 
 export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
 export type InputMethod = "text" | "voice"
@@ -281,6 +284,15 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      // Identify user for analytics
+      if (user?.id) {
+        identifyUser(user.id, {
+          email: user.email,
+          signup_date: user.created_at,
+        })
+        trackSessionStart()
+      }
+
       // Fetch memorization sets with chunks and tags for the effective user
       const { data: setsData, error: setsError } = await supabase
         .from('memorization_sets')
@@ -323,10 +335,17 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       console.log('✅ Transformed sets:', transformedSets.length, 'sets')
       console.log('📦 Sets data:', JSON.stringify(transformedSets, null, 2))
       setSets(transformedSets)
+      
+      // Update user properties with current stats
+      if (user?.id) {
+        updateUserProperties({
+          total_sets: transformedSets.length,
+        })
+      }
     } catch (err) {
       console.error('Error fetching sets:', err)
       setError(err instanceof Error ? err.message : 'Failed to load memorization sets')
-      toast.error('Failed to load your memorization sets')
+      toast.error(getSupabaseErrorMessage(err))
     } finally {
       setIsLoaded(true)
       setIsLoading(false)
@@ -389,7 +408,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
             message: uploadError.message,
             statusCode: uploadError.statusCode
           })
-          toast.error(`Failed to upload audio: ${uploadError.message}`)
+          toast.error(getSupabaseErrorMessage(uploadError))
           throw new Error(`Failed to upload audio file: ${uploadError.message}`)
         }
 
@@ -478,11 +497,22 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
       // Refresh sets
       await fetchSets()
+      
+      // Track memorization creation
+      trackEvent(AnalyticsEvents.MEMORIZATION_CREATED, {
+        chunk_mode: chunkMode,
+        has_audio: !!audioFilePath,
+        content_length: content.length,
+        chunk_count: chunks.length,
+        tags_count: tags.length,
+        created_from: createdFrom,
+      })
+      
       toast.success('Memorization set created')
       return id
     } catch (err) {
       console.error('Error adding set:', err)
-      toast.error('Failed to create memorization set')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, fetchSets])
@@ -542,7 +572,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
         if (uploadError) {
           console.error('[updateSet] Audio upload failed:', uploadError)
-          toast.error('Failed to upload audio recording')
+          toast.error(getSupabaseErrorMessage(uploadError))
           throw uploadError
         }
 
@@ -654,7 +684,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       toast.success('Memorization set updated')
     } catch (err) {
       console.error('Error updating set:', err)
-      toast.error('Failed to update memorization set')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet, fetchSets])
@@ -664,6 +694,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const set = getSet(id)
       if (!set || set.chunkMode === mode) return
 
+      const oldMode = set.chunkMode
+      const oldChunkCount = set.chunks.length
       const chunks = generateChunks(set.content, mode)
 
       // Update chunk mode
@@ -701,11 +733,20 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         if (chunksError) throw chunksError
       }
 
+      // Track chunk mode change
+      trackEvent(AnalyticsEvents.CHUNK_MODE_CHANGED, {
+        set_id: id,
+        old_mode: oldMode,
+        new_mode: mode,
+        chunk_count_before: oldChunkCount,
+        chunk_count_after: chunks.length,
+      })
+
       await fetchSets()
       toast.success('Chunk mode updated')
     } catch (err) {
       console.error('Error updating chunk mode:', err)
-      toast.error('Failed to update chunk mode')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet, fetchSets])
@@ -782,14 +823,28 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       } : s))
     } catch (err) {
       console.error('Error updating progress:', err)
-      toast.error('Failed to update progress')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet])
 
   const markFamiliarizeComplete = useCallback(async (id: string) => {
+    const set = getSet(id)
     await updateProgress(id, { familiarizeCompleted: true })
-  }, [updateProgress])
+    
+    // Track familiarize completion
+    if (set) {
+      const timeSpent = set.sessionState.lastVisitedAt 
+        ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
+        : 0
+      
+      trackEvent(AnalyticsEvents.FAMILIARIZE_COMPLETED, {
+        set_id: id,
+        chunk_count: set.chunks.length,
+        time_spent_seconds: timeSpent,
+      })
+    }
+  }, [updateProgress, getSet])
 
   const updateEncodeProgress = useCallback(async (id: string, stage: 1 | 2 | 3, score?: number) => {
     try {
@@ -835,9 +890,21 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
       } : s))
+      
+      // Track encode completion
+      const timeSpent = set.sessionState.lastVisitedAt 
+        ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
+        : 0
+      
+      trackEvent(AnalyticsEvents.ENCODE_COMPLETED, {
+        set_id: id,
+        stage: stage,
+        score: score || 0,
+        time_spent_seconds: timeSpent,
+      })
     } catch (err) {
       console.error('Error updating encode progress:', err)
-      toast.error('Failed to update progress')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet])
@@ -849,6 +916,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
       const currentBest = set.progress.tests[testType].bestScore
       const newBest = currentBest === null ? score : Math.max(currentBest, score)
+      const isBestScore = score === newBest
+      const improvement = currentBest !== null ? ((score - currentBest) / currentBest) * 100 : 0
 
       const updatedProgress = {
         ...set.progress,
@@ -885,9 +954,30 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
       } : s))
+      
+      // Track test completion
+      const durationSeconds = set.sessionState.lastVisitedAt 
+        ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
+        : 0
+      
+      trackEvent(AnalyticsEvents.TEST_COMPLETED, {
+        set_id: id,
+        test_type: testType === 'firstLetter' ? 'first_letter' : testType === 'fullText' ? 'full_text' : 'audio',
+        score: score,
+        duration_seconds: durationSeconds,
+        is_best_score: isBestScore,
+        improvement_percentage: currentBest !== null ? improvement : undefined,
+        chunk_count: set.chunks.length,
+      })
+      
+      // Track practice session for retention
+      trackEvent(AnalyticsEvents.PRACTICE_SESSION, {
+        activity_type: 'test',
+        set_id: id,
+      })
     } catch (err) {
       console.error('Error updating test score:', err)
-      toast.error('Failed to update test score')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet])
@@ -919,7 +1009,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       } : s))
     } catch (err) {
       console.error('Error updating reviewed chunks:', err)
-      toast.error('Failed to update reviewed chunks')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet])
@@ -951,15 +1041,33 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       } : s))
     } catch (err) {
       console.error('Error updating marked chunks:', err)
-      toast.error('Failed to update marked chunks')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, getSet])
 
   const deleteSet = useCallback(async (id: string) => {
     try {
-      // Get the set to check for audio file
+      // Get the set to check for audio file and track analytics
       const set = sets.find(s => s.id === id)
+      
+      // Calculate metrics before deletion
+      const setAgeInDays = set ? AnalyticsEvents.getTimeDifferenceDays(set.createdAt) : 0
+      
+      // Calculate completion percentage
+      let completionPercentage = 0
+      if (set) {
+        let completed = 0
+        let total = 7
+        if (set.progress.familiarizeCompleted) completed++
+        if (set.progress.encode.stage1Completed) completed++
+        if (set.progress.encode.stage2Completed) completed++
+        if (set.progress.encode.stage3Completed) completed++
+        if (set.progress.tests.firstLetter.bestScore !== null) completed++
+        if (set.progress.tests.fullText.bestScore !== null) completed++
+        if (set.progress.tests.audioTest.bestScore !== null) completed++
+        completionPercentage = Math.round((completed / total) * 100)
+      }
       
       // Delete audio file if exists
       if (set?.audioFilePath) {
@@ -979,11 +1087,20 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error
 
+      // Track deletion
+      trackEvent(AnalyticsEvents.MEMORIZATION_DELETED, {
+        set_id: id,
+        set_age_days: setAgeInDays,
+        completion_percentage: completionPercentage,
+        had_audio: !!set?.audioFilePath,
+        chunk_count: set?.chunks.length || 0,
+      })
+
       await fetchSets()
       toast.success('Memorization set deleted')
     } catch (err) {
       console.error('Error deleting set:', err)
-      toast.error('Failed to delete memorization set')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, fetchSets, sets])
@@ -999,7 +1116,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       toast.success('Audio file deleted')
     } catch (err) {
       console.error('Error deleting audio file:', err)
-      toast.error('Failed to delete audio file')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase])
@@ -1057,7 +1174,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       toast.success('Tags updated')
     } catch (err) {
       console.error('Error updating tags:', err)
-      toast.error('Failed to update tags')
+      toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, fetchSets])
