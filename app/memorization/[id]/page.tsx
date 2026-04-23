@@ -496,43 +496,45 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 </ButtonGroup>
               </div>
 
-              {/* Chunk Mode Selector */}
-              <div className="flex items-center justify-center">
-                <ButtonGroup>
-                  <Button
-                    variant={set.chunkMode === "line" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateChunkMode(id, "line")}
-                  >
-                    <Type className="size-3.5 mr-1.5" />
-                    Line
-                  </Button>
-                  <Button
-                    variant={set.chunkMode === "paragraph" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateChunkMode(id, "paragraph")}
-                  >
-                    <FileText className="size-3.5 mr-1.5" />
-                    Paragraph
-                  </Button>
-                  <Button
-                    variant={set.chunkMode === "sentence" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateChunkMode(id, "sentence")}
-                  >
-                    <Layers className="size-3.5 mr-1.5" />
-                    Sentence
-                  </Button>
-                  <Button
-                    variant={set.chunkMode === "custom" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateChunkMode(id, "custom")}
-                  >
-                    <Wand2 className="size-3.5 mr-1.5" />
-                    Custom
-                  </Button>
-                </ButtonGroup>
-              </div>
+              {/* Chunk Mode Selector - Only visible in chunk view */}
+              {familiarizeView === "chunks" && (
+                <div className="flex items-center justify-center">
+                  <ButtonGroup>
+                    <Button
+                      variant={set.chunkMode === "line" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "line")}
+                    >
+                      <Type className="size-3.5 mr-1.5" />
+                      Line
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "paragraph" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "paragraph")}
+                    >
+                      <FileText className="size-3.5 mr-1.5" />
+                      Paragraph
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "sentence" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "sentence")}
+                    >
+                      <Layers className="size-3.5 mr-1.5" />
+                      Sentence
+                    </Button>
+                    <Button
+                      variant={set.chunkMode === "custom" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => updateChunkMode(id, "custom")}
+                    >
+                      <Wand2 className="size-3.5 mr-1.5" />
+                      Custom
+                    </Button>
+                  </ButtonGroup>
+                </div>
+              )}
 
               <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
                 <span>{wordCount} words</span>
