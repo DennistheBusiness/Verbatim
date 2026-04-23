@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info } from "lucide-react"
 import { toast } from "sonner"
 import { AudioPlayer } from "@/components/audio-player"
 import { createClient } from "@/lib/supabase/client"
@@ -59,6 +59,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showTTSPlayer, setShowTTSPlayer] = useState(false)
   const [showMarkedOnly, setShowMarkedOnly] = useState(false)
+  const [showSystemInfo, setShowSystemInfo] = useState(false)
   const supabase = createClient()
 
   // Fetch audio URL if available
@@ -1131,6 +1132,78 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             </div>
           </div>
         </div>
+
+        {/* How It Works Info Card */}
+        {!showSystemInfo ? (
+          <Card className="border-blue-500/20 bg-blue-500/5">
+            <CardContent className="p-4">
+              <button 
+                onClick={() => setShowSystemInfo(true)}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                    <Info className="size-5 text-blue-600" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <h3 className="text-sm font-semibold text-foreground">How the system works</h3>
+                    <p className="text-xs text-muted-foreground">Quick overview of the 3-step method</p>
+                  </div>
+                </div>
+                <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+              </button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-blue-500/20 bg-blue-500/5">
+            <CardContent className="flex flex-col gap-4 p-4">
+              <button 
+                onClick={() => setShowSystemInfo(false)}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                    <Info className="size-5 text-blue-600" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-foreground">How the system works</h3>
+                </div>
+                <ChevronUp className="size-4 text-muted-foreground shrink-0" />
+              </button>
+              
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 mt-0.5">
+                    <span className="text-xs font-bold text-blue-600">1</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground mb-1">Familiarize</p>
+                    <p className="text-muted-foreground">Read through your content multiple times. Use flashcard mode to review chunk-by-chunk.</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 mt-0.5">
+                    <span className="text-xs font-bold text-purple-600">2</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground mb-1">Encode with First Letter Method</p>
+                    <p className="text-muted-foreground">Train your memory in 3 progressive levels. Start seeing first letters, then gradually less, until you can recall from memory alone.</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 mt-0.5">
+                    <span className="text-xs font-bold text-green-600">3</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground mb-1">Test Your Recall</p>
+                    <p className="text-muted-foreground">Prove your mastery with multiple test modes: first letters only, full typing, or audio recording.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Resume/Continue CTA */}
         {hasResumePoint() ? (

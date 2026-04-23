@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
+import { getEffectiveUserId } from "@/lib/impersonation"
 
 export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
 export type InputMethod = "text" | "voice"
@@ -264,10 +265,15 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       // Get current user and session
       const { data: { user }, error: userError } = await supabase.auth.getUser()
       const { data: { session } } = await supabase.auth.getSession()
+      
+      // Use effective user ID (handles impersonation)
+      const effectiveUserId = getEffectiveUserId(user?.id)
+      
       console.log('🔍 fetchSets - User:', user?.id, user?.email)
+      console.log('🎭 Effective User ID:', effectiveUserId)
       console.log('🔑 Session exists:', !!session)
       
-      if (!user) {
+      if (!effectiveUserId) {
         console.log('❌ No user found in session')
         setSets([])
         setIsLoaded(true)
@@ -275,7 +281,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // Fetch memorization sets with chunks and tags
+      // Fetch memorization sets with chunks and tags for the effective user
       const { data: setsData, error: setsError } = await supabase
         .from('memorization_sets')
         .select(`
@@ -285,6 +291,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
             tag:tags (name)
           )
         `)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false })
 
       if (setsError) throw setsError
@@ -342,8 +349,13 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   ): Promise<string> => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      
+      // Use effective user ID (handles impersonation)
+      const effectiveUserId = getEffectiveUserId(user?.id)
       console.log('🔍 addSet - User:', user?.id, user?.email)
-      if (!user) throw new Error('Not authenticated')
+      console.log('🎭 Effective User ID:', effectiveUserId)
+      
+      if (!effectiveUserId) throw new Error('Not authenticated')
 
       const id = generateId()
       const now = new Date().toISOString()
@@ -357,12 +369,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         console.log('🎙️ Attempting to upload audio:', {
           blobSize: audioBlob.size,
           blobType: audioBlob.type,
-          userId: user.id,
+          userId: effectiveUserId,
           setId: id
         })
         
         const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'mp4'
-        const fileName = `${user.id}/${id}.${fileExtension}`
+        const fileName = `${effectiveUserId}/${id}.${fileExtension}`
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('audio-recordings')
@@ -390,7 +402,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         .from('memorization_sets')
         .insert({
           id,
-          user_id: user.id,
+          user_id: effectiveUserId,
           title,
           content,
           chunk_mode: chunkMode,
@@ -436,7 +448,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           const { data: existingTag } = await supabase
             .from('tags')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', effectiveUserId)
             .eq('name', tagName)
             .single()
 
@@ -447,7 +459,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           } else {
             const { data: newTag, error: tagError } = await supabase
               .from('tags')
-              .insert({ user_id: user.id, name: tagName })
+              .insert({ user_id: effectiveUserId, name: tagName })
               .select('id')
               .single()
 
