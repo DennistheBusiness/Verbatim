@@ -70,7 +70,11 @@ export default function CreatePage() {
   }
 
   const parseIntoParagraphs = (text: string) => {
-    return text.split(/\n\s*\n+/).map((para) => para.trim()).filter((para) => para.length > 0)
+    return text
+      .split(/\n\s*\/\s*\n/) // First split on "/" separator
+      .flatMap((section) => section.split(/\n\s*\n+/)) // Then split on blank lines
+      .map((para) => para.trim())
+      .filter((para) => para.length > 0)
   }
 
   const COMMON_ABBREVIATIONS = [
@@ -268,7 +272,7 @@ export default function CreatePage() {
                       onBlur={handleContentBlur}
                     />
                     <FieldDescription>
-                      Separate paragraphs with blank lines or use --- to create custom chunks
+                      Separate paragraphs with blank lines or use / to create custom chunks
                     </FieldDescription>
                   </>
                 }

@@ -281,7 +281,7 @@ export default function EditPage({ params }: EditPageProps) {
                       onBlur={handleContentBlur}
                     />
                     <FieldDescription>
-                      Separate paragraphs with blank lines or use --- to create custom chunks
+                      Separate paragraphs with blank lines or use / to create custom chunks
                     </FieldDescription>
                   </>
                 }
