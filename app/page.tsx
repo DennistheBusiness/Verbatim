@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X, Edit3 } from "lucide-react"
+import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X, Edit3, HelpCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -121,6 +121,10 @@ export default function HomePage() {
     }
   }
 
+  const handleShowTour = () => {
+    router.push("/onboarding")
+  }
+
   // Show splash screen on first visit
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} duration={2000} />
@@ -151,7 +155,21 @@ export default function HomePage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <Header title="Library" showBranding={true} />
+      <Header 
+        title="Library" 
+        showBranding={true}
+        action={
+          <Button 
+            variant="ghost" 
+            size="icon-sm"
+            onClick={handleShowTour}
+            title="View Tour"
+          >
+            <HelpCircle className="size-5" />
+            <span className="sr-only">View Tour</span>
+          </Button>
+        }
+      />
       
       <main className="flex flex-1 flex-col gap-6 p-4 pb-24 md:pb-8">
         {sets.length === 0 ? (

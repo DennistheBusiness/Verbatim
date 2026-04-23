@@ -2,12 +2,14 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useRouter } from "next/navigation"
-import { ChevronLeft, LogOut, LogIn } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { ChevronLeft, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { NavigationMenu } from "@/components/navigation-menu"
 import { type ReactNode, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
+import { getImpersonationState } from "@/lib/impersonation"
 
 interface HeaderProps {
   title: string
@@ -19,7 +21,6 @@ interface HeaderProps {
 
 export function Header({ title, showBack = false, onBack, action, showBranding = false }: HeaderProps) {
   const pathname = usePathname()
-  const router = useRouter()
   const isHome = pathname === "/"
   const [user, setUser] = useState<User | null>(null)
   const supabase = createClient()
@@ -37,11 +38,6 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
 
     return () => subscription.unsubscribe()
   }, [supabase])
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-  }
 
   return (
     <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -90,21 +86,9 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
           </div>
         )}
         
-        {/* Auth button */}
+        {/* Navigation Menu */}
         <div className="shrink-0">
-          {user ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-              <span className="hidden sm:inline text-sm">{user.email}</span>
-              <LogOut className="size-4" />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="sm" asChild className="gap-2">
-              <Link href="/auth/login">
-                <LogIn className="size-4" />
-                <span className="hidden sm:inline">Login</span>
-              </Link>
-            </Button>
-          )}
+          <NavigationMenu user={user} />
         </div>
       </div>
     </header>
