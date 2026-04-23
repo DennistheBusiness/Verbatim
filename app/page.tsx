@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X, Edit3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -266,8 +267,10 @@ export default function HomePage() {
                   
                   return (
                     <Card key={set.id} className="group relative transition-colors hover:bg-accent/50">
-                      <Link href={`/memorization/${set.id}`} className="block">
-                        <CardContent className="flex flex-col gap-3 py-4">
+                      <CardContent 
+                        className="flex flex-col gap-3 py-4 cursor-pointer"
+                        onClick={() => router.push(`/memorization/${set.id}`)}
+                      >
                           {/* Progress bar at top */}
                           <div className="flex items-center gap-3">
                             <Progress 
@@ -316,11 +319,13 @@ export default function HomePage() {
                               size="sm"
                               className="shrink-0 gap-1.5 h-8 -mr-2 opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                               asChild
-                              onClick={(e: React.MouseEvent) => {
-                                e.stopPropagation()
-                              }}
                             >
-                              <Link href={`/edit/${set.id}`}>
+                              <Link 
+                                href={`/edit/${set.id}`}
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation()
+                                }}
+                              >
                                 <Edit3 className="size-3.5" />
                                 <span className="text-xs">Edit</span>
                               </Link>
@@ -338,7 +343,7 @@ export default function HomePage() {
                             </div>
                           )}
                         </CardContent>
-                      </Link>
+
                     </Card>
                   )
                 })}

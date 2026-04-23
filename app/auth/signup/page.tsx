@@ -93,6 +93,7 @@ export default function SignupPage() {
               width={64} 
               height={64}
               className="shrink-0"
+              style={{ height: 'auto' }}
             />
             <div className="flex flex-col gap-1">
               <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
