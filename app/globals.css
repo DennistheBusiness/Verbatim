@@ -135,6 +135,11 @@
     @apply bg-background text-foreground;
   }
   
+  /* Mobile touch optimization - remove tap highlights and focus outlines on touch devices */
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
   /* Verbatim Typography Standards */
   h1, h2, h3, h4, h5, h6 {
     @apply font-bold tracking-tight;

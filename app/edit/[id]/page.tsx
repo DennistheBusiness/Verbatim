@@ -123,6 +123,11 @@ export default function EditPage({ params }: EditPageProps) {
   const handleSave = async () => {
     if (!isValid) return
     
+    // Update chunk mode FIRST if it changed, so chunks are generated with new mode
+    if (set && chunkMode !== set.chunkMode) {
+      await updateChunkMode(id, chunkMode)
+    }
+    
     await updateSet(
       id, 
       title.trim(), 
@@ -132,9 +137,7 @@ export default function EditPage({ params }: EditPageProps) {
       originalFilename,
       contentSource
     )
-    if (set && chunkMode !== set.chunkMode) {
-      updateChunkMode(id, chunkMode)
-    }
+    
     router.push(`/memorization/${id}`)
   }
 

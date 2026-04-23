@@ -33,6 +33,10 @@ export interface Progress {
       bestScore: number | null
       lastScore: number | null
     }
+    audioTest: {
+      bestScore: number | null
+      lastScore: number | null
+    }
   }
 }
 
@@ -83,7 +87,7 @@ interface MemorizationContextType {
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
   markFamiliarizeComplete: (id: string) => Promise<void>
   updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => Promise<void>
-  updateTestScore: (id: string, testType: "firstLetter" | "fullText", score: number) => Promise<void>
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number) => Promise<void>
   updateReviewedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateTags: (id: string, tags: string[]) => Promise<void>
@@ -116,6 +120,10 @@ function createInitialProgress(): Progress {
         lastScore: null,
       },
       fullText: {
+        bestScore: null,
+        lastScore: null,
+      },
+      audioTest: {
         bestScore: null,
         lastScore: null,
       },
@@ -727,6 +735,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         tests: updates.tests ? {
           firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
           fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,
+          audioTest: updates.tests.audioTest ? { ...set.progress.tests.audioTest, ...updates.tests.audioTest } : set.progress.tests.audioTest,
         } : set.progress.tests,
       }
 
@@ -816,7 +825,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase, getSet])
 
-  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText", score: number) => {
+  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number) => {
     try {
       const set = getSet(id)
       if (!set) throw new Error('Set not found')

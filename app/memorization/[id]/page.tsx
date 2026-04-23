@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3 } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic } from "lucide-react"
 import { toast } from "sonner"
 import { AudioPlayer } from "@/components/audio-player"
 import { createClient } from "@/lib/supabase/client"
@@ -21,8 +21,11 @@ import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { SessionLayout } from "@/components/session-layout"
 import { FlashcardViewer } from "@/components/flashcard-viewer"
+import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
+import { AudioTest } from "@/components/audio-test"
+import { MobileMemoNav } from "@/components/mobile-memo-nav"
 
-type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test"
+type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -53,7 +56,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [showTTSPlayer, setShowTTSPlayer] = useState(false)
   const supabase = createClient()
 
   // Fetch audio URL if available
@@ -72,37 +75,14 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     fetchAudioUrl()
   }, [set?.audioFilePath, supabase])
 
-  // Text-to-speech handler
-  const handleTextToSpeech = () => {
-    if (!set?.content) return
-
-    if (isSpeaking) {
-      window.speechSynthesis.cancel()
-      setIsSpeaking(false)
-      return
-    }
-
-    const utterance = new SpeechSynthesisUtterance(set.content)
-    utterance.rate = 0.9
-    utterance.pitch = 1
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-      toast.error('Text-to-speech failed')
-    }
-    
-    window.speechSynthesis.speak(utterance)
-    setIsSpeaking(true)
+  // Text-to-speech player handlers
+  const handleOpenTTSPlayer = () => {
+    setShowTTSPlayer(true)
   }
 
-  // Cleanup speech on unmount
-  useEffect(() => {
-    return () => {
-      if (isSpeaking) {
-        window.speechSynthesis.cancel()
-      }
-    }
-  }, [isSpeaking])
+  const handleCloseTTSPlayer = () => {
+    setShowTTSPlayer(false)
+  }
 
   const handleChunkModeChange = (mode: ChunkMode) => {
     if (set) {
@@ -279,6 +259,17 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setPageMode("test-select")
   }
 
+  const startAudioTest = () => {
+    setPageMode("audio-test")
+    updateSessionState(id, {
+      currentStep: "test",
+    })
+  }
+
+  const exitAudioTest = () => {
+    setPageMode("test-select")
+  }
+
   // Helper functions for progress hub
   type StepStatus = "not-started" | "in-progress" | "complete"
 
@@ -300,19 +291,20 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }
 
   const getTestStatus = (): StepStatus => {
-    const { firstLetter, fullText } = set.progress.tests
+    const { firstLetter, fullText, audioTest } = set.progress.tests
     const hasFirstLetter = firstLetter.lastScore !== null
     const hasFullText = fullText.lastScore !== null
+    const hasAudioTest = audioTest.lastScore !== null
     
-    if (hasFirstLetter && hasFullText) return "complete"
-    if (hasFirstLetter || hasFullText) return "in-progress"
+    if (hasFirstLetter && hasFullText && hasAudioTest) return "complete"
+    if (hasFirstLetter || hasFullText || hasAudioTest) return "in-progress"
     return "not-started"
   }
 
   const getTestProgress = (): string => {
-    const { firstLetter, fullText } = set.progress.tests
-    const completed = [firstLetter.lastScore !== null, fullText.lastScore !== null].filter(Boolean).length
-    return `${completed}/2 tests`
+    const { firstLetter, fullText, audioTest } = set.progress.tests
+    const completed = [firstLetter.lastScore !== null, fullText.lastScore !== null, audioTest.lastScore !== null].filter(Boolean).length
+    return `${completed}/3 tests`
   }
 
   /**
@@ -320,7 +312,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
    * Each step contributes 33.33% to the total:
    * - Familiarize: 33.33% (complete when familiarizeCompleted = true)
    * - Encode: 33.33% (complete when all 3 stages done)
-   * - Test: 33.33% (complete when both tests taken)
+   * - Test: 33.33% (complete when all 3 tests taken)
    */
   const getOverallCompletion = (): number => {
     let completed = 0
@@ -329,8 +321,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     if (set.progress.familiarizeCompleted) completed++
     if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
     
-    const { firstLetter, fullText } = set.progress.tests
-    if (firstLetter.lastScore !== null && fullText.lastScore !== null) completed++
+    const { firstLetter, fullText, audioTest } = set.progress.tests
+    if (firstLetter.lastScore !== null && fullText.lastScore !== null && audioTest.lastScore !== null) completed++
 
     return Math.round((completed / total) * 100)
   }
@@ -462,80 +454,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </CardContent>
             </Card>
 
-            {/* Audio Playback */}
-            {audioUrl && (
-              <Card className="border-blue-500/20 bg-blue-500/5">
-                <CardContent className="flex flex-col gap-3 py-4">
-                  <div className="flex items-center gap-2">
-                    <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
-                    <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
-                  </div>
-                  <AudioPlayer 
-                    audioUrl={audioUrl} 
-                    mode="full"
-                    onDelete={undefined}
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Text-to-Speech */}
-            <Card className="border-purple-500/20 bg-purple-500/5">
-              <CardContent className="flex gap-4 py-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
-                  {isSpeaking ? <VolumeX className="size-5 text-purple-600 dark:text-purple-400" /> : <Volume2 className="size-5 text-purple-600 dark:text-purple-400" />}
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  <div className="flex flex-1 flex-col gap-1">
-                    <h3 className="font-medium text-foreground">Listen Instead</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Have the computer read the content aloud to you. Great for auditory learners.
-                    </p>
-                  </div>
-                  <Button 
-                    onClick={handleTextToSpeech} 
-                    className="w-full sm:w-auto" 
-                    size="sm"
-                    variant={isSpeaking ? "outline" : "default"}
-                  >
-                    {isSpeaking ? (
-                      <>
-                        <VolumeX className="size-4 mr-2" />
-                        Stop Reading
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="size-4 mr-2" />
-                        Read Aloud
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Flashcard Mode CTA */}
-            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
-              <CardContent className="flex gap-4 py-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                  <BookMarked className="size-5 text-primary" />
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  <div className="flex flex-1 flex-col gap-1">
-                    <h3 className="font-medium text-foreground">Try Flashcard Mode</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
-                      {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
-                    </p>
-                  </div>
-                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
-                    Start Flashcards
-                    <ArrowRight className="size-4 ml-2" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* View Toggle and Stats */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-center">
@@ -586,6 +504,77 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 ))}
               </div>
             )}
+
+            {/* Audio Playback */}
+            {audioUrl && (
+              <Card className="border-blue-500/20 bg-blue-500/5">
+                <CardContent className="flex flex-col gap-3 py-4">
+                  <div className="flex items-center gap-2">
+                    <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
+                  </div>
+                  <AudioPlayer 
+                    audioUrl={audioUrl} 
+                    mode="full"
+                    onDelete={undefined}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Text-to-Speech Player or CTA */}
+            {showTTSPlayer ? (
+              <TextToSpeechPlayer 
+                content={set.content} 
+                onClose={handleCloseTTSPlayer}
+              />
+            ) : (
+              <Card className="border-purple-500/20 bg-purple-500/5">
+                <CardContent className="flex gap-4 py-4">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+                    <Volume2 className="size-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2">
+                    <div className="flex flex-1 flex-col gap-1">
+                      <h3 className="font-medium text-foreground">Listen Instead</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Have the computer read the content aloud to you. Great for auditory learners.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleOpenTTSPlayer} 
+                      className="w-full sm:w-auto" 
+                      size="sm"
+                    >
+                      <Volume2 className="size-4 mr-2" />
+                      Read Aloud
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Flashcard Mode CTA */}
+            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+              <CardContent className="flex gap-4 py-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                  <BookMarked className="size-5 text-primary" />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex flex-1 flex-col gap-1">
+                    <h3 className="font-medium text-foreground">Try Flashcard Mode</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
+                      {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
+                    </p>
+                  </div>
+                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
+                    Start Flashcards
+                    <ArrowRight className="size-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
       </SessionLayout>
@@ -730,7 +719,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         {/* Instructions */}
         <div className="rounded-lg bg-muted/50 p-3">
           <p className="text-sm text-muted-foreground">
-            Select a test method. Both methods test the entire passage and can earn you 100% completion.
+            Select a test method. All three methods can help validate complete recall from memory.
           </p>
         </div>
 
@@ -785,6 +774,31 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </Button>
             </CardContent>
           </Card>
+
+          {/* Audio Test Option */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <Mic className="size-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Audio Recall</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Record yourself reciting from memory
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  Test entire memo or specific chunks · Auto-transcribed
+                </p>
+              </div>
+              <Button onClick={startAudioTest} className="w-full">
+                Begin Test
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </SessionLayout>
     )
@@ -820,6 +834,27 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         showBottomActions={false}
       >
         <TypingTest setId={id} content={set.content} onBack={finishTesting} />
+      </SessionLayout>
+    )
+  }
+
+  // Audio test mode
+  if (pageMode === "audio-test") {
+    return (
+      <SessionLayout
+        step="Step 3"
+        title="Audio Recall Test"
+        setTitle={set.title}
+        onBack={exitAudioTest}
+        showBottomActions={false}
+      >
+        <AudioTest 
+          setId={id} 
+          content={set.content} 
+          chunks={chunks}
+          chunkMode={set.chunkMode}
+          onBack={finishTesting} 
+        />
       </SessionLayout>
     )
   }
@@ -938,7 +973,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           <Button 
             variant="outline"
             size="sm" 
-            className="gap-1.5"
+            className="gap-1.5 hidden md:flex"
             asChild
           >
             <Link href={`/edit/${set.id}`}>
@@ -949,7 +984,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         }
       />
       
-      <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
+      <main className="flex flex-1 flex-col gap-6 p-4 pb-24 md:pb-8">
         {/* Overview Section */}
         <div className="flex flex-col gap-4">
           {/* Completion Progress */}
@@ -1202,6 +1237,13 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           )}
         </p>
       </main>
+      <MobileMemoNav 
+        memoId={id}
+        onFamiliarize={handleFamiliarize}
+        onEncode={handleEncode}
+        onTest={handleTest}
+        currentStep={null}
+      />
     </div>
   )
 }

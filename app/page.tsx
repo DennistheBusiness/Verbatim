@@ -13,6 +13,7 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
 import { SplashScreen } from "@/components/splash-screen"
+import { MobileLibraryNav } from "@/components/mobile-library-nav"
 import { useMemorization } from "@/lib/memorization-context"
 
 function formatDate(dateString: string): string {
@@ -52,6 +53,7 @@ function calculateProgress(set: any): number {
 }
 
 export default function HomePage() {
+  const router = useRouter()
   const { sets, isLoaded, getAllTags } = useMemorization()
   const [showSplash, setShowSplash] = useState(true)
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false)
@@ -128,7 +130,7 @@ export default function HomePage() {
     return (
       <div className="flex min-h-svh flex-col bg-background">
         <main className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
+          <Spinner className="size-8" />
         </main>
       </div>
     )
@@ -139,7 +141,7 @@ export default function HomePage() {
       <div className="flex min-h-svh flex-col bg-background">
         <Header title="Library" showBranding={true} />
         <main className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
+          <Spinner className="size-8" />
           <p className="text-sm text-muted-foreground">Loading your library...</p>
         </main>
       </div>
@@ -150,7 +152,7 @@ export default function HomePage() {
     <div className="flex min-h-svh flex-col bg-background">
       <Header title="Library" showBranding={true} />
       
-      <main className="flex flex-1 flex-col gap-6 p-4 pb-8">
+      <main className="flex flex-1 flex-col gap-6 p-4 pb-24 md:pb-8">
         {sets.length === 0 ? (
           <Empty className="flex-1 border-0 bg-muted/30">
             <EmptyHeader>
@@ -184,7 +186,7 @@ export default function HomePage() {
                   {sets.length === 1 ? "Memorization Set" : "Memorization Sets"}
                 </span>
               </div>
-              <Button asChild className="gap-2">
+              <Button asChild className="gap-2 hidden md:flex">
                 <Link href="/create">
                   <Plus className="size-4" />
                   New Memorization
@@ -352,6 +354,7 @@ export default function HomePage() {
           </>
         )}
       </main>
+      <MobileLibraryNav />
     </div>
   )
 }
