@@ -14,7 +14,11 @@ import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
 import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
+import { OnboardingTip } from "@/components/onboarding-tip"
+import { LibrarySkeletons } from "@/components/loading-skeletons"
 import { useMemorization } from "@/lib/memorization-context"
+import { trackEvent } from "@/lib/analytics"
+import * as AnalyticsEvents from "@/lib/analytics-events"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -88,16 +92,37 @@ export default function HomePage() {
   }, [sets, searchQuery, selectedTags])
 
   const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag)
+    setSelectedTags((prev) => {
+      const newTags = prev.includes(tag)
         ? prev.filter((t) => t !== tag)
         : [...prev, tag]
-    )
+      
+      // Track tag filter
+      trackEvent(AnalyticsEvents.TAG_FILTER_APPLIED, {
+        tag_name: tag,
+        selected_tags_count: newTags.length,
+        filtered_results_count: filteredSets.length,
+      })
+      
+      return newTags
+    })
   }
 
   const clearFilters = () => {
+    const hadSearch = searchQuery !== ""
+    const hadTags = selectedTags.length > 0
+    
     setSearchQuery("")
     setSelectedTags([])
+    
+    // Track filters cleared
+    if (hadSearch || hadTags) {
+      trackEvent(AnalyticsEvents.FILTERS_CLEARED, {
+        had_search: hadSearch,
+        had_tags: hadTags,
+        total_sets_visible: sets.length,
+      })
+    }
   }
 
   // Check if user has seen splash this session
@@ -107,6 +132,21 @@ export default function HomePage() {
       setShowSplash(false)
     }
   }, [])
+
+  // Track search with debouncing
+  useEffect(() => {
+    if (!searchQuery.trim()) return
+    
+    const timer = setTimeout(() => {
+      trackEvent(AnalyticsEvents.SEARCH_PERFORMED, {
+        query_length: searchQuery.length,
+        has_results: filteredSets.length > 0,
+        result_count: filteredSets.length,
+      })
+    }, 1000) // Wait 1 second after user stops typing
+    
+    return () => clearTimeout(timer)
+  }, [searchQuery, filteredSets.length])
 
   const handleSplashComplete = () => {
     sessionStorage.setItem("verbatim-splash-seen", "true")
@@ -145,10 +185,7 @@ export default function HomePage() {
     return (
       <div className="flex min-h-svh flex-col bg-background">
         <Header title="Library" showBranding={true} />
-        <main className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Spinner className="size-8" />
-          <p className="text-sm text-muted-foreground">Loading your library...</p>
-        </main>
+        <LibrarySkeletons />
       </div>
     )
   }
@@ -374,6 +411,7 @@ export default function HomePage() {
         )}
       </main>
       <MobileLibraryNav />
+      <OnboardingTip page="home" delay={3000} />
     </div>
   )
 }

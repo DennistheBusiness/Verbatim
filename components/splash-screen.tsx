@@ -41,7 +41,7 @@ export function SplashScreen({ onComplete, duration = 2000 }: SplashScreenProps)
         {/* Logo */}
         <div className="relative">
           <Image
-            src="/verbatim-logo.png"
+            src="/verbatim-logo-icon.png"
             alt="Verbatim"
             width={120}
             height={120}

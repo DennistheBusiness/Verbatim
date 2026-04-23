@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Montserrat, Poppins, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { MemorizationProvider } from '@/lib/memorization-context'
+import { PostHogProvider } from '@/components/posthog-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
@@ -53,9 +54,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`bg-background ${montserrat.variable} ${poppins.variable} ${inter.variable}`}>
       <body className="font-sans antialiased">
-        <MemorizationProvider>
-          {children}
-        </MemorizationProvider>
+        <PostHogProvider>
+          <MemorizationProvider>
+            {children}
+          </MemorizationProvider>
+        </PostHogProvider>
         <Toaster position="bottom-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
