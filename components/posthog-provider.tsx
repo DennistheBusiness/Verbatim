@@ -1,8 +1,28 @@
 "use client"
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { initializeAnalytics, trackPageView } from '@/lib/analytics'
+
+/**
+ * PostHog Page View Tracker
+ * 
+ * Separate component for tracking page views to isolate useSearchParams()
+ * in a Suspense boundary (Next.js requirement for static generation).
+ */
+function PostHogPageView() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (pathname) {
+      const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '')
+      trackPageView(url)
+    }
+  }, [pathname, searchParams])
+
+  return null
+}
 
 /**
  * PostHog Analytics Provider
@@ -11,21 +31,17 @@ import { initializeAnalytics, trackPageView } from '@/lib/analytics'
  * Must be a client component to access window object and Next.js navigation hooks.
  */
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
   // Initialize PostHog on mount
   useEffect(() => {
     initializeAnalytics()
   }, [])
 
-  // Track page views on route change
-  useEffect(() => {
-    if (pathname) {
-      const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '')
-      trackPageView(url)
-    }
-  }, [pathname, searchParams])
-
-  return <>{children}</>
+  return (
+    <>
+      <Suspense fallback={null}>
+        <PostHogPageView />
+      </Suspense>
+      {children}
+    </>
+  )
 }
