@@ -898,4 +898,216 @@ console.log(posthog.isFeatureEnabled('test')) // Should not error
 
 ---
 
+## 🔐 Auth System, Chunking Fixes & Deployment Repairs
+
+**Implementation Time:** ~180 minutes  
+**Date:** April 23, 2026 (Session 3)  
+**Branch:** `forgot-pass-flow`  
+**Goal:** Fix production deployment errors, correct custom chunking behavior across all pages, and implement a complete password reset + session expiration system.
+
+---
+
+### Deployment Fixes
+
+#### 1. pnpm Lockfile Out of Date
+**File:** `pnpm-lock.yaml`  
+**Problem:** Vercel build failed with `ERR_PNPM_OUTDATED_LOCKFILE` — lockfile did not match `package.json` after `posthog-js` was installed via npm.  
+**Fix:** Regenerated lockfile by running `pnpm install` and committed updated `pnpm-lock.yaml`.
+
+#### 2. PostHog `useSearchParams()` Without Suspense Boundary
+**File:** `components/posthog-provider.tsx`  
+**Problem:** Vercel prerendering of `/about` failed — `useSearchParams()` requires a Suspense boundary during static generation.  
+**Fix:** Extracted page-view tracking logic into a `PostHogPageView` subcomponent and wrapped it in `<Suspense fallback={null}>` inside the main `PostHogProvider`.
+
+```tsx
+// After fix:
+function PostHogPageView() {
+  // useSearchParams used here
+}
+
+export function PostHogProvider({ children }) {
+  return (
+    <PHProvider client={posthog}>
+      <Suspense fallback={null}>
+        <PostHogPageView />
+      </Suspense>
+      {children}
+    </PHProvider>
+  )
+}
+```
+
+---
+
+### Custom Chunking Fixes
+
+#### 1. Database Constraint Rejected `line` and `custom` Modes
+**File:** `supabase-migration-add-chunk-modes.sql` *(new)*  
+**Problem:** Supabase schema had a CHECK constraint only allowing `('paragraph', 'sentence')` — saving sets with `line` or `custom` chunk mode returned a 400 error.  
+**Fix:** Created migration SQL to drop the old constraint and add a new one:
+
+```sql
+ALTER TABLE memorization_sets
+  DROP CONSTRAINT memorization_sets_chunk_mode_check;
+
+ALTER TABLE memorization_sets
+  ADD CONSTRAINT memorization_sets_chunk_mode_check
+  CHECK (chunk_mode IN ('paragraph', 'sentence', 'line', 'custom'));
+```
+
+> **Action Required:** Run this in the Supabase SQL Editor on your project.
+
+---
+
+#### 2. Custom Chunking Regex Too Restrictive
+**Files:** `app/create/page.tsx`, `lib/memorization-context.tsx`  
+**Problem:** The delimiter `/` only worked when it appeared on its own line (`/\n\s*\/\s*\n/`). Mid-sentence usage like `word/word` did not split.  
+**Fix:** Changed regex to `/\/+/` — splits on any occurrence of `/` anywhere in the text.
+
+**Also fixed in `create/page.tsx`:** `parseIntoParagraphs` was incorrectly splitting on `/` (a copy-paste artifact). Corrected to only split on blank lines (`/\n\s*\n/`).
+
+---
+
+#### 3. Chunk Preview Repositioned
+**File:** `app/create/page.tsx`  
+**Change:** Moved `ChunkPreview` component to appear **below** the stats bar (word/char/chunk counts) rather than above it. Both stats and preview are now wrapped in a `content.trim()` conditional so they only render when content exists.
+
+---
+
+### Edit Page Chunk Mode Parity
+
+**File:** `app/edit/[id]/page.tsx`  
+**Problem:** Stats section only computed chunk counts for `paragraph` and `sentence` modes. `line` and `custom` modes showed incorrect counts.  
+**Fix:** Added all four helper functions matching the create page:
+
+- `parseIntoLines(text)` — splits on `\n`
+- `parseIntoParagraphs(text)` — splits on blank lines
+- `parseIntoSentences(text)` — regex sentence split
+- `parseCustomChunks(text)` — splits on `/`
+
+Stats `useMemo` now computes counts for all four modes. Chunk mode label display and custom mode hint (`/`) updated to be accurate.
+
+---
+
+### Familiarize View: Chunk Mode Selector
+
+**File:** `app/memorization/[id]/page.tsx`  
+**Changes:**
+- Added a **Line / Paragraph / Sentence / Custom** `ButtonGroup` to the familiarize view.
+- Selector only renders when the user is in **"By Chunk"** mode (`familiarizeView === "chunks"`). It is hidden in Full Text mode.
+- Positioned between the Full Text / By Chunk toggle and the word/chunk count stats.
+- Import: added `Wand2` icon from `lucide-react`.
+
+```tsx
+{familiarizeView === "chunks" && (
+  <ButtonGroup>
+    <Button onClick={() => setChunkMode("line")}>Line</Button>
+    <Button onClick={() => setChunkMode("paragraph")}>Paragraph</Button>
+    <Button onClick={() => setChunkMode("sentence")}>Sentence</Button>
+    <Button onClick={() => setChunkMode("custom")}>Custom</Button>
+  </ButtonGroup>
+)}
+```
+
+---
+
+### Auth System: Password Reset Flow
+
+#### 1. Forgot Password Page
+**File:** `app/auth/forgot-password/page.tsx` *(new)*  
+
+**Features:**
+- Email input → calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: '/auth/reset-password' })`
+- Shows success confirmation screen with "Try again" fallback
+- Styled consistently with existing auth pages
+
+---
+
+#### 2. Reset Password Page
+**File:** `app/auth/reset-password/page.tsx` *(new)*  
+
+**Features:**
+- Verifies a valid session exists on mount (Supabase populates session from reset email link)
+- Shows expired/invalid token state if no session found
+- Password and confirm password fields with show/hide toggles
+- Minimum 6 character validation + match validation
+- Calls `supabase.auth.updateUser({ password })` on submit
+- Signs out and redirects to `/auth/login` on success
+
+---
+
+#### 3. Session Handler Component
+**File:** `components/session-handler.tsx` *(new)*  
+**Integrated into:** `app/layout.tsx`
+
+**Responsibilities:**
+- Listens to `supabase.auth.onAuthStateChange` for global auth events
+- `SIGNED_OUT` → redirects to `/auth/login`
+- `PASSWORD_RECOVERY` → redirects to `/auth/reset-password` (critical fix: this is the event Supabase fires when a user clicks the reset email link)
+- `SIGNED_IN` → redirects to `/` only if on an auth page **and not** on `/auth/reset-password` (prevents overriding the reset flow)
+- Runs a session validity check every **20 minutes**; redirects to login if session is expired
+- Skips public path checks for all `/auth/*` routes on mount
+
+**Key fix applied in this session:**
+
+| Event | Before | After |
+|---|---|---|
+| `PASSWORD_RECOVERY` | No redirect | `router.push('/auth/reset-password')` |
+| `SIGNED_IN` | Redirected away from reset page | Excluded `/auth/reset-password` from redirect |
+| Check interval | 5 minutes | 20 minutes |
+
+---
+
+#### 4. Forgot Password Link on Login Page
+**File:** `app/auth/login/page.tsx`  
+**Change:** Added "Forgot password?" link next to the Password label, linking to `/auth/forgot-password`.
+
+---
+
+### Files Changed Summary (Session 3)
+
+#### New Files (4)
+- ✅ `app/auth/forgot-password/page.tsx` — Password reset request
+- ✅ `app/auth/reset-password/page.tsx` — Set new password
+- ✅ `components/session-handler.tsx` — Global auth state monitor
+- ✅ `supabase-migration-add-chunk-modes.sql` — DB constraint migration
+
+#### Modified Files (6)
+- ✅ `components/posthog-provider.tsx` — Suspense boundary for `useSearchParams()`
+- ✅ `pnpm-lock.yaml` — Regenerated to fix Vercel build
+- ✅ `app/create/page.tsx` — Fixed paragraph parsing, custom regex, preview positioning
+- ✅ `lib/memorization-context.tsx` — Fixed `parseCustomChunks` regex
+- ✅ `app/edit/[id]/page.tsx` — All 4 chunk modes with accurate stats
+- ✅ `app/memorization/[id]/page.tsx` — Chunk mode selector in familiarize view
+- ✅ `app/auth/login/page.tsx` — "Forgot password?" link
+- ✅ `app/layout.tsx` — `SessionHandler` integrated
+
+#### Pending Actions
+- [ ] Run `supabase-migration-add-chunk-modes.sql` in Supabase SQL Editor (production)
+- [ ] Verify Supabase "Email Redirect URLs" allowlist includes your production domain + `/auth/reset-password`
+- [ ] Merge `forgot-pass-flow` branch into `main` and deploy
+- [ ] QA test end-to-end password reset flow in production
+
+---
+
+### Commits (Session 3)
+| Hash | Message |
+|---|---|
+| `54dcdab` | Fix: Wrap PostHog useSearchParams in Suspense boundary |
+| `4894f8d` | Fix: Add line and custom chunk modes to DB migration |
+| `77e1522` | Fix: Custom chunking splits on / anywhere in text |
+| `9b63d87` | Fix: Move chunk preview below stats, fix paragraph parsing |
+| `bc32ac3` | Fix: Edit page all 4 chunk modes + familiarize chunk selector |
+| `39d1e5e` | Fix: Hide chunk mode selector in Full Text mode |
+| `888c45f` | Feat: Add forgot-password, reset-password, and SessionHandler |
+| `32eecfa` | Fix: Update session check to 20 minutes and fix password reset redirect |
+
+---
+
+**Total Development Time (Session 3):** ~180 minutes  
+**Risk Level:** Low–Medium (auth flow changes require production testing)  
+**User Impact:** High (password reset unblocks locked-out users; chunking fixes correct core product behavior)
+
+---
+
 *End of Changelog*
