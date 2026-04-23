@@ -54,7 +54,7 @@ CREATE TABLE memorization_sets (
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   content TEXT NOT NULL,
-  chunk_mode TEXT NOT NULL DEFAULT 'paragraph' CHECK (chunk_mode IN ('paragraph', 'sentence')),
+  chunk_mode TEXT NOT NULL DEFAULT 'paragraph' CHECK (chunk_mode IN ('paragraph', 'sentence', 'line', 'custom')),
   progress JSONB NOT NULL DEFAULT '{
     "familiarizeCompleted": false,
     "encode": {

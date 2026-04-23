@@ -71,8 +71,8 @@ export default function CreatePage() {
 
   const parseIntoParagraphs = (text: string) => {
     return text
-      .split(/\n\s*\/\s*\n/) // First split on "/" separator
-      .flatMap((section) => section.split(/\n\s*\n+/)) // Then split on blank lines
+      .replace(/\r\n/g, "\n")
+      .split(/\n\s*\n+/)
       .map((para) => para.trim())
       .filter((para) => para.length > 0)
   }
