@@ -106,7 +106,11 @@ export default function CreatePage() {
   }
 
   const parseCustomChunks = (text: string) => {
-    return text.split(/---/).map((chunk) => chunk.trim()).filter((chunk) => chunk.length > 0)
+    return text
+      .replace(/\r\n/g, "\n")
+      .split(/\n\s*\/\s*\n/)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0)
   }
 
   const generatePreviewChunks = (text: string, mode: ChunkMode) => {
@@ -329,7 +333,7 @@ export default function CreatePage() {
                         <Wand2 className="size-4" />
                         <span className="font-medium">Custom</span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Use --- separator</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Use / separator</div>
                     </Label>
                   </div>
                 </div>
@@ -348,7 +352,7 @@ export default function CreatePage() {
                 <Alert className="mt-3">
                   <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
-                    Use three dashes (---) to manually separate chunks in your text
+                    Type / on its own line to manually separate chunks in your text
                   </AlertDescription>
                 </Alert>
               )}

@@ -44,6 +44,22 @@ function formatDate(dateString: string): string {
   })
 }
 
+function getChunkLabel(mode: ChunkMode, count: number): string {
+  const plural = count !== 1 ? "s" : ""
+  switch (mode) {
+    case "line":
+      return `line${plural}`
+    case "paragraph":
+      return `paragraph${plural}`
+    case "sentence":
+      return `sentence${plural}`
+    case "custom":
+      return `chunk${plural}`
+    default:
+      return `chunk${plural}`
+  }
+}
+
 interface MemorizationDetailPageProps {
   params: Promise<{ id: string }>
 }
@@ -482,7 +498,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
                 <span>{wordCount} words</span>
                 <span className="size-1 rounded-full bg-muted-foreground/30" />
-                <span>{chunks.length} {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""}</span>
+                <span>{chunks.length} {getChunkLabel(set.chunkMode, chunks.length)}</span>
               </div>
             </div>
 
@@ -788,7 +804,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex flex-1 flex-col gap-1">
                   <p className="font-medium text-primary">Practice Entire Selection</p>
                   <p className="text-sm text-muted-foreground">
-                    Train all {chunks.length} {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""} • {wordCount} word{wordCount !== 1 ? "s" : ""}
+                    Train all {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} • {wordCount} word{wordCount !== 1 ? "s" : ""}
                   </p>
                 </div>
               </button>
@@ -849,7 +865,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </div>
               <div className="rounded-lg bg-muted/30 p-3">
                 <p className="text-sm text-muted-foreground">
-                  {wordCount} words · {chunks.length} {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""}
+                  {wordCount} words · {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)}
                 </p>
               </div>
               <Button onClick={startFirstLetterTest} className="w-full">
@@ -874,7 +890,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </div>
               <div className="rounded-lg bg-muted/30 p-3">
                 <p className="text-sm text-muted-foreground">
-                  {wordCount} words · {chunks.length} {set.chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""}
+                  {wordCount} words · {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)}
                 </p>
               </div>
               <Button onClick={startTypingTest} className="w-full">
