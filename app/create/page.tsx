@@ -118,7 +118,7 @@ export default function CreatePage() {
   const parseCustomChunks = (text: string) => {
     const result = text
       .replace(/\r\n/g, "\n")
-      .split(/\n\s*\/\s*\n/)
+      .split(/\/+/)
       .map((chunk) => chunk.trim())
       .filter((chunk) => chunk.length > 0)
     
@@ -380,7 +380,7 @@ export default function CreatePage() {
                 <Alert className="mt-3">
                   <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
-                    Type / on its own line to manually separate chunks in your text
+                    Use / anywhere in your text to manually separate chunks
                   </AlertDescription>
                 </Alert>
               )}
