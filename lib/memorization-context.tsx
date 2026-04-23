@@ -166,9 +166,11 @@ function computeRecommendedStep(progress: Progress): RecommendedStep {
   // Rule 3: Check test scores - if any test has score < 70, recommend encode again
   const firstLetterScore = progress.tests.firstLetter.lastScore
   const fullTextScore = progress.tests.fullText.lastScore
+  const audioTestScore = progress.tests.audioTest.lastScore
   
   if ((firstLetterScore !== null && firstLetterScore < 70) || 
-      (fullTextScore !== null && fullTextScore < 70)) {
+      (fullTextScore !== null && fullTextScore < 70) ||
+      (audioTestScore !== null && audioTestScore < 70)) {
     return "encode"
   }
   
@@ -178,7 +180,8 @@ function computeRecommendedStep(progress: Progress): RecommendedStep {
 
 /**
  * Parses content into paragraphs.
- * - Splits on one or more line breaks
+ * - First splits on custom separator "/" (surrounded by newlines)
+ * - Then splits on one or more line breaks
  * - Trims whitespace from each paragraph
  * - Normalizes internal whitespace (multiple spaces become single space)
  * - Ignores empty chunks
@@ -187,8 +190,10 @@ function parseIntoParagraphs(content: string): string[] {
   return content
     // Normalize line endings
     .replace(/\r\n/g, "\n")
-    // Split on one or more line breaks (with optional whitespace between)
-    .split(/\n\s*\n|\n/)
+    // First split on custom separator "/" with surrounding whitespace/newlines
+    .split(/\n\s*\/\s*\n/)
+    // Then split each section on line breaks, flattening the results
+    .flatMap((section) => section.split(/\n\s*\n|\n/))
     // Trim and normalize internal whitespace
     .map((p) => p.trim().replace(/\s+/g, " "))
     // Filter out empty chunks

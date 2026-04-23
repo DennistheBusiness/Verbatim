@@ -40,7 +40,7 @@ function truncateContent(content: string, maxLength: number = 100): string {
 
 function calculateProgress(set: any): number {
   let completed = 0
-  let total = 6 // familiarize (1) + encode stages (3) + tests (2)
+  let total = 7 // familiarize (1) + encode stages (3) + tests (3)
   
   if (set.progress.familiarizeCompleted) completed++
   if (set.progress.encode.stage1Completed) completed++
@@ -48,6 +48,7 @@ function calculateProgress(set: any): number {
   if (set.progress.encode.stage3Completed) completed++
   if (set.progress.tests.firstLetter.bestScore !== null) completed++
   if (set.progress.tests.fullText.bestScore !== null) completed++
+  if (set.progress.tests.audioTest.bestScore !== null) completed++
   
   return Math.round((completed / total) * 100)
 }

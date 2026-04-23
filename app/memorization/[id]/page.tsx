@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X } from "lucide-react"
 import { toast } from "sonner"
 import { AudioPlayer } from "@/components/audio-player"
 import { createClient } from "@/lib/supabase/client"
@@ -55,8 +55,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
+  const [contentExpanded, setContentExpanded] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showTTSPlayer, setShowTTSPlayer] = useState(false)
+  const [showMarkedOnly, setShowMarkedOnly] = useState(false)
   const supabase = createClient()
 
   // Fetch audio URL if available
@@ -185,6 +187,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const handleFlashcards = () => {
     setPageMode("flashcards")
+    setShowMarkedOnly(false) // Reset filter when entering
     updateSessionState(id, {
       currentStep: "familiarize",
       currentChunkIndex: 0,
@@ -193,6 +196,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const exitFlashcards = () => {
     setPageMode("familiarize")
+    setShowMarkedOnly(false) // Reset filter when exiting
     updateSessionState(id, {
       currentChunkIndex: null,
     })
@@ -296,8 +300,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     const hasFullText = fullText.lastScore !== null
     const hasAudioTest = audioTest.lastScore !== null
     
-    if (hasFirstLetter && hasFullText && hasAudioTest) return "complete"
-    if (hasFirstLetter || hasFullText || hasAudioTest) return "in-progress"
+    // Test section complete when ANY test is taken (changed from requiring all 3)
+    if (hasFirstLetter || hasFullText || hasAudioTest) return "complete"
     return "not-started"
   }
 
@@ -312,7 +316,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
    * Each step contributes 33.33% to the total:
    * - Familiarize: 33.33% (complete when familiarizeCompleted = true)
    * - Encode: 33.33% (complete when all 3 stages done)
-   * - Test: 33.33% (complete when all 3 tests taken)
+   * - Test: 33.33% (complete when any 1 test taken)
    */
   const getOverallCompletion = (): number => {
     let completed = 0
@@ -322,7 +326,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
     
     const { firstLetter, fullText, audioTest } = set.progress.tests
-    if (firstLetter.lastScore !== null && fullText.lastScore !== null && audioTest.lastScore !== null) completed++
+    if (firstLetter.lastScore !== null || fullText.lastScore !== null || audioTest.lastScore !== null) completed++
 
     return Math.round((completed / total) * 100)
   }
@@ -485,14 +489,39 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             {familiarizeView === "full" ? (
               <Card>
                 <CardContent className="py-5">
-                  <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
-                    {set.content}
-                  </p>
+                  <div className={contentExpanded ? "" : "max-h-[300px] overflow-hidden relative"}>
+                    <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
+                      {set.content}
+                    </p>
+                    {!contentExpanded && set.content.length > 500 && (
+                      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent" />
+                    )}
+                  </div>
+                  {set.content.length > 500 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setContentExpanded(!contentExpanded)}
+                      className="w-full mt-3 gap-2"
+                    >
+                      {contentExpanded ? (
+                        <>
+                          <ChevronUp className="size-4" />
+                          Show Less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="size-4" />
+                          See More
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
               <div className="flex flex-col gap-3">
-                {chunks.map((chunk) => (
+                {(contentExpanded ? chunks : chunks.slice(0, 3)).map((chunk) => (
                   <Card key={chunk.id}>
                     <CardContent className="flex gap-4 py-4">
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
@@ -502,6 +531,26 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     </CardContent>
                   </Card>
                 ))}
+                {chunks.length > 3 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setContentExpanded(!contentExpanded)}
+                    className="w-full gap-2"
+                  >
+                    {contentExpanded ? (
+                      <>
+                        <ChevronUp className="size-4" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="size-4" />
+                        See More ({chunks.length - 3} more chunks)
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             )}
 
@@ -583,6 +632,13 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   // Flashcard mode
   if (pageMode === "flashcards") {
+    const markedChunkIds = set.progress.markedChunks ?? []
+    const filteredChunks = showMarkedOnly 
+      ? chunks.filter(chunk => markedChunkIds.includes(chunk.id))
+      : chunks
+    const hasMarkedChunks = markedChunkIds.length > 0
+    const showingMarkedEmpty = showMarkedOnly && filteredChunks.length === 0
+
     return (
       <SessionLayout
         step="Step 1"
@@ -612,14 +668,65 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             </EmptyHeader>
           </Empty>
         ) : (
-          <FlashcardViewer
-            chunks={chunks}
-            initialIndex={set.sessionState.currentChunkIndex ?? 0}
-            reviewedChunks={set.progress.reviewedChunks ?? []}
-            markedChunks={set.progress.markedChunks ?? []}
-            onUpdateReviewed={(chunkIds) => updateReviewedChunks(id, chunkIds)}
-            onUpdateMarked={(chunkIds) => updateMarkedChunks(id, chunkIds)}
-          />
+          <div className="flex flex-col gap-4">
+            {/* Filter toggle button */}
+            {hasMarkedChunks && (
+              <div className="flex justify-center">
+                <Button
+                  variant={showMarkedOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowMarkedOnly(!showMarkedOnly)}
+                  className="gap-2"
+                >
+                  {showMarkedOnly ? (
+                    <>
+                      <X className="size-4" />
+                      Show All ({chunks.length})
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="size-4" />
+                      Marked {markedChunkIds.length}
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Empty state when viewing marked but none exist */}
+            {showingMarkedEmpty ? (
+              <Empty className="flex-1 border-0">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon" className="size-12 rounded-full bg-muted text-muted-foreground [&_svg]:size-5">
+                    <Bookmark />
+                  </EmptyMedia>
+                  <EmptyTitle>No marked chunks</EmptyTitle>
+                  <EmptyDescription>
+                    Tap the bookmark icon on any flashcard to save it for later review.
+                  </EmptyDescription>
+                  <EmptyContent>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowMarkedOnly(false)}
+                      className="gap-2"
+                    >
+                      <ArrowRight className="size-4" />
+                      View All Chunks
+                    </Button>
+                  </EmptyContent>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <FlashcardViewer
+                chunks={filteredChunks}
+                initialIndex={0}
+                reviewedChunks={set.progress.reviewedChunks ?? []}
+                markedChunks={markedChunkIds}
+                onUpdateReviewed={(chunkIds) => updateReviewedChunks(id, chunkIds)}
+                onUpdateMarked={(chunkIds) => updateMarkedChunks(id, chunkIds)}
+              />
+            )}
+          </div>
         )}
       </SessionLayout>
     )
