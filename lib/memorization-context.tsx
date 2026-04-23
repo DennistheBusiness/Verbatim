@@ -184,23 +184,16 @@ function computeRecommendedStep(progress: Progress): RecommendedStep {
 
 /**
  * Parses content into paragraphs.
- * - First splits on custom separator "/" (surrounded by newlines)
- * - Then splits on one or more line breaks
+ * - Splits on blank lines (one or more line breaks)
  * - Trims whitespace from each paragraph
  * - Normalizes internal whitespace (multiple spaces become single space)
  * - Ignores empty chunks
  */
 function parseIntoParagraphs(content: string): string[] {
   return content
-    // Normalize line endings
     .replace(/\r\n/g, "\n")
-    // First split on custom separator "/" with surrounding whitespace/newlines
-    .split(/\n\s*\/\s*\n/)
-    // Then split each section on line breaks, flattening the results
-    .flatMap((section) => section.split(/\n\s*\n|\n/))
-    // Trim and normalize internal whitespace
+    .split(/\n\s*\n+/)
     .map((p) => p.trim().replace(/\s+/g, " "))
-    // Filter out empty chunks
     .filter((p) => p.length > 0)
 }
 
@@ -240,10 +233,41 @@ export function countWords(content: string): number {
     .length
 }
 
+function parseIntoLines(content: string): string[] {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
+function parseCustomChunks(content: string): string[] {
+  return content
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\/\s*\n/)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0)
+}
+
 function generateChunks(content: string, mode: ChunkMode): Chunk[] {
-  const texts = mode === "paragraph" 
-    ? parseIntoParagraphs(content) 
-    : parseIntoSentences(content)
+  let texts: string[]
+  
+  switch (mode) {
+    case "line":
+      texts = parseIntoLines(content)
+      break
+    case "paragraph":
+      texts = parseIntoParagraphs(content)
+      break
+    case "sentence":
+      texts = parseIntoSentences(content)
+      break
+    case "custom":
+      texts = parseCustomChunks(content)
+      break
+    default:
+      texts = parseIntoParagraphs(content)
+  }
   
   return texts.map((text, index) => ({
     id: generateId(),
