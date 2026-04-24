@@ -12,6 +12,37 @@ const SPEED_OPTIONS = ["0.5", "0.75", "1", "1.25", "1.5", "2"]
 const VOICE_STORAGE_KEY = "verbatim-tts-voice"
 const WORDS_PER_SECOND = 2.5 // average spoken words/sec at 1× speed
 
+// Curated priority list — best voices across macOS, Windows, and Chrome
+const PREFERRED_VOICE_NAMES = [
+  "Samantha",               // macOS — natural American English
+  "Google US English",      // Chrome — American English
+  "Microsoft Zira",         // Windows — female American English
+  "Microsoft David",        // Windows — male American English
+  "Alex",                   // macOS — classic American English
+  "Daniel",                 // macOS — British English
+  "Google UK English Female",
+  "Google UK English Male",
+  "Microsoft Mark",
+  "Karen",                  // macOS — Australian English
+]
+
+function pickBestVoices(all: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  const english = all.filter(v => v.lang.startsWith("en"))
+  const preferred: SpeechSynthesisVoice[] = []
+  for (const name of PREFERRED_VOICE_NAMES) {
+    const match = english.find(v => v.name === name)
+    if (match) preferred.push(match)
+    if (preferred.length === 5) break
+  }
+  if (preferred.length < 5) {
+    const usVoices = english
+      .filter(v => v.lang === "en-US" && !preferred.includes(v))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    preferred.push(...usVoices.slice(0, 5 - preferred.length))
+  }
+  return preferred.slice(0, 5)
+}
+
 interface TextToSpeechPlayerProps {
   content: string
   onClose: () => void
@@ -47,17 +78,11 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
   useEffect(() => {
     const loadVoices = () => {
       const all = window.speechSynthesis.getVoices()
-      const english = all
-        .filter((v) => v.lang.startsWith("en"))
-        .sort((a, b) => {
-          if (a.lang === "en-US" && b.lang !== "en-US") return -1
-          if (b.lang === "en-US" && a.lang !== "en-US") return 1
-          return a.name.localeCompare(b.name)
-        })
-      setVoices(english)
+      const best = pickBestVoices(all)
+      setVoices(best)
       const saved = localStorage.getItem(VOICE_STORAGE_KEY)
-      const match = english.find((v) => v.voiceURI === saved)
-      setSelectedVoiceURI(match?.voiceURI ?? english[0]?.voiceURI ?? "")
+      const match = best.find((v) => v.voiceURI === saved)
+      setSelectedVoiceURI(match?.voiceURI ?? best[0]?.voiceURI ?? "")
     }
     loadVoices()
     window.speechSynthesis.onvoiceschanged = loadVoices

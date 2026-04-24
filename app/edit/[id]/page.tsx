@@ -304,7 +304,7 @@ export default function EditPage({ params }: EditPageProps) {
             <Field>
               <FieldLabel>Split content by</FieldLabel>
               <RadioGroup value={chunkMode} onValueChange={(v) => setChunkMode(v as ChunkMode)}>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     { value: "paragraph", Icon: FileText, label: "Paragraph", desc: "Blank lines" },
                     { value: "sentence",  Icon: Layers,   label: "Sentence",  desc: "Punctuation" },
