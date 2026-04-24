@@ -13,7 +13,7 @@ import { Header } from "@/components/header"
 import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
 import { VoiceRecorder } from "@/components/voice-recorder"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
+import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
 import { FileText, Type, Trash2, AlertCircle, Layers, X, AlertTriangle, Wand2, Plus } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
@@ -52,6 +52,7 @@ export default function EditPage({ params }: EditPageProps) {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [originalFilename, setOriginalFilename] = useState<string | null>(null)
   const [hasExistingAudio, setHasExistingAudio] = useState(false)
+  const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
 
   const addTag = () => {
     const trimmedTag = tagInput.trim()
@@ -72,9 +73,10 @@ export default function EditPage({ params }: EditPageProps) {
     }
   }
 
-  const handleVoiceRecording = (blob: Blob, transcription: string) => {
+  const handleVoiceRecording = (blob: Blob, transcription: string, words: TranscriptWord[]) => {
     setContent(transcription)
     setAudioBlob(blob)
+    setTranscriptWords(words)
     setOriginalFilename("voice-recording.webm")
     setContentSource("voice")
     setInputMethod("text")
@@ -163,7 +165,11 @@ export default function EditPage({ params }: EditPageProps) {
     if (set && chunkMode !== set.chunkMode) {
       await updateChunkMode(id, chunkMode)
     }
-    await updateSet(id, title.trim(), content.trim(), tags, audioBlob, originalFilename, contentSource)
+    await updateSet(
+      id, title.trim(), content.trim(), tags, audioBlob, originalFilename, contentSource,
+      transcriptWords.length > 0 ? content.trim() : undefined,
+      transcriptWords.length > 0 ? transcriptWords : undefined,
+    )
     router.push(`/memorization/${id}`)
   }
 

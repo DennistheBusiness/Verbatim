@@ -9,12 +9,13 @@ import { Label } from "@/components/ui/label"
 import { FieldDescription } from "@/components/ui/field"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
+import type { TranscriptWord } from "@/app/api/transcribe/route"
 
 interface VoiceRecorderProps {
-  onRecordingComplete: (audioBlob: Blob, transcription: string) => void
+  onRecordingComplete: (audioBlob: Blob, transcription: string, transcriptWords: TranscriptWord[]) => void
 }
 
-type RecordingState = "idle" | "recording" | "paused" | "stopped"
+type RecordingState = "idle" | "recording" | "paused" | "stopped" | "transcribing"
 
 // Check if browser supports required APIs
 const isWebSpeechSupported = 
@@ -30,6 +31,7 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [audioUrl, setAudioUrl] = useState<string>("")
   const [transcription, setTranscription] = useState("")
+  const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
   const [duration, setDuration] = useState(0)
   const [error, setError] = useState("")
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -102,6 +104,20 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
     }
   }, [])
 
+  // Auto-stop at 1-hour limit
+  useEffect(() => {
+    if (duration >= 3600 && (state === "recording" || state === "paused")) {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop()
+        try { recognitionRef.current?.stop() } catch {}
+        setState("stopped")
+      }
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
+      toast.warning("1 hour limit reached. Recording saved automatically.")
+    }
+  }, [duration]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const drawWaveform = () => {
     if (!analyserRef.current || !canvasRef.current) return
 
@@ -169,6 +185,7 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
         mimeType: MediaRecorder.isTypeSupported("audio/webm")
           ? "audio/webm"
           : "audio/mp4",
+        audioBitsPerSecond: 64000,
       })
 
       mediaRecorderRef.current = mediaRecorder
@@ -180,13 +197,13 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
         }
       }
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType })
 
-        // Validate size before accepting (50 MB limit)
-        const MAX_AUDIO_SIZE = 50 * 1024 * 1024
+        // Validate size before accepting (10 MB limit)
+        const MAX_AUDIO_SIZE = 10 * 1024 * 1024
         if (blob.size > MAX_AUDIO_SIZE) {
-          setError("Recording is too large (max 50 MB). Please record a shorter clip.")
+          setError("Recording is too large (max 10 MB). Please record a shorter clip.")
           stream.getTracks().forEach((track) => track.stop())
           if (timerRef.current) clearInterval(timerRef.current)
           if (animationRef.current) cancelAnimationFrame(animationRef.current)
@@ -196,19 +213,28 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
 
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
-        
-        // Stop all tracks
         stream.getTracks().forEach((track) => track.stop())
-        
-        // Stop timer
-        if (timerRef.current) {
-          clearInterval(timerRef.current)
+        if (timerRef.current) clearInterval(timerRef.current)
+        if (animationRef.current) cancelAnimationFrame(animationRef.current)
+
+        // AI transcription via Groq Whisper
+        setState("transcribing")
+        try {
+          const form = new FormData()
+          form.append("audio", blob)
+          const res = await fetch("/api/transcribe", { method: "POST", body: form })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.text) {
+              setTranscription(data.text)
+              setTranscriptWords(data.words ?? [])
+            }
+          }
+        } catch {
+          // Keep Web Speech transcript if Groq fails
         }
 
-        // Stop waveform animation
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current)
-        }
+        setState("stopped")
       }
 
       mediaRecorder.start()
@@ -230,6 +256,7 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
       }, 1000)
 
       toast.success("Recording started")
+
     } catch (err) {
       console.error("Error starting recording:", err)
       setError("Failed to access microphone. Please check permissions.")
@@ -298,14 +325,8 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
 
   const handleConfirm = () => {
     if (audioBlob && transcription) {
-      console.log('🎤 Voice recording confirmed:', {
-        transcriptionLength: transcription.length,
-        blobSize: audioBlob.size,
-        blobType: audioBlob.type
-      })
-      onRecordingComplete(audioBlob, transcription)
+      onRecordingComplete(audioBlob, transcription, transcriptWords)
       toast.success("Recording saved! Now add a title and click 'Create Memorization'")
-      // Don't discard yet - let the parent handle it
     } else if (audioBlob && !transcription) {
       toast.error("Please provide content for memorization")
     }
@@ -326,6 +347,19 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
           Your browser doesn't support audio recording. Please use a modern browser like Chrome, Firefox, or Edge.
         </AlertDescription>
       </Alert>
+    )
+  }
+
+  // Show AI transcribing state
+  if (state === "transcribing") {
+    return (
+      <Card className="p-6">
+        <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm font-medium">Transcribing with AI…</p>
+          <p className="text-xs text-muted-foreground">Groq Whisper is generating an accurate transcript</p>
+        </div>
+      </Card>
     )
   }
 
@@ -421,6 +455,9 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
                   </span>
                 )}
                 {state === "paused" && "Paused"}
+              </p>
+              <p className="text-xs text-muted-foreground/60 mt-2">
+                Up to 1 hour · For best results, record shorter passages
               </p>
             </div>
           )}

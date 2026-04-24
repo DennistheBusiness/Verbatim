@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
@@ -13,6 +13,7 @@ import * as AnalyticsEvents from "@/lib/analytics-events"
 
 export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
 export type InputMethod = "text" | "voice"
+export type { TranscriptWord } from "@/app/api/transcribe/route"
 
 export interface Chunk {
   id: string
@@ -70,6 +71,8 @@ export interface MemorizationSet {
   audioFilePath?: string | null
   originalFilename?: string | null
   createdFrom: InputMethod
+  transcript?: string | null
+  transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null
 }
 
 interface MemorizationContextType {
@@ -78,16 +81,18 @@ interface MemorizationContextType {
   isLoading: boolean
   error: string | null
   addSet: (
-    title: string, 
-    content: string, 
-    chunkMode?: ChunkMode, 
+    title: string,
+    content: string,
+    chunkMode?: ChunkMode,
     tags?: string[],
     audioBlob?: Blob | null,
     originalFilename?: string | null,
-    createdFrom?: InputMethod
+    createdFrom?: InputMethod,
+    transcript?: string | null,
+    transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null,
   ) => Promise<string>
   getSet: (id: string) => MemorizationSet | undefined
-  updateSet: (id: string, title: string, content: string, tags?: string[], audioBlob?: Blob | null, originalFilename?: string | null, createdFrom?: InputMethod) => Promise<void>
+  updateSet: (id: string, title: string, content: string, tags?: string[], audioBlob?: Blob | null, originalFilename?: string | null, createdFrom?: InputMethod, transcript?: string | null, transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null) => Promise<void>
   updateChunkMode: (id: string, mode: ChunkMode) => Promise<void>
   updateSessionState: (id: string, sessionState: Partial<SessionState>) => Promise<void>
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
@@ -99,6 +104,7 @@ interface MemorizationContextType {
   updateTags: (id: string, tags: string[]) => Promise<void>
   deleteSet: (id: string) => Promise<void>
   deleteAudioFile: (audioFilePath: string) => Promise<void>
+  getAudioUrl: (setId: string) => Promise<string | null>
   getAllTags: () => string[]
   refreshSets: () => Promise<void>
 }
@@ -284,6 +290,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
+  const audioUrlCache = useRef<Map<string, { url: string; expiresAt: number }>>(new Map())
 
   // Fetch sets from Supabase
   const fetchSets = useCallback(async () => {
@@ -354,6 +361,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         audioFilePath: set.audio_file_path || null,
         originalFilename: set.original_filename || null,
         createdFrom: (set.created_from || 'text') as InputMethod,
+        transcript: set.transcript || null,
+        transcriptWords: set.transcript_words || null,
       }))
 
       console.log('✅ Transformed sets:', transformedSets.length, 'sets')
@@ -382,13 +391,15 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   }, [fetchSets])
 
   const addSet = useCallback(async (
-    title: string, 
-    content: string, 
-    chunkMode: ChunkMode = "paragraph", 
+    title: string,
+    content: string,
+    chunkMode: ChunkMode = "paragraph",
     tags: string[] = [],
     audioBlob: Blob | null = null,
     originalFilename: string | null = null,
-    createdFrom: InputMethod = "text"
+    createdFrom: InputMethod = "text",
+    transcript: string | null = null,
+    transcriptWords: import("@/app/api/transcribe/route").TranscriptWord[] | null = null,
   ): Promise<string> => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -425,12 +436,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       let audioFilePath: string | null = null
 
       // Upload audio file if provided
-      const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50 MB
+      const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10 MB
       const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
 
       if (audioBlob && createdFrom === 'voice') {
         if (audioBlob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio file must be 50 MB or smaller')
+          toast.error('Audio file must be 10 MB or smaller')
           throw new Error('Audio file too large')
         }
         if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
@@ -486,11 +497,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           audio_file_path: audioFilePath,
           original_filename: originalFilename,
           created_from: createdFrom,
+          transcript: transcript || null,
+          transcript_words: transcriptWords ? transcriptWords as any : null,
         })
 
       if (setError) {
         console.error('❌ Insert failed:', setError)
-        // Clean up uploaded audio if DB insert failed
         if (audioFilePath) {
           await supabase.storage.from('audio-recordings').remove([audioFilePath])
         }
@@ -575,13 +587,15 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   }, [sets])
 
   const updateSet = useCallback(async (
-    id: string, 
-    title: string, 
-    content: string, 
-    tags?: string[], 
-    audioBlob?: Blob | null, 
-    originalFilename?: string | null, 
-    createdFrom?: InputMethod
+    id: string,
+    title: string,
+    content: string,
+    tags?: string[],
+    audioBlob?: Blob | null,
+    originalFilename?: string | null,
+    createdFrom?: InputMethod,
+    transcript?: string | null,
+    transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null,
   ) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -615,13 +629,13 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       let audioOriginalFilename = set.originalFilename
       let audioCreatedFrom = set.createdFrom
 
-      const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50 MB
+      const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10 MB
       const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
 
       // If new audio is provided
       if (audioBlob && createdFrom === 'voice') {
         if (audioBlob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio file must be 50 MB or smaller')
+          toast.error('Audio file must be 10 MB or smaller')
           throw new Error('Audio file too large')
         }
         if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
@@ -684,6 +698,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           audio_file_path: audioFilePath,
           original_filename: audioOriginalFilename,
           created_from: audioCreatedFrom,
+          transcript: transcript !== undefined ? (transcript || null) : undefined,
+          transcript_words: transcriptWords !== undefined ? (transcriptWords as any ?? null) : undefined,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -1261,6 +1277,32 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase, fetchSets])
 
+  const getAudioUrl = useCallback(async (setId: string): Promise<string | null> => {
+    const set = getSet(setId)
+    if (!set?.audioFilePath) return null
+
+    const cached = audioUrlCache.current.get(setId)
+    const now = Date.now()
+    // Return cached URL if valid with >5 min remaining
+    if (cached && cached.expiresAt - now > 5 * 60 * 1000) {
+      return cached.url
+    }
+
+    const EXPIRY_SECONDS = 24 * 60 * 60 // 24 hours
+    const { data } = await supabase.storage
+      .from('audio-recordings')
+      .createSignedUrl(set.audioFilePath, EXPIRY_SECONDS)
+
+    if (!data?.signedUrl) return null
+
+    audioUrlCache.current.set(setId, {
+      url: data.signedUrl,
+      expiresAt: now + EXPIRY_SECONDS * 1000,
+    })
+
+    return data.signedUrl
+  }, [supabase, getSet])
+
   const getAllTags = useCallback((): string[] => {
     const tagSet = new Set<string>()
     sets.forEach((set) => {
@@ -1294,6 +1336,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       getAllTags,
       deleteSet,
       deleteAudioFile,
+      getAudioUrl,
       refreshSets,
     }}>
       {children}
