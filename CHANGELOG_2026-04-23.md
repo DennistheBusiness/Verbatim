@@ -1110,4 +1110,113 @@ Stats `useMemo` now computes counts for all four modes. Chunk mode label display
 
 ---
 
+## 🔐 Security Hardening
+
+**Date:** April 23, 2026 (Session 4)  
+**Branch:** `security-updates`  
+**Goal:** Eliminate client-trust vulnerabilities — server-side admin gating, service-role API routes, input validation, and XSS sanitization.
+
+---
+
+### 1. Admin Gate — Server-Side (`middleware.ts`)
+
+Any request to `/admin*` now queries `profiles.user_role` in the middleware before the page renders. A non-admin receives a hard server redirect to `/` — not a client-side redirect that could be bypassed in DevTools.
+
+---
+
+### 2. localStorage Impersonation — Eliminated
+
+**Files:** `lib/impersonation.ts`, `lib/memorization-context.tsx`, `app/admin/page.tsx`
+
+- `impersonation.ts` replaced with a no-op shim — the import stays valid, but `getEffectiveUserId()` simply returns `actualUserId`.
+- All `getEffectiveUserId()` calls removed from the context — queries now always use `user.id` from the authenticated session.
+- The "Login As" button replaced with "View Sets" — fetches that user's data through a server-validated API route instead of injecting an arbitrary ID into localStorage.
+- Dead impersonation UI removed from `components/navigation-menu.tsx` (`getImpersonationState`, `endImpersonation` imports, amber warning banner, `handleStopImpersonating`).
+
+---
+
+### 3. Admin API Routes — Service Role (`app/api/admin/*`)
+
+New server-side routes using the Supabase service-role client (bypasses RLS safely, never touches the client bundle):
+
+| Method | Route | Action |
+|---|---|---|
+| `GET` | `/api/admin/users` | List all profiles |
+| `GET` | `/api/admin/stats` | Aggregate counts |
+| `GET` | `/api/admin/users/[userId]/sets` | View any user's sets |
+| `PATCH` | `/api/admin/users/[userId]` | Change role (Zod-validated) |
+| `DELETE` | `/api/admin/users/[userId]` | Delete user + data + auth record |
+
+Every route calls `requireAdmin()` which verifies the caller's session cookie and `user_role === 'admin'` before touching the service-role client.
+
+**New file:** `lib/supabase/service.ts` — `createServiceClient()` using `SUPABASE_SERVICE_ROLE_KEY` (server-only env var).
+
+---
+
+### 4. Zod Input Validation (`lib/schemas.ts`)
+
+New file with Zod schemas applied before any DB write:
+
+- `createSetSchema` — `title` (1–200 chars), `content` (1–50k chars), `chunkMode` (enum), `tags` (max 10, each max 50 chars)
+- `updateSetSchema` — same field constraints, `chunkMode` omitted (not editable post-create)
+- Applied in `addSet()` and `updateSet()` — invalid input surfaces a user-friendly toast and returns early before any Supabase call.
+
+---
+
+### 5. XSS Sanitization (`lib/sanitize.ts`)
+
+New file with two functions applied to all user-supplied text before Zod validation:
+
+- `sanitizeText(input)` — strips all HTML tags; uses DOMPurify on client, regex fallback on server
+- `sanitizeTags(tags)` — maps `sanitizeText` over each tag and drops empty results
+
+Applied to `title`, `content`, and `tags` in both `addSet()` and `updateSet()`.
+
+---
+
+### 6. File Upload Locks
+
+**Files:** `lib/memorization-context.tsx` (lines 428–430, 618–620), `components/voice-recorder.tsx`
+
+- Max 50 MB size check enforced in `addSet()` and `updateSet()` before upload.
+- MIME type allowlist: `['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']` enforced in both context functions.
+- Voice recorder checks blob size immediately on stop, before passing it up to the context.
+
+---
+
+### 7. Environment & Config
+
+- `.env.local` — `SUPABASE_SERVICE_ROLE_KEY` added (was previously left in a comment).
+- `.env.local.example` — updated to include `SUPABASE_SERVICE_ROLE_KEY` with documentation.
+
+---
+
+### Files Changed Summary (Session 4)
+
+#### New Files (4)
+- ✅ `lib/schemas.ts` — Zod schemas for create/update validation
+- ✅ `lib/sanitize.ts` — XSS sanitization (DOMPurify + regex fallback)
+- ✅ `lib/supabase/service.ts` — Service-role Supabase client (server-only)
+- ✅ `app/api/admin/users/route.ts` — GET list users
+- ✅ `app/api/admin/users/[userId]/route.ts` — PATCH role, DELETE user
+- ✅ `app/api/admin/users/[userId]/sets/route.ts` — GET user's sets
+- ✅ `app/api/admin/stats/route.ts` — GET aggregate stats
+
+#### Modified Files (5)
+- ✅ `middleware.ts` — Server-side admin role check added
+- ✅ `lib/impersonation.ts` — Replaced with no-op shim
+- ✅ `lib/memorization-context.tsx` — Zod validation, sanitization, file upload locks; impersonation removed
+- ✅ `app/admin/page.tsx` — "Login As" replaced with "View Sets" via API route
+- ✅ `components/navigation-menu.tsx` — Dead impersonation imports/UI removed
+- ✅ `.env.local` — `SUPABASE_SERVICE_ROLE_KEY` activated
+- ✅ `.env.local.example` — Updated with service role key documentation
+
+---
+
+**Risk Level:** Low (hardening only — no behavior changes visible to users)  
+**User Impact:** None visible — internal security improvement  
+**Breaking Changes:** None
+
+---
+
 *End of Changelog*
