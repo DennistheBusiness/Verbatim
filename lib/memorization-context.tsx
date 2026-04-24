@@ -4,7 +4,9 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { Database } from "@/lib/supabase/types"
-import { getEffectiveUserId } from "@/lib/impersonation"
+// Impersonation removed — all queries use the authenticated user's own ID
+import { createSetSchema, updateSetSchema, formatZodError } from "@/lib/schemas"
+import { sanitizeText, sanitizeTags } from "@/lib/sanitize"
 import { getSupabaseErrorMessage } from "@/components/error-display"
 import { identifyUser, trackSessionStart, updateUserProperties, trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
@@ -293,11 +295,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const { data: { user }, error: userError } = await supabase.auth.getUser()
       const { data: { session } } = await supabase.auth.getSession()
       
-      // Use effective user ID (handles impersonation)
-      const effectiveUserId = getEffectiveUserId(user?.id)
+      const effectiveUserId = user?.id
       
       console.log('🔍 fetchSets - User:', user?.id, user?.email)
-      console.log('🎭 Effective User ID:', effectiveUserId)
       console.log('🔑 Session exists:', !!session)
       
       if (!effectiveUserId) {
@@ -393,22 +393,51 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       
-      // Use effective user ID (handles impersonation)
-      const effectiveUserId = getEffectiveUserId(user?.id)
+      const effectiveUserId = user?.id
       console.log('🔍 addSet - User:', user?.id, user?.email)
-      console.log('🎭 Effective User ID:', effectiveUserId)
       
       if (!effectiveUserId) throw new Error('Not authenticated')
+
+      // Sanitize and validate input
+      const sanitizedTitle = sanitizeText(title)
+      const sanitizedContent = sanitizeText(content)
+      const sanitizedTags = sanitizeTags(tags)
+
+      const validation = createSetSchema.safeParse({
+        title: sanitizedTitle,
+        content: sanitizedContent,
+        chunkMode,
+        tags: sanitizedTags,
+      })
+      if (!validation.success) {
+        const msg = formatZodError(validation.error)
+        toast.error(msg)
+        throw new Error(msg)
+      }
+
+      const { title: validTitle, content: validContent, chunkMode: validChunkMode, tags: validTags } = validation.data
 
       const id = generateId()
       const now = new Date().toISOString()
       const progress = createInitialProgress()
-      const chunks = generateChunks(content, chunkMode)
+      const chunks = generateChunks(validContent, validChunkMode)
 
       let audioFilePath: string | null = null
 
       // Upload audio file if provided
+      const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50 MB
+      const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
+
       if (audioBlob && createdFrom === 'voice') {
+        if (audioBlob.size > MAX_AUDIO_SIZE) {
+          toast.error('Audio file must be 50 MB or smaller')
+          throw new Error('Audio file too large')
+        }
+        if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
+          toast.error('Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.')
+          throw new Error('Unsupported audio type: ' + audioBlob.type)
+        }
+
         console.log('🎙️ Attempting to upload audio:', {
           blobSize: audioBlob.size,
           blobType: audioBlob.type,
@@ -446,9 +475,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         .insert({
           id,
           user_id: effectiveUserId,
-          title,
-          content,
-          chunk_mode: chunkMode,
+          title: validTitle,
+          content: validContent,
+          chunk_mode: validChunkMode,
           progress: progress as any,
           session_state: createInitialSessionState() as any,
           recommended_step: computeRecommendedStep(progress),
@@ -485,9 +514,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       // Handle tags
-      if (tags.length > 0) {
+      if (validTags.length > 0) {
         // Get or create tags
-        for (const tagName of tags) {
+        for (const tagName of validTags) {
           const { data: existingTag } = await supabase
             .from('tags')
             .select('id')
@@ -524,11 +553,11 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       
       // Track memorization creation
       trackEvent(AnalyticsEvents.MEMORIZATION_CREATED, {
-        chunk_mode: chunkMode,
+        chunk_mode: validChunkMode,
         has_audio: !!audioFilePath,
-        content_length: content.length,
+        content_length: validContent.length,
         chunk_count: chunks.length,
-        tags_count: tags.length,
+        tags_count: validTags.length,
         created_from: createdFrom,
       })
       
@@ -561,16 +590,45 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const set = getSet(id)
       if (!set) throw new Error('Set not found')
 
-      const hasContentChanged = set.content !== content
-      const chunks = hasContentChanged ? generateChunks(content, set.chunkMode) : set.chunks
+      // Sanitize and validate input
+      const sanitizedTitle = sanitizeText(title)
+      const sanitizedContent = sanitizeText(content)
+      const sanitizedTags = sanitizeTags(tags ?? [])
+
+      const validation = updateSetSchema.safeParse({
+        title: sanitizedTitle,
+        content: sanitizedContent,
+        tags: sanitizedTags,
+      })
+      if (!validation.success) {
+        const msg = formatZodError(validation.error)
+        toast.error(msg)
+        throw new Error(msg)
+      }
+      const { title: validTitle, content: validContent, tags: validTags } = validation.data
+
+      const hasContentChanged = set.content !== validContent
+      const chunks = hasContentChanged ? generateChunks(validContent, set.chunkMode) : set.chunks
 
       // Handle audio file operations
       let audioFilePath = set.audioFilePath
       let audioOriginalFilename = set.originalFilename
       let audioCreatedFrom = set.createdFrom
 
+      const MAX_AUDIO_SIZE = 50 * 1024 * 1024 // 50 MB
+      const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
+
       // If new audio is provided
       if (audioBlob && createdFrom === 'voice') {
+        if (audioBlob.size > MAX_AUDIO_SIZE) {
+          toast.error('Audio file must be 50 MB or smaller')
+          throw new Error('Audio file too large')
+        }
+        if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
+          toast.error('Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.')
+          throw new Error('Unsupported audio type: ' + audioBlob.type)
+        }
+
         // Delete old audio file if it exists
         if (set.audioFilePath) {
           await deleteAudioFile(set.audioFilePath)
@@ -621,8 +679,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const { error: updateError } = await supabase
         .from('memorization_sets')
         .update({
-          title,
-          content,
+          title: validTitle,
+          content: validContent,
           audio_file_path: audioFilePath,
           original_filename: audioOriginalFilename,
           created_from: audioCreatedFrom,
@@ -661,8 +719,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
       // Update tags if provided
       if (tags !== undefined) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('Not authenticated')
+        const { data: { user: tagUser } } = await supabase.auth.getUser()
+        if (!tagUser) throw new Error('Not authenticated')
 
         // Delete existing set_tags
         const { error: deleteTagsError } = await supabase
@@ -672,12 +730,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
         if (deleteTagsError) throw deleteTagsError
 
-        // Insert new tags
-        for (const tagName of tags) {
+        // Insert new tags (use already-sanitized validTags)
+        for (const tagName of validTags ?? []) {
           const { data: existingTag } = await supabase
             .from('tags')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', tagUser.id)
             .eq('name', tagName)
             .single()
 
@@ -688,7 +746,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           } else {
             const { data: newTag, error: tagError } = await supabase
               .from('tags')
-              .insert({ user_id: user.id, name: tagName })
+              .insert({ user_id: tagUser.id, name: tagName })
               .select('id')
               .single()
 

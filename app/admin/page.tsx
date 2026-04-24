@@ -7,36 +7,36 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Shield, 
-  Users, 
-  Trash2, 
-  LogIn, 
-  LogOut, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Shield,
+  Users,
+  Trash2,
+  Eye,
   Search,
-  AlertCircle,
   CheckCircle2,
   XCircle,
-  Crown,
   User,
-  Calendar,
   Database,
-  Activity
+  Activity,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { Spinner } from "@/components/ui/spinner"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger 
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
@@ -50,15 +50,6 @@ interface Profile {
   avatar_url: string | null
 }
 
-interface DeleteRequest {
-  id: string
-  user_id: string
-  user_email: string
-  reason: string | null
-  requested_at: string
-  status: string
-}
-
 interface Stats {
   totalUsers: number
   totalSets: number
@@ -66,209 +57,133 @@ interface Stats {
   pendingDeletes: number
 }
 
+interface UserSet {
+  id: string
+  title: string
+  content: string
+  chunk_mode: string
+  created_at: string
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null)
-  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [users, setUsers] = useState<Profile[]>([])
-  const [deleteRequests, setDeleteRequests] = useState<DeleteRequest[]>([])
-  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalSets: 0, activeUsers: 0, pendingDeletes: 0 })
+  const [stats, setStats] = useState<Stats>({
+    totalUsers: 0,
+    totalSets: 0,
+    activeUsers: 0,
+    pendingDeletes: 0,
+  })
   const [searchQuery, setSearchQuery] = useState("")
-  const [isImpersonating, setIsImpersonating] = useState(false)
-  const [originalUserId, setOriginalUserId] = useState<string | null>(null)
+
+  // View-sets dialog state (replaces localStorage impersonation)
+  const [viewSetsUser, setViewSetsUser] = useState<Profile | null>(null)
+  const [viewSets, setViewSets] = useState<UserSet[]>([])
+  const [viewSetsLoading, setViewSetsLoading] = useState(false)
 
   useEffect(() => {
-    checkAdminAccess()
+    initPage()
   }, [])
 
-  const checkAdminAccess = async () => {
+  const initPage = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) {
-        router.push('/auth/login')
+        router.push("/auth/login")
         return
       }
-
       setCurrentUser(user)
-
-      // Check if user is admin
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (error) throw error
-
-      setCurrentProfile(profile)
-
-      if (profile.user_role !== 'admin') {
-        toast.error("Access denied. Admin privileges required.")
-        router.push('/')
-        return
-      }
-
-      setIsAdmin(true)
       await loadAdminData()
-    } catch (error: any) {
-      console.error('Admin access check failed:', error)
-      toast.error("Failed to verify admin access")
-      router.push('/')
+    } catch (error) {
+      console.error("Admin init failed:", error)
+      toast.error("Failed to load admin panel")
+      router.push("/")
     } finally {
       setIsLoading(false)
     }
   }
 
   const loadAdminData = async () => {
-    await Promise.all([
-      loadUsers(),
-      loadDeleteRequests(),
-      loadStats()
-    ])
+    await Promise.all([loadUsers(), loadStats()])
   }
 
+  /** Fetch all users via server-validated API route */
   const loadUsers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setUsers(data || [])
-    } catch (error: any) {
-      console.error('Failed to load users:', error)
-      toast.error("Failed to load users")
+    const res = await fetch("/api/admin/users")
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Unknown error" }))
+      toast.error("Failed to load users: " + error)
+      return
     }
+    const data: Profile[] = await res.json()
+    setUsers(data)
   }
 
-  const loadDeleteRequests = async () => {
-    try {
-      // For now, we'll create a mock implementation
-      // In production, you'd have a delete_requests table
-      setDeleteRequests([])
-    } catch (error: any) {
-      console.error('Failed to load delete requests:', error)
-    }
-  }
-
+  /** Fetch stats via server-validated API route */
   const loadStats = async () => {
-    try {
-      const { count: userCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-
-      const { count: setCount } = await supabase
-        .from('memorization_sets')
-        .select('*', { count: 'exact', head: true })
-
-      setStats({
-        totalUsers: userCount || 0,
-        totalSets: setCount || 0,
-        activeUsers: userCount || 0, // Could calculate based on recent activity
-        pendingDeletes: 0
-      })
-    } catch (error: any) {
-      console.error('Failed to load stats:', error)
-    }
+    const res = await fetch("/api/admin/stats")
+    if (!res.ok) return
+    const data: Stats = await res.json()
+    setStats(data)
   }
 
-  const handleImpersonateUser = async (userId: string) => {
-    if (!currentUser) return
-
-    try {
-      // Get target user's email
-      const targetUser = users.find(u => u.id === userId)
-      if (!targetUser) {
-        toast.error("User not found")
-        return
-      }
-
-      // Store original user ID
-      setOriginalUserId(currentUser.id)
-      setIsImpersonating(true)
-      
-      toast.success(`Impersonating ${targetUser.email}`)
-      
-      // Store impersonation state in localStorage
-      localStorage.setItem('impersonating', 'true')
-      localStorage.setItem('originalUserId', currentUser.id)
-      localStorage.setItem('targetUserId', userId)
-      localStorage.setItem('targetUserEmail', targetUser.email)
-      
-      // Navigate to home to view as the user
-      router.push('/')
-    } catch (error: any) {
-      toast.error("Failed to impersonate user")
-    }
-  }
-
-  const handleEndImpersonation = () => {
-    localStorage.removeItem('impersonating')
-    localStorage.removeItem('originalUserId')
-    localStorage.removeItem('targetUserId')
-    localStorage.removeItem('targetUserEmail')
-    setIsImpersonating(false)
-    setOriginalUserId(null)
-    toast.success("Ended impersonation mode")
-    router.push('/admin')
-  }
-
-  const handleDeleteUser = async (userId: string, userEmail: string) => {
-    try {
-      // Delete user's memorization sets
-      const { error: setsError } = await supabase
-        .from('memorization_sets')
-        .delete()
-        .eq('user_id', userId)
-
-      if (setsError) throw setsError
-
-      // Delete user profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userId)
-
-      if (profileError) throw profileError
-
-      toast.success(`User ${userEmail} deleted successfully`)
-      await loadAdminData()
-    } catch (error: any) {
-      toast.error("Failed to delete user: " + error.message)
-    }
-  }
-
+  /** Update role via server-validated API route */
   const handleUpdateRole = async (userId: string, newRole: string) => {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ user_role: newRole })
-        .eq('id', userId)
-
-      if (error) throw error
-
-      toast.success("User role updated")
-      await loadUsers()
-    } catch (error: any) {
-      toast.error("Failed to update role: " + error.message)
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_role: newRole }),
+    })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Unknown error" }))
+      toast.error("Failed to update role: " + error)
+      return
     }
+    toast.success("User role updated")
+    await loadUsers()
   }
 
-  const filteredUsers = users.filter(user => 
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  /** Delete user via server-validated API route (uses service role) */
+  const handleDeleteUser = async (userId: string, userEmail: string) => {
+    const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Unknown error" }))
+      toast.error("Failed to delete user: " + error)
+      return
+    }
+    toast.success(`User ${userEmail} deleted successfully`)
+    await loadAdminData()
+  }
+
+  /** View a user's sets without impersonating them */
+  const handleViewSets = async (user: Profile) => {
+    setViewSetsUser(user)
+    setViewSets([])
+    setViewSetsLoading(true)
+    const res = await fetch(`/api/admin/users/${user.id}/sets`)
+    setViewSetsLoading(false)
+    if (!res.ok) {
+      toast.error("Failed to load user's sets")
+      return
+    }
+    const data: UserSet[] = await res.json()
+    setViewSets(data)
+  }
+
+  const filteredUsers = users.filter(
+    (user) =>
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'bg-red-500/10 text-red-600 border-red-500/20'
-      case 'vip': return 'bg-purple-500/10 text-purple-600 border-purple-500/20'
-      default: return 'bg-gray-500/10 text-gray-600 border-gray-500/20'
+      case "admin": return "bg-red-500/10 text-red-600 border-red-500/20"
+      case "vip": return "bg-purple-500/10 text-purple-600 border-purple-500/20"
+      default: return "bg-gray-500/10 text-gray-600 border-gray-500/20"
     }
   }
 
@@ -278,20 +193,16 @@ export default function AdminPage() {
         <Header title="Admin Panel" showBack />
         <main className="flex flex-1 flex-col items-center justify-center gap-3">
           <Spinner className="size-8" />
-          <p className="text-sm text-muted-foreground">Verifying admin access...</p>
+          <p className="text-sm text-muted-foreground">Verifying admin access…</p>
         </main>
       </div>
     )
   }
 
-  if (!isAdmin) {
-    return null
-  }
-
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <Header title="Admin Panel" showBack />
-      
+
       <main className="flex flex-1 flex-col gap-6 p-4 pb-8 max-w-7xl mx-auto w-full">
         {/* Header */}
         <div className="flex flex-col gap-4 items-center text-center pt-4">
@@ -303,22 +214,6 @@ export default function AdminPage() {
             <p className="text-sm text-muted-foreground">System administration and user management</p>
           </div>
         </div>
-
-        {/* Impersonation Alert */}
-        {isImpersonating && (
-          <Alert className="border-orange-500/50 bg-orange-500/10">
-            <AlertCircle className="size-4 text-orange-600" />
-            <AlertDescription className="flex items-center justify-between">
-              <span className="text-sm text-orange-700 dark:text-orange-400">
-                You are currently in impersonation mode
-              </span>
-              <Button size="sm" variant="outline" onClick={handleEndImpersonation}>
-                <LogOut className="size-3 mr-2" />
-                End Impersonation
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -379,175 +274,140 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="users">
-              <Users className="size-4 mr-2" />
-              Users
-            </TabsTrigger>
-            <TabsTrigger value="delete-requests">
-              <Trash2 className="size-4 mr-2" />
-              Delete Requests
-            </TabsTrigger>
-          </TabsList>
+        {/* Users */}
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users by email or name…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
 
-          {/* Users Tab */}
-          <TabsContent value="users" className="space-y-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search users by email or name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Users List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>All Users ({filteredUsers.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {filteredUsers.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No users found</p>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
-                            <User className="size-5 text-primary" />
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">{user.email}</span>
-                              {user.id === currentUser?.id && (
-                                <Badge variant="outline" className="text-xs">You</Badge>
-                              )}
-                            </div>
-                            {user.full_name && (
-                              <span className="text-sm text-muted-foreground truncate">
-                                {user.full_name}
-                              </span>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                              Joined {new Date(user.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Role Badge with dropdown */}
-                          <select
-                            value={user.user_role}
-                            onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                            disabled={user.id === currentUser?.id}
-                            className={`px-2 py-1 text-xs font-medium rounded-md border ${getRoleBadgeColor(user.user_role)} disabled:opacity-50`}
-                          >
-                            <option value="general">General</option>
-                            <option value="vip">VIP</option>
-                            <option value="admin">Admin</option>
-                          </select>
-
-                          {user.id !== currentUser?.id && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleImpersonateUser(user.id)}
-                              >
-                                <LogIn className="size-3 mr-1" />
-                                Login As
-                              </Button>
-
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="size-3" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete User?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will permanently delete <strong>{user.email}</strong> and all their data. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleDeleteUser(user.id, user.email)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      Delete User
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Delete Requests Tab */}
-          <TabsContent value="delete-requests" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Pending Delete Requests</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {deleteRequests.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle2 className="size-12 text-green-500 mx-auto mb-3" />
-                    <p className="text-muted-foreground">No pending delete requests</p>
-                  </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>All Users ({filteredUsers.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {filteredUsers.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No users found</p>
                 ) : (
-                  <div className="space-y-3">
-                    {deleteRequests.map((request) => (
-                      <div
-                        key={request.id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div>
-                          <p className="font-medium">{request.user_email}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Requested {new Date(request.requested_at).toLocaleDateString()}
-                          </p>
-                          {request.reason && (
-                            <p className="text-sm mt-1">Reason: {request.reason}</p>
-                          )}
+                  filteredUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
+                          <User className="size-5 text-primary" />
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <XCircle className="size-3 mr-1" />
-                            Deny
-                          </Button>
-                          <Button size="sm" variant="destructive">
-                            <CheckCircle2 className="size-3 mr-1" />
-                            Approve
-                          </Button>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">{user.email}</span>
+                            {user.id === currentUser?.id && (
+                              <Badge variant="outline" className="text-xs">You</Badge>
+                            )}
+                          </div>
+                          {user.full_name && (
+                            <span className="text-sm text-muted-foreground truncate">{user.full_name}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            Joined {new Date(user.created_at).toLocaleDateString()}
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          value={user.user_role}
+                          onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                          disabled={user.id === currentUser?.id}
+                          className={`px-2 py-1 text-xs font-medium rounded-md border ${getRoleBadgeColor(user.user_role)} disabled:opacity-50`}
+                        >
+                          <option value="general">General</option>
+                          <option value="vip">VIP</option>
+                          <option value="admin">Admin</option>
+                        </select>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewSets(user)}
+                        >
+                          <Eye className="size-3 mr-1" />
+                          View Sets
+                        </Button>
+
+                        {user.id !== currentUser?.id && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="destructive">
+                                <Trash2 className="size-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete <strong>{user.email}</strong> and all their data. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteUser(user.id, user.email)}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                >
+                                  Delete User
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  ))
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
+
+      {/* View Sets Dialog — server-fetched, no impersonation */}
+      <Dialog
+        open={!!viewSetsUser}
+        onOpenChange={(open) => {
+          if (!open) { setViewSetsUser(null); setViewSets([]) }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sets for {viewSetsUser?.email}</DialogTitle>
+          </DialogHeader>
+          {viewSetsLoading ? (
+            <div className="flex justify-center py-8">
+              <Spinner className="size-6" />
+            </div>
+          ) : viewSets.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No memorization sets found</p>
+          ) : (
+            <div className="space-y-2">
+              {viewSets.map((set) => (
+                <div key={set.id} className="p-3 border rounded-lg">
+                  <p className="font-medium text-sm">{set.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {set.chunk_mode} · {new Date(set.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

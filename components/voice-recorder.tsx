@@ -182,6 +182,18 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType })
+
+        // Validate size before accepting (50 MB limit)
+        const MAX_AUDIO_SIZE = 50 * 1024 * 1024
+        if (blob.size > MAX_AUDIO_SIZE) {
+          setError("Recording is too large (max 50 MB). Please record a shorter clip.")
+          stream.getTracks().forEach((track) => track.stop())
+          if (timerRef.current) clearInterval(timerRef.current)
+          if (animationRef.current) cancelAnimationFrame(animationRef.current)
+          setState("idle")
+          return
+        }
+
         setAudioBlob(blob)
         setAudioUrl(URL.createObjectURL(blob))
         
