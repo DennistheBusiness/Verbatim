@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, Pencil, CheckCircle2, Circle, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, VolumeX, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info, Wand2 } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info } from "lucide-react"
 import { toast } from "sonner"
 import { AudioPlayer } from "@/components/audio-player"
 import { createClient } from "@/lib/supabase/client"
@@ -24,6 +24,7 @@ import { FlashcardViewer } from "@/components/flashcard-viewer"
 import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
 import { AudioTest } from "@/components/audio-test"
 import { MobileMemoNav } from "@/components/mobile-memo-nav"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test"
 
@@ -70,6 +71,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const set = getSet(id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
+  const [familiarizeSubView, setFamiliarizeSubView] = useState<"landing" | "reader">("landing")
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
   const [contentExpanded, setContentExpanded] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -182,6 +184,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const handleFamiliarize = () => {
     setPageMode("familiarize")
+    setFamiliarizeSubView("landing")
     updateSessionState(id, {
       currentStep: "familiarize",
       currentChunkIndex: null,
@@ -367,11 +370,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Badge>
         )
       case "not-started":
-        return (
-          <Badge variant="outline" className="text-muted-foreground">
-            Not Started
-          </Badge>
-        )
+        return null
     }
   }
 
@@ -430,6 +429,146 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   // Familiarize mode
   if (pageMode === "familiarize") {
+    // Reader sub-view: shows content with view toggle and chunk selector
+    if (familiarizeSubView === "reader" && hasContent) {
+      return (
+        <SessionLayout
+          step="Step 1"
+          title="Familiarize"
+          setTitle={set.title}
+          onBack={exitFamiliarize}
+          primaryAction={{
+            label: "Continue to Training",
+            onClick: continueToEncode,
+            icon: <ArrowRight className="size-4" />,
+          }}
+          secondaryAction={{
+            label: "Back to Overview",
+            onClick: () => setFamiliarizeSubView("landing"),
+          }}
+        >
+          {/* View Toggle */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-center">
+              <ButtonGroup>
+                <Button
+                  variant={familiarizeView === "full" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFamiliarizeView("full")}
+                >
+                  Full Text
+                </Button>
+                <Button
+                  variant={familiarizeView === "chunks" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFamiliarizeView("chunks")}
+                >
+                  By Chunk
+                </Button>
+              </ButtonGroup>
+            </div>
+
+            {/* Chunk Mode Selector as dropdown — only in chunk view */}
+            {familiarizeView === "chunks" && (
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
+                <span className="text-sm text-muted-foreground">Split by</span>
+                <Select
+                  value={set.chunkMode}
+                  onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}
+                >
+                  <SelectTrigger className="h-8 w-auto min-w-[130px] border-0 bg-transparent text-sm font-medium focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="line">Line</SelectItem>
+                    <SelectItem value="paragraph">Paragraph</SelectItem>
+                    <SelectItem value="sentence">Sentence</SelectItem>
+                    <SelectItem value="custom">Custom (/)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <span>{wordCount} words</span>
+              <span className="size-1 rounded-full bg-muted-foreground/30" />
+              <span>{chunks.length} {getChunkLabel(set.chunkMode, chunks.length)}</span>
+            </div>
+          </div>
+
+          {/* Content Display */}
+          {familiarizeView === "full" ? (
+            <Card>
+              <CardContent className="py-5">
+                <div className={contentExpanded ? "" : "max-h-[300px] overflow-hidden relative"}>
+                  <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
+                    {set.content}
+                  </p>
+                  {!contentExpanded && set.content.length > 500 && (
+                    <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent" />
+                  )}
+                </div>
+                {set.content.length > 500 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setContentExpanded(!contentExpanded)}
+                    className="w-full mt-3 gap-2"
+                  >
+                    {contentExpanded ? (
+                      <>
+                        <ChevronUp className="size-4" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="size-4" />
+                        See More
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {(contentExpanded ? chunks : chunks.slice(0, 3)).map((chunk) => (
+                <Card key={chunk.id}>
+                  <CardContent className="flex gap-4 py-4">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                      {chunk.orderIndex + 1}
+                    </span>
+                    <p className="flex-1 text-base leading-7 text-foreground">{chunk.text}</p>
+                  </CardContent>
+                </Card>
+              ))}
+              {chunks.length > 3 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setContentExpanded(!contentExpanded)}
+                  className="w-full gap-2"
+                >
+                  {contentExpanded ? (
+                    <>
+                      <ChevronUp className="size-4" />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="size-4" />
+                      See More ({chunks.length - 3} more chunks)
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+        </SessionLayout>
+      )
+    }
+
+    // Landing sub-view: shows action cards with CTAs
     return (
       <SessionLayout
         step="Step 1"
@@ -460,157 +599,30 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Empty>
         ) : (
           <>
-            {/* Instructions */}
+            {/* Read and Absorb CTA */}
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="flex gap-4 py-4">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <BookOpen className="size-5 text-primary" />
                 </div>
-                <div className="flex flex-1 flex-col gap-1">
-                  <h3 className="font-medium text-foreground">Read and Absorb</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Take your time reading through the content. Focus on understanding the flow, key phrases, and structure.
-                  </p>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-medium text-foreground">Read and Absorb</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Take your time reading through the content. Focus on understanding the flow, key phrases, and structure.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => { setContentExpanded(false); setFamiliarizeSubView("reader") }}
+                    size="sm"
+                    className="w-full sm:w-auto"
+                  >
+                    <BookOpen className="size-4 mr-2" />
+                    Start Reading
+                  </Button>
                 </div>
               </CardContent>
             </Card>
-
-            {/* View Toggle and Stats */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-center">
-                <ButtonGroup>
-                  <Button
-                    variant={familiarizeView === "full" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFamiliarizeView("full")}
-                  >
-                    Full Text
-                  </Button>
-                  <Button
-                    variant={familiarizeView === "chunks" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFamiliarizeView("chunks")}
-                  >
-                    By Chunk
-                  </Button>
-                </ButtonGroup>
-              </div>
-
-              {/* Chunk Mode Selector - Only visible in chunk view */}
-              {familiarizeView === "chunks" && (
-                <div className="flex items-center justify-center">
-                  <ButtonGroup>
-                    <Button
-                      variant={set.chunkMode === "line" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateChunkMode(id, "line")}
-                    >
-                      <Type className="size-3.5 mr-1.5" />
-                      Line
-                    </Button>
-                    <Button
-                      variant={set.chunkMode === "paragraph" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateChunkMode(id, "paragraph")}
-                    >
-                      <FileText className="size-3.5 mr-1.5" />
-                      Paragraph
-                    </Button>
-                    <Button
-                      variant={set.chunkMode === "sentence" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateChunkMode(id, "sentence")}
-                    >
-                      <Layers className="size-3.5 mr-1.5" />
-                      Sentence
-                    </Button>
-                    <Button
-                      variant={set.chunkMode === "custom" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => updateChunkMode(id, "custom")}
-                    >
-                      <Wand2 className="size-3.5 mr-1.5" />
-                      Custom
-                    </Button>
-                  </ButtonGroup>
-                </div>
-              )}
-
-              <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-                <span>{wordCount} words</span>
-                <span className="size-1 rounded-full bg-muted-foreground/30" />
-                <span>{chunks.length} {getChunkLabel(set.chunkMode, chunks.length)}</span>
-              </div>
-            </div>
-
-            {/* Content Display */}
-            {familiarizeView === "full" ? (
-              <Card>
-                <CardContent className="py-5">
-                  <div className={contentExpanded ? "" : "max-h-[300px] overflow-hidden relative"}>
-                    <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
-                      {set.content}
-                    </p>
-                    {!contentExpanded && set.content.length > 500 && (
-                      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent" />
-                    )}
-                  </div>
-                  {set.content.length > 500 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setContentExpanded(!contentExpanded)}
-                      className="w-full mt-3 gap-2"
-                    >
-                      {contentExpanded ? (
-                        <>
-                          <ChevronUp className="size-4" />
-                          Show Less
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="size-4" />
-                          See More
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {(contentExpanded ? chunks : chunks.slice(0, 3)).map((chunk) => (
-                  <Card key={chunk.id}>
-                    <CardContent className="flex gap-4 py-4">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                        {chunk.orderIndex + 1}
-                      </span>
-                      <p className="flex-1 text-base leading-7 text-foreground">{chunk.text}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-                {chunks.length > 3 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setContentExpanded(!contentExpanded)}
-                    className="w-full gap-2"
-                  >
-                    {contentExpanded ? (
-                      <>
-                        <ChevronUp className="size-4" />
-                        Show Less
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="size-4" />
-                        See More ({chunks.length - 3} more chunks)
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            )}
 
             {/* Audio Playback */}
             {audioUrl && (
@@ -620,8 +632,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
                     <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
                   </div>
-                  <AudioPlayer 
-                    audioUrl={audioUrl} 
+                  <AudioPlayer
+                    audioUrl={audioUrl}
                     mode="full"
                     onDelete={undefined}
                   />
@@ -631,8 +643,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
             {/* Text-to-Speech Player or CTA */}
             {showTTSPlayer ? (
-              <TextToSpeechPlayer 
-                content={set.content} 
+              <TextToSpeechPlayer
+                content={set.content}
                 onClose={handleCloseTTSPlayer}
               />
             ) : (
@@ -642,15 +654,15 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     <Volume2 className="size-5 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div className="flex flex-1 flex-col gap-2">
-                    <div className="flex flex-1 flex-col gap-1">
+                    <div className="flex flex-col gap-1">
                       <h3 className="font-medium text-foreground">Listen Instead</h3>
                       <p className="text-sm text-muted-foreground">
                         Have the computer read the content aloud to you. Great for auditory learners.
                       </p>
                     </div>
-                    <Button 
-                      onClick={handleOpenTTSPlayer} 
-                      className="w-full sm:w-auto" 
+                    <Button
+                      onClick={handleOpenTTSPlayer}
+                      className="w-full sm:w-auto"
                       size="sm"
                     >
                       <Volume2 className="size-4 mr-2" />
@@ -668,7 +680,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <BookMarked className="size-5 text-primary" />
                 </div>
                 <div className="flex flex-1 flex-col gap-2">
-                  <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex flex-col gap-1">
                     <h3 className="font-medium text-foreground">Try Flashcard Mode</h3>
                     <p className="text-sm text-muted-foreground">
                       Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
@@ -1331,9 +1343,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   {getFamiliarizeStatus() === "complete" && (
                     <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   )}
-                  {getFamiliarizeStatus() === "not-started" && (
-                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {getFamiliarizeStatus() === "not-started" && (
@@ -1380,9 +1389,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     <div className="flex size-5 shrink-0 items-center justify-center">
                       <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
                     </div>
-                  )}
-                  {getEncodeStatus() === "not-started" && (
-                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1436,9 +1442,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     <div className="flex size-5 shrink-0 items-center justify-center">
                       <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
                     </div>
-                  )}
-                  {getTestStatus() === "not-started" && (
-                    <Circle className="size-5 shrink-0 text-muted-foreground/50" />
                   )}
                 </div>
                 <div className="flex items-center gap-2">

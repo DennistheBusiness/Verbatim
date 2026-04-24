@@ -96,7 +96,7 @@ export default function EditPage({ params }: EditPageProps) {
 
   // Helper functions for chunking
   const parseIntoLines = (text: string) => {
-    return text.split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+    return text.replace(/\r\n/g, "\n").split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
   }
 
   const parseIntoParagraphs = (text: string) => {

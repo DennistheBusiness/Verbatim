@@ -1,32 +1,29 @@
 "use client"
 
+import Image from "next/image"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { NavigationMenu } from "@/components/navigation-menu"
+import { createClient } from "@/lib/supabase/client"
+import type { User } from "@supabase/supabase-js"
+import { useEffect, useState } from "react"
 
 interface SessionLayoutProps {
-  /** Step indicator, e.g., "Step 1" */
   step?: string
-  /** Screen title, e.g., "Familiarize" */
   title: string
-  /** Memorization set title */
   setTitle: string
-  /** Called when back button is clicked */
   onBack: () => void
-  /** Main content */
   children: React.ReactNode
-  /** Primary action button */
   primaryAction?: {
     label: string
     onClick: () => void
     icon?: React.ReactNode
   }
-  /** Secondary action button */
   secondaryAction?: {
     label: string
     onClick: () => void
     variant?: "outline" | "ghost"
   }
-  /** Whether to show fixed bottom actions */
   showBottomActions?: boolean
 }
 
@@ -41,28 +38,58 @@ export function SessionLayout({
   showBottomActions = true,
 }: SessionLayoutProps) {
   const hasActions = primaryAction || secondaryAction
+  const [user, setUser] = useState<User | null>(null)
+  const supabase = createClient()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [supabase])
 
   return (
     <div className="flex min-h-svh flex-col">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex flex-col">
-          {/* Top row with back and step */}
-          <div className="flex h-14 items-center gap-3 px-4">
-            <Button variant="ghost" size="icon-sm" onClick={onBack}>
-              <ChevronLeft className="size-5" />
-              <span className="sr-only">Go back</span>
-            </Button>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              {step && (
-                <span className="text-xs font-medium text-primary">{step}</span>
-              )}
-              <span className="truncate font-semibold leading-tight">{title}</span>
-            </div>
+        {/* Main row: back · logo · menu */}
+        <div className="flex h-14 items-center px-2">
+          <Button variant="ghost" size="icon-sm" onClick={onBack} className="shrink-0">
+            <ChevronLeft className="size-5" />
+            <span className="sr-only">Go back</span>
+          </Button>
+
+          {/* Centered logo */}
+          <div className="flex flex-1 items-center justify-center gap-2">
+            <Image
+              src="/verbatim-logo-icon.png"
+              alt="Verbatim"
+              width={28}
+              height={28}
+              className="shrink-0"
+            />
+            <span className="text-base font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
+              Verbatim
+            </span>
           </div>
-          {/* Memorization title row */}
-          <div className="border-t bg-muted/30 px-4 py-2">
-            <p className="text-sm text-muted-foreground line-clamp-1">{setTitle}</p>
+
+          <div className="shrink-0">
+            <NavigationMenu user={user} />
+          </div>
+        </div>
+
+        {/* Context strip: step · title · set name */}
+        <div className="border-t bg-muted/30 px-4 py-2">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {step && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{step}</span>
+                <span className="text-[11px] text-muted-foreground/60">·</span>
+                <span className="text-[11px] font-medium text-muted-foreground">{title}</span>
+              </div>
+            )}
+            <p className="truncate text-sm font-medium leading-tight text-foreground">{setTitle}</p>
           </div>
         </div>
       </header>
@@ -83,10 +110,10 @@ export function SessionLayout({
               </Button>
             )}
             {secondaryAction && (
-              <Button 
-                size="lg" 
-                variant={secondaryAction.variant || "ghost"} 
-                onClick={secondaryAction.onClick} 
+              <Button
+                size="lg"
+                variant={secondaryAction.variant || "ghost"}
+                onClick={secondaryAction.onClick}
                 className="w-full"
               >
                 {secondaryAction.label}
