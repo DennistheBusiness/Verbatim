@@ -3,35 +3,53 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 export function LibrarySkeletons() {
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      {/* Search and tags section */}
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full max-w-md" />
-        <div className="flex gap-2 flex-wrap">
-          <Skeleton className="h-8 w-16" />
-          <Skeleton className="h-8 w-20" />
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-8 w-16" />
+    <div className="flex flex-col gap-5 p-4">
+      {/* Count row */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1.5">
+          <Skeleton className="h-8 w-8" />
+          <Skeleton className="h-4 w-32" />
         </div>
       </div>
 
-      {/* Grid of memorization set cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i} className="overflow-hidden">
-            <CardHeader className="space-y-3">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Skeleton className="h-6 w-16" />
-                <Skeleton className="h-6 w-20" />
+      {/* Search bar */}
+      <Skeleton className="h-10 w-full" />
+
+      {/* Cards */}
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} className="overflow-hidden border-l-[3px] border-l-border">
+            <CardContent className="flex flex-col gap-4 p-4">
+              {/* Title + pill */}
+              <div className="flex items-start justify-between gap-3">
+                <Skeleton className="h-5 flex-1 max-w-[60%]" />
+                <Skeleton className="h-6 w-20 rounded-full shrink-0" />
               </div>
-              <div className="flex justify-between items-center pt-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-8 w-24" />
+
+              {/* Step track: 3 dots + 2 lines */}
+              <div className="flex items-start">
+                {[0, 1, 2].map((dot) => (
+                  <div key={dot} className="flex flex-1 items-start">
+                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                      <Skeleton className="size-8 rounded-full" />
+                      <Skeleton className="h-2.5 w-7" />
+                    </div>
+                    {dot < 2 && (
+                      <div className="flex-1 pt-4 px-1">
+                        <Skeleton className="h-0.5 w-full" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Metadata row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-3.5 w-16" />
+                  <Skeleton className="h-3.5 w-14" />
+                </div>
+                <Skeleton className="h-7 w-12 rounded-md" />
               </div>
             </CardContent>
           </Card>

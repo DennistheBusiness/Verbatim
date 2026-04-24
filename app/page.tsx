@@ -3,12 +3,14 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Plus, BookOpen, Layers, Calendar, Pencil, Search, X, Edit3, HelpCircle } from "lucide-react"
+import {
+  Plus, BookOpen, Search, X, Edit3, HelpCircle,
+  Clock, Check, Sparkles, Target, Mic, ChevronRight,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
@@ -16,20 +18,21 @@ import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
 import { OnboardingTip } from "@/components/onboarding-tip"
 import { LibrarySkeletons } from "@/components/loading-skeletons"
-import { useMemorization } from "@/lib/memorization-context"
+import { useMemorization, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
+import { cn } from "@/lib/utils"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  
+
   if (diffDays === 0) return "Today"
   if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays} days ago`
-  
+  if (diffDays < 7) return `${diffDays}d ago`
+
   return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -37,25 +40,134 @@ function formatDate(dateString: string): string {
   })
 }
 
-function truncateContent(content: string, maxLength: number = 100): string {
-  if (content.length <= maxLength) return content
-  return content.slice(0, maxLength).trim() + "..."
+// ─── Step-track helpers ────────────────────────────────────────────────────
+
+type StepState = "complete" | "active" | "upcoming"
+
+function getStepStates(set: MemorizationSet): [StepState, StepState, StepState] {
+  const { familiarizeCompleted, encode, tests } = set.progress
+  const encodeStages = [encode.stage1Completed, encode.stage2Completed, encode.stage3Completed]
+  const encodeCount = encodeStages.filter(Boolean).length
+  const hasTest =
+    tests.firstLetter.lastScore !== null ||
+    tests.fullText.lastScore !== null ||
+    tests.audioTest.lastScore !== null
+
+  const readState: StepState = familiarizeCompleted ? "complete" : set.recommendedStep === "familiarize" ? "active" : "upcoming"
+  const encodeState: StepState = encodeCount === 3 ? "complete" : encodeCount > 0 || set.recommendedStep === "encode" ? "active" : "upcoming"
+  const testState: StepState = hasTest ? "complete" : set.recommendedStep === "test" ? "active" : "upcoming"
+
+  return [readState, encodeState, testState]
 }
 
-function calculateProgress(set: any): number {
-  let completed = 0
-  let total = 7 // familiarize (1) + encode stages (3) + tests (3)
-  
-  if (set.progress.familiarizeCompleted) completed++
-  if (set.progress.encode.stage1Completed) completed++
-  if (set.progress.encode.stage2Completed) completed++
-  if (set.progress.encode.stage3Completed) completed++
-  if (set.progress.tests.firstLetter.bestScore !== null) completed++
-  if (set.progress.tests.fullText.bestScore !== null) completed++
-  if (set.progress.tests.audioTest.bestScore !== null) completed++
-  
-  return Math.round((completed / total) * 100)
+function getBestTestScore(set: MemorizationSet): number | null {
+  const scores = [
+    set.progress.tests.firstLetter.bestScore,
+    set.progress.tests.fullText.bestScore,
+    set.progress.tests.audioTest.bestScore,
+  ].filter((s): s is number => s !== null)
+  return scores.length > 0 ? Math.max(...scores) : null
 }
+
+// ─── Sub-components ────────────────────────────────────────────────────────
+
+const STEP_META = [
+  { key: "familiarize" as RecommendedStep, label: "Read",  Icon: BookOpen,  dot: "bg-blue-500",   ring: "ring-blue-400/40",  text: "text-blue-600 dark:text-blue-400",   line: "bg-blue-400/30" },
+  { key: "encode"      as RecommendedStep, label: "Train", Icon: Sparkles,  dot: "bg-purple-500", ring: "ring-purple-400/40", text: "text-purple-600 dark:text-purple-400", line: "bg-purple-400/30" },
+  { key: "test"        as RecommendedStep, label: "Test",  Icon: Target,    dot: "bg-emerald-500", ring: "ring-emerald-400/40", text: "text-emerald-600 dark:text-emerald-400", line: "bg-emerald-400/30" },
+] as const
+
+function StepTrack({ states }: { states: [StepState, StepState, StepState] }) {
+  return (
+    <div className="flex items-start">
+      {STEP_META.map((step, i) => {
+        const state = states[i]
+        const isLast = i === STEP_META.length - 1
+        return (
+          <div key={step.key} className="flex flex-1 items-start">
+            {/* Node + label */}
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              <div
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-full transition-all",
+                  state === "complete" && step.dot + " text-white",
+                  state === "active" && "bg-background border-2 border-current ring-2 " + step.ring + " " + step.text,
+                  state === "upcoming" && "bg-muted text-muted-foreground/40",
+                )}
+              >
+                {state === "complete" ? (
+                  <Check className="size-4" />
+                ) : (
+                  <step.Icon className="size-4" />
+                )}
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] font-semibold tracking-wide",
+                  state === "complete" && "text-foreground",
+                  state === "active" && step.text,
+                  state === "upcoming" && "text-muted-foreground/40",
+                )}
+              >
+                {step.label}
+              </span>
+            </div>
+
+            {/* Connecting line */}
+            {!isLast && (
+              <div className="flex-1 pt-4 px-1">
+                <div
+                  className={cn(
+                    "h-0.5 w-full rounded-full",
+                    states[i] === "complete" ? step.line : "bg-border/60",
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function NextStepPill({ recommended, isAllDone }: { recommended: RecommendedStep; isAllDone: boolean }) {
+  if (isAllDone) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+        <Check className="size-3" />
+        Done
+      </span>
+    )
+  }
+
+  const styles = {
+    familiarize: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    encode:      "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    test:        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  }
+  const labels = {
+    familiarize: "Start Reading",
+    encode:      "Train",
+    test:        "Take Test",
+  }
+
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", styles[recommended])}>
+      {labels[recommended]}
+      <ChevronRight className="size-3" />
+    </span>
+  )
+}
+
+// Left accent bar colour per recommended step
+const ACCENT_BORDER: Record<RecommendedStep, string> = {
+  familiarize: "border-l-blue-400",
+  encode:      "border-l-purple-400",
+  test:        "border-l-emerald-400",
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
   const router = useRouter()
@@ -65,29 +177,23 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
-  // Get all available tags
   const allTags = useMemo(() => getAllTags(), [getAllTags])
 
-  // Filter sets based on search query and selected tags
   const filteredSets = useMemo(() => {
     let filtered = sets
-
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter((set) =>
-        set.title.toLowerCase().includes(query) ||
-        set.content.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (set) =>
+          set.title.toLowerCase().includes(query) ||
+          set.content.toLowerCase().includes(query),
       )
     }
-
-    // Filter by selected tags
     if (selectedTags.length > 0) {
       filtered = filtered.filter((set) =>
-        selectedTags.every((tag) => set.tags.includes(tag))
+        selectedTags.every((tag) => set.tags.includes(tag)),
       )
     }
-
     return filtered
   }, [sets, searchQuery, selectedTags])
 
@@ -96,14 +202,11 @@ export default function HomePage() {
       const newTags = prev.includes(tag)
         ? prev.filter((t) => t !== tag)
         : [...prev, tag]
-      
-      // Track tag filter
       trackEvent(AnalyticsEvents.TAG_FILTER_APPLIED, {
         tag_name: tag,
         selected_tags_count: newTags.length,
         filtered_results_count: filteredSets.length,
       })
-      
       return newTags
     })
   }
@@ -111,11 +214,8 @@ export default function HomePage() {
   const clearFilters = () => {
     const hadSearch = searchQuery !== ""
     const hadTags = selectedTags.length > 0
-    
     setSearchQuery("")
     setSelectedTags([])
-    
-    // Track filters cleared
     if (hadSearch || hadTags) {
       trackEvent(AnalyticsEvents.FILTERS_CLEARED, {
         had_search: hadSearch,
@@ -125,52 +225,39 @@ export default function HomePage() {
     }
   }
 
-  // Check if user has seen splash this session
   useEffect(() => {
     const hasSeenSplash = sessionStorage.getItem("verbatim-splash-seen")
-    if (hasSeenSplash) {
-      setShowSplash(false)
-    }
+    if (hasSeenSplash) setShowSplash(false)
   }, [])
 
-  // Track search with debouncing
   useEffect(() => {
     if (!searchQuery.trim()) return
-    
     const timer = setTimeout(() => {
       trackEvent(AnalyticsEvents.SEARCH_PERFORMED, {
         query_length: searchQuery.length,
         has_results: filteredSets.length > 0,
         result_count: filteredSets.length,
       })
-    }, 1000) // Wait 1 second after user stops typing
-    
+    }, 1000)
     return () => clearTimeout(timer)
   }, [searchQuery, filteredSets.length])
 
   const handleSplashComplete = () => {
     sessionStorage.setItem("verbatim-splash-seen", "true")
     setShowSplash(false)
-    
-    // Check if first-time user
     const hasSeenOnboarding = localStorage.getItem("hasSeenOnboarding")
     if (!hasSeenOnboarding) {
       setIsCheckingOnboarding(true)
-      // Navigate to onboarding for first-time users
       window.location.href = "/onboarding"
     }
   }
 
-  const handleShowTour = () => {
-    router.push("/onboarding")
-  }
+  const handleShowTour = () => router.push("/onboarding")
 
-  // Show splash screen on first visit
   if (showSplash) {
     return <SplashScreen onComplete={handleSplashComplete} duration={2000} />
   }
 
-  // Show loading while checking/navigating to onboarding
   if (isCheckingOnboarding) {
     return (
       <div className="flex min-h-svh flex-col bg-background">
@@ -192,23 +279,18 @@ export default function HomePage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <Header 
-        title="Library" 
+      <Header
+        title="Library"
         showBranding={true}
         action={
-          <Button 
-            variant="ghost" 
-            size="icon-sm"
-            onClick={handleShowTour}
-            title="View Tour"
-          >
+          <Button variant="ghost" size="icon-sm" onClick={handleShowTour} title="View Tour">
             <HelpCircle className="size-5" />
             <span className="sr-only">View Tour</span>
           </Button>
         }
       />
-      
-      <main className="flex flex-1 flex-col gap-6 p-4 pb-24 md:pb-8">
+
+      <main className="flex flex-1 flex-col gap-5 p-4 pb-24 md:pb-8">
         {sets.length === 0 ? (
           <Empty className="flex-1 border-0 bg-muted/30">
             <EmptyHeader>
@@ -234,7 +316,7 @@ export default function HomePage() {
           </Empty>
         ) : (
           <>
-            {/* Header with count and create button */}
+            {/* Count + create */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
                 <span className="text-2xl font-semibold tabular-nums">{sets.length}</span>
@@ -250,7 +332,7 @@ export default function HomePage() {
               </Button>
             </div>
 
-            {/* Search Bar */}
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -270,10 +352,10 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Tag Filters */}
+            {/* Tag filters */}
             {allTags.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Filter by tag:</span>
+                <span className="text-sm font-medium text-muted-foreground">Filter:</span>
                 {allTags.map((tag) => (
                   <Badge
                     key={tag}
@@ -285,14 +367,9 @@ export default function HomePage() {
                   </Badge>
                 ))}
                 {(searchQuery || selectedTags.length > 0) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    className="h-7 gap-1 text-xs"
-                  >
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 gap-1 text-xs">
                     <X className="size-3" />
-                    Clear filters
+                    Clear
                   </Button>
                 )}
               </div>
@@ -313,95 +390,112 @@ export default function HomePage() {
                   </EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
-                  <Button onClick={clearFilters} variant="outline">
-                    Clear filters
-                  </Button>
+                  <Button onClick={clearFilters} variant="outline">Clear filters</Button>
                 </EmptyContent>
               </Empty>
             ) : (
               <div className="flex flex-col gap-3">
                 {filteredSets.map((set) => {
-                  const progressPercentage = calculateProgress(set)
-                  
+                  const stepStates = getStepStates(set)
+                  const lastPracticed = set.sessionState.lastVisitedAt
+                  const wc = countWords(set.content)
+                  const bestScore = getBestTestScore(set)
+                  const isAllDone = stepStates.every((s) => s === "complete")
+                  const hasAudio = !!(set.createdFrom === "voice" || set.audioFilePath)
+
                   return (
-                    <Card key={set.id} className="group relative transition-colors hover:bg-accent/50">
-                      <CardContent 
-                        className="flex flex-col gap-3 py-4 cursor-pointer"
-                        onClick={() => router.push(`/memorization/${set.id}`)}
-                      >
-                          {/* Progress bar at top */}
-                          <div className="flex items-center gap-3">
-                            <Progress 
-                              value={progressPercentage} 
-                              className="h-1.5 flex-1"
-                            />
-                            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                              {progressPercentage}%
+                    <Card
+                      key={set.id}
+                      className={cn(
+                        "group overflow-hidden border-l-[3px] transition-all active:scale-[0.99] cursor-pointer touch-manipulation",
+                        isAllDone ? "border-l-emerald-400" : ACCENT_BORDER[set.recommendedStep],
+                      )}
+                      onClick={() => router.push(`/memorization/${set.id}`)}
+                    >
+                      <CardContent className="flex flex-col gap-4 p-4">
+                        {/* Title + next-step pill */}
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="font-bold leading-snug text-foreground line-clamp-2 flex-1 text-[17px] tracking-tight">
+                            {set.title}
+                          </h3>
+                          <NextStepPill recommended={set.recommendedStep} isAllDone={isAllDone} />
+                        </div>
+
+                        {/* 3-step visual track */}
+                        <StepTrack states={stepStates} />
+
+                        {/* Metadata row */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Last practiced */}
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="size-3 shrink-0" />
+                              {lastPracticed ? formatDate(lastPracticed) : "New"}
                             </span>
-                          </div>
-                          
-                          {/* Title and date row */}
-                          <div className="flex items-start justify-between gap-3">
-                            <h3 className="font-semibold leading-snug text-foreground">
-                              {set.title}
-                            </h3>
-                            <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                              <Calendar className="size-3" />
-                              <span className="hidden sm:inline">{formatDate(set.updatedAt || set.createdAt)}</span>
-                              <span className="sm:hidden">{formatDate(set.updatedAt || set.createdAt).split(' ')[0]}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Content preview */}
-                          <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
-                            {truncateContent(set.content)}
-                          </p>
-                          
-                          {/* Metadata and Edit button row */}
-                          <div className="flex items-center justify-between gap-3 pt-1">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Layers className="size-3.5" />
-                                <span className="tabular-nums">
-                                  {set.chunks.length}
+
+                            <span className="text-muted-foreground/30 text-xs">·</span>
+
+                            {/* Word count */}
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {wc} words
+                            </span>
+
+                            {/* Best score badge */}
+                            {bestScore !== null && (
+                              <>
+                                <span className="text-muted-foreground/30 text-xs">·</span>
+                                <span
+                                  className={cn(
+                                    "text-xs font-semibold tabular-nums",
+                                    bestScore >= 90 ? "text-emerald-600 dark:text-emerald-400" :
+                                    bestScore >= 70 ? "text-amber-600 dark:text-amber-400" :
+                                    "text-red-500",
+                                  )}
+                                >
+                                  {bestScore}%
                                 </span>
-                              </div>
-                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
-                                {set.chunkMode}
-                              </span>
-                            </div>
-                            
-                            {/* Mobile-visible edit button */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="shrink-0 gap-1.5 h-8 -mr-2 opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                              asChild
-                            >
-                              <Link 
-                                href={`/edit/${set.id}`}
-                                onClick={(e: React.MouseEvent) => {
-                                  e.stopPropagation()
-                                }}
-                              >
-                                <Edit3 className="size-3.5" />
-                                <span className="text-xs">Edit</span>
-                              </Link>
-                            </Button>
+                              </>
+                            )}
+
+                            {/* Audio/voice indicator */}
+                            {hasAudio && (
+                              <Mic className="size-3 text-muted-foreground/50 shrink-0" />
+                            )}
                           </div>
 
-                          {/* Tags */}
-                          {set.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {set.tags.map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </CardContent>
+                          {/* Edit button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 h-7 gap-1 px-2 text-xs opacity-50 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                            asChild
+                          >
+                            <Link
+                              href={`/edit/${set.id}`}
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            >
+                              <Edit3 className="size-3" />
+                              Edit
+                            </Link>
+                          </Button>
+                        </div>
 
+                        {/* Tags */}
+                        {set.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {set.tags.slice(0, 3).map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs h-5 px-2 font-normal">
+                                {tag}
+                              </Badge>
+                            ))}
+                            {set.tags.length > 3 && (
+                              <Badge variant="secondary" className="text-xs h-5 px-2 font-normal">
+                                +{set.tags.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
                     </Card>
                   )
                 })}
@@ -410,6 +504,7 @@ export default function HomePage() {
           </>
         )}
       </main>
+
       <MobileLibraryNav />
       <OnboardingTip page="home" delay={3000} />
     </div>
