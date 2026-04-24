@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { transcribeLimiter, applyRateLimit } from '@/lib/rate-limit'
 
 export type TranscriptWord = { word: string; start: number; end: number }
 
@@ -15,6 +16,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transcrib
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ text: '', words: [], error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Rate limit: 20 transcriptions per user per hour
+  const rateLimitResponse = await applyRateLimit(transcribeLimiter, `transcribe:${user.id}`)
+  if (rateLimitResponse) {
+    return NextResponse.json({ text: '', words: [], error: 'Too many requests. Please try again later.' }, { status: 429 })
   }
 
   const apiKey = process.env.GROQ_API_KEY

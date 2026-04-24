@@ -1,10 +1,9 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import type { Database } from "@/lib/supabase/types"
-// Impersonation removed — all queries use the authenticated user's own ID
+
 import { createSetSchema, updateSetSchema, formatZodError } from "@/lib/schemas"
 import { sanitizeText, sanitizeTags } from "@/lib/sanitize"
 import { getSupabaseErrorMessage } from "@/components/error-display"
@@ -23,8 +22,8 @@ export interface Chunk {
 
 export interface Progress {
   familiarizeCompleted: boolean
-  reviewedChunks?: string[] // Chunk IDs reviewed in flashcard mode
-  markedChunks?: string[] // Chunk IDs marked for later review
+  reviewedChunks?: string[]
+  markedChunks?: string[]
   encode: {
     stage1Completed: boolean
     stage2Completed: boolean
@@ -75,11 +74,21 @@ export interface MemorizationSet {
   transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null
 }
 
-interface MemorizationContextType {
+// ─── Context types ────────────────────────────────────────────────────────────
+
+interface SetListContextType {
   sets: MemorizationSet[]
+  hasMore: boolean
+  isLoadingMore: boolean
   isLoaded: boolean
   isLoading: boolean
   error: string | null
+  getAllTags: () => string[]
+  loadMore: () => Promise<void>
+  refreshSets: () => Promise<void>
+}
+
+interface SetActionsContextType {
   addSet: (
     title: string,
     content: string,
@@ -105,11 +114,17 @@ interface MemorizationContextType {
   deleteSet: (id: string) => Promise<void>
   deleteAudioFile: (audioFilePath: string) => Promise<void>
   getAudioUrl: (setId: string) => Promise<string | null>
-  getAllTags: () => string[]
-  refreshSets: () => Promise<void>
 }
 
-const MemorizationContext = createContext<MemorizationContextType | undefined>(undefined)
+// Combined for backward compatibility
+interface MemorizationContextType extends SetListContextType, SetActionsContextType {}
+
+// ─── Contexts ─────────────────────────────────────────────────────────────────
+
+const SetListContext = createContext<SetListContextType | undefined>(undefined)
+const SetActionsContext = createContext<SetActionsContextType | undefined>(undefined)
+
+// ─── Pure functions ───────────────────────────────────────────────────────────
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -127,18 +142,9 @@ function createInitialProgress(): Progress {
       lastScore: null,
     },
     tests: {
-      firstLetter: {
-        bestScore: null,
-        lastScore: null,
-      },
-      fullText: {
-        bestScore: null,
-        lastScore: null,
-      },
-      audioTest: {
-        bestScore: null,
-        lastScore: null,
-      },
+      firstLetter: { bestScore: null, lastScore: null },
+      fullText: { bestScore: null, lastScore: null },
+      audioTest: { bestScore: null, lastScore: null },
     },
   }
 }
@@ -152,51 +158,29 @@ function createInitialSessionState(): SessionState {
   }
 }
 
-/**
- * Computes the recommended next step based on progress.
- * Rules:
- * - If familiarizeCompleted is false → "familiarize"
- * - Else if any encode stage is incomplete → "encode"
- * - Else → "test"
- * 
- * Additional rule:
- * - If last test score < 70 → "encode" instead of "test"
- */
 function computeRecommendedStep(progress: Progress): RecommendedStep {
-  // Rule 1: Familiarize first
-  if (!progress.familiarizeCompleted) {
-    return "familiarize"
-  }
-  
-  // Rule 2: Complete all encode stages
-  if (!progress.encode.stage1Completed || 
-      !progress.encode.stage2Completed || 
-      !progress.encode.stage3Completed) {
+  if (!progress.familiarizeCompleted) return "familiarize"
+
+  if (
+    !progress.encode.stage1Completed ||
+    !progress.encode.stage2Completed ||
+    !progress.encode.stage3Completed
+  ) {
     return "encode"
   }
-  
-  // Rule 3: Check test scores - if any test has score < 70, recommend encode again
-  const firstLetterScore = progress.tests.firstLetter.lastScore
-  const fullTextScore = progress.tests.fullText.lastScore
-  const audioTestScore = progress.tests.audioTest.lastScore
-  
-  if ((firstLetterScore !== null && firstLetterScore < 70) || 
-      (fullTextScore !== null && fullTextScore < 70) ||
-      (audioTestScore !== null && audioTestScore < 70)) {
+
+  const { firstLetter, fullText, audioTest } = progress.tests
+  if (
+    (firstLetter.lastScore !== null && firstLetter.lastScore < 70) ||
+    (fullText.lastScore !== null && fullText.lastScore < 70) ||
+    (audioTest.lastScore !== null && audioTest.lastScore < 70)
+  ) {
     return "encode"
   }
-  
-  // Default: recommend test
+
   return "test"
 }
 
-/**
- * Parses content into paragraphs.
- * - Splits on blank lines (one or more line breaks)
- * - Trims whitespace from each paragraph
- * - Normalizes internal whitespace (multiple spaces become single space)
- * - Ignores empty chunks
- */
 function parseIntoParagraphs(content: string): string[] {
   return content
     .replace(/\r\n/g, "\n")
@@ -205,34 +189,18 @@ function parseIntoParagraphs(content: string): string[] {
     .filter((p) => p.length > 0)
 }
 
-/**
- * Parses content into sentences.
- * - Splits on sentence-ending punctuation (. ? !)
- * - Preserves the punctuation with the sentence
- * - Trims whitespace from each sentence
- * - Normalizes internal whitespace
- * - Ignores empty chunks
- */
 function parseIntoSentences(content: string): string[] {
-  // Normalize whitespace first (replace line breaks and multiple spaces with single space)
   const normalized = content
     .replace(/\r\n/g, "\n")
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-  
-  // Split on sentence-ending punctuation, keeping the punctuation with the sentence
-  const sentences = normalized
+  return normalized
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-  
-  return sentences
 }
 
-/**
- * Counts the total number of words in content.
- */
 export function countWords(content: string): number {
   return content
     .trim()
@@ -259,136 +227,160 @@ function parseCustomChunks(content: string): string[] {
 
 function generateChunks(content: string, mode: ChunkMode): Chunk[] {
   let texts: string[]
-  
   switch (mode) {
-    case "line":
-      texts = parseIntoLines(content)
-      break
-    case "paragraph":
-      texts = parseIntoParagraphs(content)
-      break
-    case "sentence":
-      texts = parseIntoSentences(content)
-      break
-    case "custom":
-      texts = parseCustomChunks(content)
-      break
-    default:
-      texts = parseIntoParagraphs(content)
+    case "line":      texts = parseIntoLines(content); break
+    case "paragraph": texts = parseIntoParagraphs(content); break
+    case "sentence":  texts = parseIntoSentences(content); break
+    case "custom":    texts = parseCustomChunks(content); break
+    default:          texts = parseIntoParagraphs(content)
   }
-  
-  return texts.map((text, index) => ({
-    id: generateId(),
-    orderIndex: index,
-    text,
-  }))
+  return texts.map((text, index) => ({ id: generateId(), orderIndex: index, text }))
 }
+
+function transformSetRow(set: any): MemorizationSet {
+  return {
+    id: set.id,
+    title: set.title,
+    content: set.content,
+    createdAt: set.created_at,
+    updatedAt: set.updated_at,
+    chunkMode: set.chunk_mode as ChunkMode,
+    chunks: (set.chunks || [])
+      .sort((a: any, b: any) => a.order_index - b.order_index)
+      .map((chunk: any) => ({
+        id: chunk.id,
+        orderIndex: chunk.order_index,
+        text: chunk.text,
+      })),
+    progress: (set.progress || createInitialProgress()) as Progress,
+    sessionState: (set.session_state || createInitialSessionState()) as SessionState,
+    recommendedStep: set.recommended_step as RecommendedStep,
+    tags: (set.set_tags || []).map((st: any) => st.tag.name),
+    audioFilePath: set.audio_file_path || null,
+    originalFilename: set.original_filename || null,
+    createdFrom: (set.created_from || "text") as InputMethod,
+    transcript: set.transcript || null,
+    transcriptWords: set.transcript_words || null,
+  }
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 20
 
 export function MemorizationProvider({ children }: { children: ReactNode }) {
   const [sets, setSets] = useState<MemorizationSet[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
   const supabase = createClient()
   const audioUrlCache = useRef<Map<string, { url: string; expiresAt: number }>>(new Map())
 
-  // Fetch sets from Supabase
-  const fetchSets = useCallback(async () => {
+  // setsRef is always in sync with the sets state.
+  // Callbacks read from this ref so they don't need [sets] in their dep arrays,
+  // giving them stable identities that never change after mount.
+  const setsRef = useRef<MemorizationSet[]>([])
+
+  // Helper: update both ref and state atomically
+  const commitSets = useCallback((newSets: MemorizationSet[]) => {
+    setsRef.current = newSets
+    setSets(newSets)
+  }, [])
+
+  // Helper: apply a single-set update to the current list
+  const patchSet = useCallback((id: string, updater: (s: MemorizationSet) => MemorizationSet) => {
+    const newSets = setsRef.current.map((s) => (s.id === id ? updater(s) : s))
+    setsRef.current = newSets
+    setSets(newSets)
+  }, [])
+
+  // ─── Fetch (paginated) ─────────────────────────────────────────────────────
+
+  const fetchSets = useCallback(async (reset = true) => {
     try {
-      setIsLoading(true)
+      if (reset) setIsLoading(true)
+      else setIsLoadingMore(true)
       setError(null)
 
-      // Get current user and session
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      const { data: { user } } = await supabase.auth.getUser()
       const effectiveUserId = user?.id
-      
-      console.log('🔍 fetchSets - User:', user?.id, user?.email)
-      console.log('🔑 Session exists:', !!session)
-      
+
       if (!effectiveUserId) {
-        console.log('❌ No user found in session')
-        setSets([])
+        commitSets([])
         setIsLoaded(true)
         setIsLoading(false)
+        setIsLoadingMore(false)
         return
       }
 
-      // Identify user for analytics
-      if (user?.id) {
-        identifyUser(user.id, {
-          email: user.email,
-          signup_date: user.created_at,
-        })
+      if (reset && user?.id) {
+        identifyUser(user.id, { email: user.email, signup_date: user.created_at })
         trackSessionStart()
       }
 
-      // Fetch memorization sets with chunks and tags for the effective user
-      const { data: setsData, error: setsError } = await supabase
-        .from('memorization_sets')
-        .select(`
-          *,
-          chunks (id, order_index, text),
-          set_tags (
-            tag:tags (name)
-          )
-        `)
-        .eq('user_id', effectiveUserId)
-        .order('created_at', { ascending: false })
+      const offset = reset ? 0 : setsRef.current.length
+
+      const { data: setsData, error: setsError, count } = await supabase
+        .from("memorization_sets")
+        .select(
+          `*, chunks (id, order_index, text), set_tags (tag:tags (name))`,
+          { count: "exact" },
+        )
+        .eq("user_id", effectiveUserId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
 
       if (setsError) throw setsError
 
-      // Transform database format to app format
-      const transformedSets: MemorizationSet[] = (setsData || []).map((set: any) => ({
-        id: set.id,
-        title: set.title,
-        content: set.content,
-        createdAt: set.created_at,
-        updatedAt: set.updated_at,
-        chunkMode: set.chunk_mode as ChunkMode,
-        chunks: (set.chunks || [])
-          .sort((a: any, b: any) => a.order_index - b.order_index)
-          .map((chunk: any) => ({
-            id: chunk.id,
-            orderIndex: chunk.order_index,
-            text: chunk.text,
-          })),
-        progress: (set.progress || createInitialProgress()) as Progress,
-        sessionState: (set.session_state || createInitialSessionState()) as SessionState,
-        recommendedStep: set.recommended_step as RecommendedStep,
-        tags: (set.set_tags || []).map((st: any) => st.tag.name),
-        audioFilePath: set.audio_file_path || null,
-        originalFilename: set.original_filename || null,
-        createdFrom: (set.created_from || 'text') as InputMethod,
-        transcript: set.transcript || null,
-        transcriptWords: set.transcript_words || null,
-      }))
+      const transformedSets = (setsData || []).map(transformSetRow)
+      const newSets = reset ? transformedSets : [...setsRef.current, ...transformedSets]
+      commitSets(newSets)
+      setHasMore((count ?? 0) > offset + transformedSets.length)
 
-      console.log('✅ Transformed sets:', transformedSets.length, 'sets')
-      console.log('📦 Sets data:', JSON.stringify(transformedSets, null, 2))
-      setSets(transformedSets)
-      
-      // Update user properties with current stats
-      if (user?.id) {
-        updateUserProperties({
-          total_sets: transformedSets.length,
-        })
+      if (reset && user?.id) {
+        updateUserProperties({ total_sets: count ?? 0 })
       }
     } catch (err) {
-      console.error('Error fetching sets:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load memorization sets')
+      console.error("Error fetching sets:", err)
+      setError(err instanceof Error ? err.message : "Failed to load memorization sets")
       toast.error(getSupabaseErrorMessage(err))
     } finally {
       setIsLoaded(true)
       setIsLoading(false)
+      setIsLoadingMore(false)
     }
-  }, [supabase])
+  }, [supabase, commitSets])
 
-  // Initial fetch
   useEffect(() => {
     fetchSets()
   }, [fetchSets])
+
+  // ─── List actions ──────────────────────────────────────────────────────────
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || isLoadingMore) return
+    await fetchSets(false)
+  }, [fetchSets, hasMore, isLoadingMore])
+
+  const refreshSets = useCallback(async () => {
+    await fetchSets(true)
+  }, [fetchSets])
+
+  const getAllTags = useCallback((): string[] => {
+    const tagSet = new Set<string>()
+    sets.forEach((set) => set.tags.forEach((tag) => tagSet.add(tag)))
+    return Array.from(tagSet).sort()
+  }, [sets])
+
+  // ─── Set actions (stable via setsRef) ─────────────────────────────────────
+
+  // getSet reads from ref — always fresh, never changes identity
+  const getSet = useCallback((id: string): MemorizationSet | undefined => {
+    return setsRef.current.find((s) => s.id === id)
+  }, [])
 
   const addSet = useCallback(async (
     title: string,
@@ -403,13 +395,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   ): Promise<string> => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
       const effectiveUserId = user?.id
-      console.log('🔍 addSet - User:', user?.id, user?.email)
-      
-      if (!effectiveUserId) throw new Error('Not authenticated')
+      if (!effectiveUserId) throw new Error("Not authenticated")
 
-      // Sanitize and validate input
       const sanitizedTitle = sanitizeText(title)
       const sanitizedContent = sanitizeText(content)
       const sanitizedTags = sanitizeTags(tags)
@@ -435,54 +423,36 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
 
       let audioFilePath: string | null = null
 
-      // Upload audio file if provided
-      const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10 MB
-      const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
+      const MAX_AUDIO_SIZE = 10 * 1024 * 1024
+      const ALLOWED_AUDIO_TYPES = ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav"]
 
-      if (audioBlob && createdFrom === 'voice') {
+      if (audioBlob && createdFrom === "voice") {
         if (audioBlob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio file must be 10 MB or smaller')
-          throw new Error('Audio file too large')
+          toast.error("Audio file must be 10 MB or smaller")
+          throw new Error("Audio file too large")
         }
         if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
-          toast.error('Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.')
-          throw new Error('Unsupported audio type: ' + audioBlob.type)
+          toast.error("Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.")
+          throw new Error("Unsupported audio type: " + audioBlob.type)
         }
 
-        console.log('🎙️ Attempting to upload audio:', {
-          blobSize: audioBlob.size,
-          blobType: audioBlob.type,
-          userId: effectiveUserId,
-          setId: id
-        })
-        
-        const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'mp4'
+        const fileExtension = audioBlob.type.includes("webm") ? "webm" : "mp4"
         const fileName = `${effectiveUserId}/${id}.${fileExtension}`
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('audio-recordings')
-          .upload(fileName, audioBlob, {
-            contentType: audioBlob.type,
-            upsert: false,
-          })
+
+        const { error: uploadError } = await supabase.storage
+          .from("audio-recordings")
+          .upload(fileName, audioBlob, { contentType: audioBlob.type, upsert: false })
 
         if (uploadError) {
-          console.error('❌ Audio upload failed:', {
-            error: uploadError,
-            message: uploadError.message,
-            statusCode: uploadError.statusCode
-          })
           toast.error(getSupabaseErrorMessage(uploadError))
           throw new Error(`Failed to upload audio file: ${uploadError.message}`)
         }
 
         audioFilePath = fileName
-        console.log('✅ Audio uploaded successfully:', { fileName, data: uploadData })
       }
 
-      // Insert memorization set
       const { error: setError } = await supabase
-        .from('memorization_sets')
+        .from("memorization_sets")
         .insert({
           id,
           user_id: effectiveUserId,
@@ -499,71 +469,58 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           created_from: createdFrom,
           transcript: transcript || null,
           transcript_words: transcriptWords ? transcriptWords as any : null,
-        })
+        } as any)
 
       if (setError) {
-        console.error('❌ Insert failed:', setError)
         if (audioFilePath) {
-          await supabase.storage.from('audio-recordings').remove([audioFilePath])
+          await supabase.storage.from("audio-recordings").remove([audioFilePath])
         }
         throw setError
       }
 
-      // Insert chunks
       if (chunks.length > 0) {
         const { error: chunksError } = await supabase
-          .from('chunks')
-          .insert(
-            chunks.map(chunk => ({
-              id: chunk.id,
-              set_id: id,
-              order_index: chunk.orderIndex,
-              text: chunk.text,
-            }))
-          )
-
+          .from("chunks")
+          .insert(chunks.map((chunk) => ({
+            id: chunk.id,
+            set_id: id,
+            order_index: chunk.orderIndex,
+            text: chunk.text,
+          })))
         if (chunksError) throw chunksError
       }
 
-      // Handle tags
       if (validTags.length > 0) {
-        // Get or create tags
         for (const tagName of validTags) {
           const { data: existingTag } = await supabase
-            .from('tags')
-            .select('id')
-            .eq('user_id', effectiveUserId)
-            .eq('name', tagName)
+            .from("tags")
+            .select("id")
+            .eq("user_id", effectiveUserId)
+            .eq("name", tagName)
             .single()
 
           let tagId: string
-
           if (existingTag) {
             tagId = existingTag.id
           } else {
             const { data: newTag, error: tagError } = await supabase
-              .from('tags')
+              .from("tags")
               .insert({ user_id: effectiveUserId, name: tagName })
-              .select('id')
+              .select("id")
               .single()
-
             if (tagError) throw tagError
             tagId = newTag.id
           }
 
-          // Create set_tag relationship
           const { error: setTagError } = await supabase
-            .from('set_tags')
+            .from("set_tags")
             .insert({ set_id: id, tag_id: tagId })
-
           if (setTagError) throw setTagError
         }
       }
 
-      // Refresh sets
-      await fetchSets()
-      
-      // Track memorization creation
+      await fetchSets(true)
+
       trackEvent(AnalyticsEvents.MEMORIZATION_CREATED, {
         chunk_mode: validChunkMode,
         has_audio: !!audioFilePath,
@@ -572,19 +529,29 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         tags_count: validTags.length,
         created_from: createdFrom,
       })
-      
-      toast.success('Memorization set created')
+
+      toast.success("Memorization set created")
       return id
     } catch (err) {
-      console.error('Error adding set:', err)
+      console.error("Error adding set:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, fetchSets])
 
-  const getSet = useCallback((id: string): MemorizationSet | undefined => {
-    return sets.find((set) => set.id === id)
-  }, [sets])
+  const deleteAudioFile = useCallback(async (audioFilePath: string) => {
+    try {
+      const { error } = await supabase.storage
+        .from("audio-recordings")
+        .remove([audioFilePath])
+      if (error) throw error
+      toast.success("Audio file deleted")
+    } catch (err) {
+      console.error("Error deleting audio file:", err)
+      toast.error(getSupabaseErrorMessage(err))
+      throw err
+    }
+  }, [supabase])
 
   const updateSet = useCallback(async (
     id: string,
@@ -599,12 +566,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   ) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
+      if (!user) throw new Error("Not authenticated")
 
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      // Read from ref — stable, no [sets] dep needed
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
-      // Sanitize and validate input
       const sanitizedTitle = sanitizeText(title)
       const sanitizedContent = sanitizeText(content)
       const sanitizedTags = sanitizeTags(tags ?? [])
@@ -624,214 +591,163 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const hasContentChanged = set.content !== validContent
       const chunks = hasContentChanged ? generateChunks(validContent, set.chunkMode) : set.chunks
 
-      // Handle audio file operations
       let audioFilePath = set.audioFilePath
       let audioOriginalFilename = set.originalFilename
       let audioCreatedFrom = set.createdFrom
 
-      const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10 MB
-      const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav']
+      const MAX_AUDIO_SIZE = 10 * 1024 * 1024
+      const ALLOWED_AUDIO_TYPES = ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav"]
 
-      // If new audio is provided
-      if (audioBlob && createdFrom === 'voice') {
+      if (audioBlob && createdFrom === "voice") {
         if (audioBlob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio file must be 10 MB or smaller')
-          throw new Error('Audio file too large')
+          toast.error("Audio file must be 10 MB or smaller")
+          throw new Error("Audio file too large")
         }
         if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
-          toast.error('Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.')
-          throw new Error('Unsupported audio type: ' + audioBlob.type)
+          toast.error("Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.")
+          throw new Error("Unsupported audio type: " + audioBlob.type)
         }
 
-        // Delete old audio file if it exists
         if (set.audioFilePath) {
           await deleteAudioFile(set.audioFilePath)
         }
 
-        // Upload new audio
-        const fileExtension = audioBlob.type.includes('webm') ? 'webm' : 'mp4'
+        const fileExtension = audioBlob.type.includes("webm") ? "webm" : "mp4"
         const fileName = `${user.id}/${id}.${fileExtension}`
-        
-        console.log('[updateSet] Uploading audio:', {
-          fileName,
-          blobType: audioBlob.type,
-          blobSize: audioBlob.size,
-          createdFrom
-        })
 
-        const { data, error: uploadError } = await supabase.storage
-          .from('audio-recordings')
-          .upload(fileName, audioBlob, {
-            contentType: audioBlob.type,
-            upsert: true
-          })
+        const { error: uploadError } = await supabase.storage
+          .from("audio-recordings")
+          .upload(fileName, audioBlob, { contentType: audioBlob.type, upsert: true })
 
         if (uploadError) {
-          console.error('[updateSet] Audio upload failed:', uploadError)
           toast.error(getSupabaseErrorMessage(uploadError))
           throw uploadError
         }
 
-        console.log('[updateSet] Audio uploaded successfully:', data)
         audioFilePath = fileName
-        audioOriginalFilename = originalFilename || 'voice-recording.webm'
-        audioCreatedFrom = 'voice'
-      } 
-      // If switching from voice to text (no new audio, but createdFrom is text)
-      else if (createdFrom === 'text' && set.audioFilePath) {
+        audioOriginalFilename = originalFilename || "voice-recording.webm"
+        audioCreatedFrom = "voice"
+      } else if (createdFrom === "text" && set.audioFilePath) {
         await deleteAudioFile(set.audioFilePath)
         audioFilePath = null
         audioOriginalFilename = null
-        audioCreatedFrom = 'text'
-      }
-      // Update createdFrom if provided without audio changes
-      else if (createdFrom) {
+        audioCreatedFrom = "text"
+      } else if (createdFrom) {
         audioCreatedFrom = createdFrom
       }
 
-      // Update memorization set
+      const updatePayload: Record<string, any> = {
+        title: validTitle,
+        content: validContent,
+        audio_file_path: audioFilePath,
+        original_filename: audioOriginalFilename,
+        created_from: audioCreatedFrom,
+        updated_at: new Date().toISOString(),
+      }
+      if (transcript !== undefined) updatePayload.transcript = transcript || null
+      if (transcriptWords !== undefined) updatePayload.transcript_words = transcriptWords ?? null
+
       const { error: updateError } = await supabase
-        .from('memorization_sets')
-        .update({
-          title: validTitle,
-          content: validContent,
-          audio_file_path: audioFilePath,
-          original_filename: audioOriginalFilename,
-          created_from: audioCreatedFrom,
-          transcript: transcript !== undefined ? (transcript || null) : undefined,
-          transcript_words: transcriptWords !== undefined ? (transcriptWords as any ?? null) : undefined,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
+        .from("memorization_sets")
+        .update(updatePayload as any)
+        .eq("id", id)
 
       if (updateError) throw updateError
 
-      // Update chunks if content changed
       if (hasContentChanged) {
-        // Delete old chunks
-        const { error: deleteError } = await supabase
-          .from('chunks')
-          .delete()
-          .eq('set_id', id)
-
+        const { error: deleteError } = await supabase.from("chunks").delete().eq("set_id", id)
         if (deleteError) throw deleteError
 
-        // Insert new chunks
         if (chunks.length > 0) {
           const { error: chunksError } = await supabase
-            .from('chunks')
-            .insert(
-              chunks.map(chunk => ({
-                id: chunk.id,
-                set_id: id,
-                order_index: chunk.orderIndex,
-                text: chunk.text,
-              }))
-            )
-
+            .from("chunks")
+            .insert(chunks.map((chunk) => ({
+              id: chunk.id,
+              set_id: id,
+              order_index: chunk.orderIndex,
+              text: chunk.text,
+            })))
           if (chunksError) throw chunksError
         }
       }
 
-      // Update tags if provided
       if (tags !== undefined) {
         const { data: { user: tagUser } } = await supabase.auth.getUser()
-        if (!tagUser) throw new Error('Not authenticated')
+        if (!tagUser) throw new Error("Not authenticated")
 
-        // Delete existing set_tags
         const { error: deleteTagsError } = await supabase
-          .from('set_tags')
+          .from("set_tags")
           .delete()
-          .eq('set_id', id)
-
+          .eq("set_id", id)
         if (deleteTagsError) throw deleteTagsError
 
-        // Insert new tags (use already-sanitized validTags)
         for (const tagName of validTags ?? []) {
           const { data: existingTag } = await supabase
-            .from('tags')
-            .select('id')
-            .eq('user_id', tagUser.id)
-            .eq('name', tagName)
+            .from("tags")
+            .select("id")
+            .eq("user_id", tagUser.id)
+            .eq("name", tagName)
             .single()
 
           let tagId: string
-
           if (existingTag) {
             tagId = existingTag.id
           } else {
             const { data: newTag, error: tagError } = await supabase
-              .from('tags')
+              .from("tags")
               .insert({ user_id: tagUser.id, name: tagName })
-              .select('id')
+              .select("id")
               .single()
-
             if (tagError) throw tagError
             tagId = newTag.id
           }
 
           const { error: setTagError } = await supabase
-            .from('set_tags')
+            .from("set_tags")
             .insert({ set_id: id, tag_id: tagId })
-
           if (setTagError) throw setTagError
         }
       }
 
-      await fetchSets()
-      toast.success('Memorization set updated')
+      await fetchSets(true)
+      toast.success("Memorization set updated")
     } catch (err) {
-      console.error('Error updating set:', err)
+      console.error("Error updating set:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet, fetchSets])
+  }, [supabase, fetchSets, deleteAudioFile])
 
   const updateChunkMode = useCallback(async (id: string, mode: ChunkMode) => {
     try {
-      const set = getSet(id)
+      const set = setsRef.current.find((s) => s.id === id)
       if (!set || set.chunkMode === mode) return
 
       const oldMode = set.chunkMode
       const oldChunkCount = set.chunks.length
       const chunks = generateChunks(set.content, mode)
 
-      // Update chunk mode
       const { error: updateError } = await supabase
-        .from('memorization_sets')
-        .update({
-          chunk_mode: mode,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-
+        .from("memorization_sets")
+        .update({ chunk_mode: mode, updated_at: new Date().toISOString() })
+        .eq("id", id)
       if (updateError) throw updateError
 
-      // Delete old chunks
-      const { error: deleteError } = await supabase
-        .from('chunks')
-        .delete()
-        .eq('set_id', id)
-
+      const { error: deleteError } = await supabase.from("chunks").delete().eq("set_id", id)
       if (deleteError) throw deleteError
 
-      // Insert new chunks
       if (chunks.length > 0) {
         const { error: chunksError } = await supabase
-          .from('chunks')
-          .insert(
-            chunks.map(chunk => ({
-              id: chunk.id,
-              set_id: id,
-              order_index: chunk.orderIndex,
-              text: chunk.text,
-            }))
-          )
-
+          .from("chunks")
+          .insert(chunks.map((chunk) => ({
+            id: chunk.id,
+            set_id: id,
+            order_index: chunk.orderIndex,
+            text: chunk.text,
+          })))
         if (chunksError) throw chunksError
       }
 
-      // Track chunk mode change
       trackEvent(AnalyticsEvents.CHUNK_MODE_CHANGED, {
         set_id: id,
         old_mode: oldMode,
@@ -840,19 +756,19 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         chunk_count_after: chunks.length,
       })
 
-      await fetchSets()
-      toast.success('Chunk mode updated')
+      await fetchSets(true)
+      toast.success("Chunk mode updated")
     } catch (err) {
-      console.error('Error updating chunk mode:', err)
+      console.error("Error updating chunk mode:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet, fetchSets])
+  }, [supabase, fetchSets])
 
   const updateSessionState = useCallback(async (id: string, sessionState: Partial<SessionState>) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
       const updatedSessionState = {
         ...set.sessionState,
@@ -861,38 +777,45 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       const { error } = await supabase
-        .from('memorization_sets')
+        .from("memorization_sets")
         .update({
           session_state: updatedSessionState as any,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id)
-
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? { ...s, sessionState: updatedSessionState } : s))
+      patchSet(id, (s) => ({ ...s, sessionState: updatedSessionState }))
     } catch (err) {
-      console.error('Error updating session state:', err)
-      // Silent fail for session state updates
+      console.error("Error updating session state:", err)
+      // Silent fail for session state
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
 
   const updateProgress = useCallback(async (id: string, updates: Partial<Progress>) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
       const updatedProgress = {
         ...set.progress,
         ...updates,
-        // Deep merge for nested objects
-        encode: updates.encode ? { ...set.progress.encode, ...updates.encode } : set.progress.encode,
-        tests: updates.tests ? {
-          firstLetter: updates.tests.firstLetter ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter } : set.progress.tests.firstLetter,
-          fullText: updates.tests.fullText ? { ...set.progress.tests.fullText, ...updates.tests.fullText } : set.progress.tests.fullText,
-          audioTest: updates.tests.audioTest ? { ...set.progress.tests.audioTest, ...updates.tests.audioTest } : set.progress.tests.audioTest,
-        } : set.progress.tests,
+        encode: updates.encode
+          ? { ...set.progress.encode, ...updates.encode }
+          : set.progress.encode,
+        tests: updates.tests
+          ? {
+              firstLetter: updates.tests.firstLetter
+                ? { ...set.progress.tests.firstLetter, ...updates.tests.firstLetter }
+                : set.progress.tests.firstLetter,
+              fullText: updates.tests.fullText
+                ? { ...set.progress.tests.fullText, ...updates.tests.fullText }
+                : set.progress.tests.fullText,
+              audioTest: updates.tests.audioTest
+                ? { ...set.progress.tests.audioTest, ...updates.tests.audioTest }
+                : set.progress.tests.audioTest,
+            }
+          : set.progress.tests,
       }
 
       const updatedSessionState = {
@@ -901,67 +824,56 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       const { error } = await supabase
-        .from('memorization_sets')
+        .from("memorization_sets")
         .update({
           progress: updatedProgress as any,
           session_state: updatedSessionState as any,
           recommended_step: computeRecommendedStep(updatedProgress),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id)
-
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? {
+      patchSet(id, (s) => ({
         ...s,
         progress: updatedProgress,
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
-      } : s))
+      }))
     } catch (err) {
-      console.error('Error updating progress:', err)
+      console.error("Error updating progress:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
 
   const markFamiliarizeComplete = useCallback(async (id: string) => {
-    const set = getSet(id)
+    const set = setsRef.current.find((s) => s.id === id)
     await updateProgress(id, { familiarizeCompleted: true })
-    
-    // Track familiarize completion
+
     if (set) {
-      const timeSpent = set.sessionState.lastVisitedAt 
+      const timeSpent = set.sessionState.lastVisitedAt
         ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
         : 0
-      
       trackEvent(AnalyticsEvents.FAMILIARIZE_COMPLETED, {
         set_id: id,
         chunk_count: set.chunks.length,
         time_spent_seconds: timeSpent,
       })
     }
-  }, [updateProgress, getSet])
+  }, [updateProgress])
 
   const updateEncodeProgress = useCallback(async (id: string, stage: 1 | 2 | 3, score?: number) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
-      const updates: Partial<Progress["encode"]> = {
-        [`stage${stage}Completed`]: true,
-      } as any
-      if (score !== undefined) {
-        updates.lastScore = score
-      }
+      const updates: Partial<Progress["encode"]> = { [`stage${stage}Completed`]: true } as any
+      if (score !== undefined) updates.lastScore = score
 
       const updatedProgress = {
         ...set.progress,
-        encode: {
-          ...set.progress.encode,
-          ...updates,
-        },
+        encode: { ...set.progress.encode, ...updates },
       }
 
       const updatedSessionState = {
@@ -970,47 +882,47 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       const { error } = await supabase
-        .from('memorization_sets')
+        .from("memorization_sets")
         .update({
           progress: updatedProgress as any,
           session_state: updatedSessionState as any,
           recommended_step: computeRecommendedStep(updatedProgress),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id)
-
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? {
+      patchSet(id, (s) => ({
         ...s,
         progress: updatedProgress,
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
-      } : s))
-      
-      // Track encode completion
-      const timeSpent = set.sessionState.lastVisitedAt 
+      }))
+
+      const timeSpent = set.sessionState.lastVisitedAt
         ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
         : 0
-      
       trackEvent(AnalyticsEvents.ENCODE_COMPLETED, {
         set_id: id,
-        stage: stage,
+        stage,
         score: score || 0,
         time_spent_seconds: timeSpent,
       })
     } catch (err) {
-      console.error('Error updating encode progress:', err)
+      console.error("Error updating encode progress:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
 
-  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number) => {
+  const updateTestScore = useCallback(async (
+    id: string,
+    testType: "firstLetter" | "fullText" | "audioTest",
+    score: number,
+  ) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
       const currentBest = set.progress.tests[testType].bestScore
       const newBest = currentBest === null ? score : Math.max(currentBest, score)
@@ -1021,10 +933,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         ...set.progress,
         tests: {
           ...set.progress.tests,
-          [testType]: {
-            lastScore: score,
-            bestScore: newBest,
-          },
+          [testType]: { lastScore: score, bestScore: newBest },
         },
       }
 
@@ -1034,129 +943,144 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       const { error } = await supabase
-        .from('memorization_sets')
+        .from("memorization_sets")
         .update({
           progress: updatedProgress as any,
           session_state: updatedSessionState as any,
           recommended_step: computeRecommendedStep(updatedProgress),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id)
-
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? {
+      patchSet(id, (s) => ({
         ...s,
         progress: updatedProgress,
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
-      } : s))
-      
-      // Track test completion
-      const durationSeconds = set.sessionState.lastVisitedAt 
+      }))
+
+      const durationSeconds = set.sessionState.lastVisitedAt
         ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
         : 0
-      
       trackEvent(AnalyticsEvents.TEST_COMPLETED, {
         set_id: id,
-        test_type: testType === 'firstLetter' ? 'first_letter' : testType === 'fullText' ? 'full_text' : 'audio',
-        score: score,
+        test_type: testType === "firstLetter" ? "first_letter" : testType === "fullText" ? "full_text" : "audio",
+        score,
         duration_seconds: durationSeconds,
         is_best_score: isBestScore,
         improvement_percentage: currentBest !== null ? improvement : undefined,
         chunk_count: set.chunks.length,
       })
-      
-      // Track practice session for retention
-      trackEvent(AnalyticsEvents.PRACTICE_SESSION, {
-        activity_type: 'test',
-        set_id: id,
-      })
+      trackEvent(AnalyticsEvents.PRACTICE_SESSION, { activity_type: "test", set_id: id })
     } catch (err) {
-      console.error('Error updating test score:', err)
+      console.error("Error updating test score:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
 
   const updateReviewedChunks = useCallback(async (id: string, chunkIds: string[]) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
-      const updatedProgress = {
-        ...set.progress,
-        reviewedChunks: chunkIds,
-      }
+      const updatedProgress = { ...set.progress, reviewedChunks: chunkIds }
 
       const { error } = await supabase
-        .from('memorization_sets')
-        .update({
-          progress: updatedProgress as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-
+        .from("memorization_sets")
+        .update({ progress: updatedProgress as any, updated_at: new Date().toISOString() })
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? {
-        ...s,
-        progress: updatedProgress,
-      } : s))
+      patchSet(id, (s) => ({ ...s, progress: updatedProgress }))
     } catch (err) {
-      console.error('Error updating reviewed chunks:', err)
+      console.error("Error updating reviewed chunks:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
 
   const updateMarkedChunks = useCallback(async (id: string, chunkIds: string[]) => {
     try {
-      const set = getSet(id)
-      if (!set) throw new Error('Set not found')
+      const set = setsRef.current.find((s) => s.id === id)
+      if (!set) throw new Error("Set not found")
 
-      const updatedProgress = {
-        ...set.progress,
-        markedChunks: chunkIds,
-      }
+      const updatedProgress = { ...set.progress, markedChunks: chunkIds }
 
       const { error } = await supabase
-        .from('memorization_sets')
-        .update({
-          progress: updatedProgress as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-
+        .from("memorization_sets")
+        .update({ progress: updatedProgress as any, updated_at: new Date().toISOString() })
+        .eq("id", id)
       if (error) throw error
 
-      // Update local state optimistically
-      setSets(prev => prev.map(s => s.id === id ? {
-        ...s,
-        progress: updatedProgress,
-      } : s))
+      patchSet(id, (s) => ({ ...s, progress: updatedProgress }))
     } catch (err) {
-      console.error('Error updating marked chunks:', err)
+      console.error("Error updating marked chunks:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, getSet])
+  }, [supabase, patchSet])
+
+  const updateTags = useCallback(async (id: string, tags: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Not authenticated")
+
+      const { error: deleteError } = await supabase.from("set_tags").delete().eq("set_id", id)
+      if (deleteError) throw deleteError
+
+      for (const tagName of tags) {
+        const { data: existingTag } = await supabase
+          .from("tags")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("name", tagName)
+          .single()
+
+        let tagId: string
+        if (existingTag) {
+          tagId = existingTag.id
+        } else {
+          const { data: newTag, error: tagError } = await supabase
+            .from("tags")
+            .insert({ user_id: user.id, name: tagName })
+            .select("id")
+            .single()
+          if (tagError) throw tagError
+          tagId = newTag.id
+        }
+
+        const { error: setTagError } = await supabase
+          .from("set_tags")
+          .insert({ set_id: id, tag_id: tagId })
+        if (setTagError) throw setTagError
+      }
+
+      await supabase
+        .from("memorization_sets")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", id)
+
+      await fetchSets(true)
+      toast.success("Tags updated")
+    } catch (err) {
+      console.error("Error updating tags:", err)
+      toast.error(getSupabaseErrorMessage(err))
+      throw err
+    }
+  }, [supabase, fetchSets])
 
   const deleteSet = useCallback(async (id: string) => {
     try {
-      // Get the set to check for audio file and track analytics
-      const set = sets.find(s => s.id === id)
-      
-      // Calculate metrics before deletion
+      const set = setsRef.current.find((s) => s.id === id)
+
       const setAgeInDays = set ? AnalyticsEvents.getTimeDifferenceDays(set.createdAt) : 0
-      
-      // Calculate completion percentage
+
       let completionPercentage = 0
       if (set) {
         let completed = 0
-        let total = 7
+        const total = 7
         if (set.progress.familiarizeCompleted) completed++
         if (set.progress.encode.stage1Completed) completed++
         if (set.progress.encode.stage2Completed) completed++
@@ -1166,26 +1090,17 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         if (set.progress.tests.audioTest.bestScore !== null) completed++
         completionPercentage = Math.round((completed / total) * 100)
       }
-      
-      // Delete audio file if exists
+
       if (set?.audioFilePath) {
         const { error: storageError } = await supabase.storage
-          .from('audio-recordings')
+          .from("audio-recordings")
           .remove([set.audioFilePath])
-        
-        if (storageError) {
-          console.error('Failed to delete audio file:', storageError)
-        }
+        if (storageError) console.error("Failed to delete audio file:", storageError)
       }
 
-      const { error } = await supabase
-        .from('memorization_sets')
-        .delete()
-        .eq('id', id)
-
+      const { error } = await supabase.from("memorization_sets").delete().eq("id", id)
       if (error) throw error
 
-      // Track deletion
       trackEvent(AnalyticsEvents.MEMORIZATION_DELETED, {
         set_id: id,
         set_age_days: setAgeInDays,
@@ -1194,103 +1109,26 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         chunk_count: set?.chunks.length || 0,
       })
 
-      await fetchSets()
-      toast.success('Memorization set deleted')
+      await fetchSets(true)
+      toast.success("Memorization set deleted")
     } catch (err) {
-      console.error('Error deleting set:', err)
-      toast.error(getSupabaseErrorMessage(err))
-      throw err
-    }
-  }, [supabase, fetchSets, sets])
-
-  const deleteAudioFile = useCallback(async (audioFilePath: string) => {
-    try {
-      const { error } = await supabase.storage
-        .from('audio-recordings')
-        .remove([audioFilePath])
-
-      if (error) throw error
-
-      toast.success('Audio file deleted')
-    } catch (err) {
-      console.error('Error deleting audio file:', err)
-      toast.error(getSupabaseErrorMessage(err))
-      throw err
-    }
-  }, [supabase])
-
-  const updateTags = useCallback(async (id: string, tags: string[]) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
-
-      // Delete existing set_tags
-      const { error: deleteError } = await supabase
-        .from('set_tags')
-        .delete()
-        .eq('set_id', id)
-
-      if (deleteError) throw deleteError
-
-      // Insert new tags
-      for (const tagName of tags) {
-        const { data: existingTag } = await supabase
-          .from('tags')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('name', tagName)
-          .single()
-
-        let tagId: string
-
-        if (existingTag) {
-          tagId = existingTag.id
-        } else {
-          const { data: newTag, error: tagError } = await supabase
-            .from('tags')
-            .insert({ user_id: user.id, name: tagName })
-            .select('id')
-            .single()
-
-          if (tagError) throw tagError
-          tagId = newTag.id
-        }
-
-        const { error: setTagError } = await supabase
-          .from('set_tags')
-          .insert({ set_id: id, tag_id: tagId })
-
-        if (setTagError) throw setTagError
-      }
-
-      await supabase
-        .from('memorization_sets')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', id)
-
-      await fetchSets()
-      toast.success('Tags updated')
-    } catch (err) {
-      console.error('Error updating tags:', err)
+      console.error("Error deleting set:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
   }, [supabase, fetchSets])
 
   const getAudioUrl = useCallback(async (setId: string): Promise<string | null> => {
-    const set = getSet(setId)
+    const set = setsRef.current.find((s) => s.id === setId)
     if (!set?.audioFilePath) return null
 
     const cached = audioUrlCache.current.get(setId)
     const now = Date.now()
-    // Return cached URL if valid with >5 min remaining
-    if (cached && cached.expiresAt - now > 5 * 60 * 1000) {
-      return cached.url
-    }
+    if (cached && cached.expiresAt - now > 5 * 60 * 1000) return cached.url
 
-    const EXPIRY_SECONDS = 24 * 60 * 60 // 24 hours
+    const EXPIRY_SECONDS = 24 * 60 * 60
     const { data } = await supabase.storage
-      .from('audio-recordings')
+      .from("audio-recordings")
       .createSignedUrl(set.audioFilePath, EXPIRY_SECONDS)
 
     if (!data?.signedUrl) return null
@@ -1301,53 +1139,70 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     })
 
     return data.signedUrl
-  }, [supabase, getSet])
+  }, [supabase])
 
-  const getAllTags = useCallback((): string[] => {
-    const tagSet = new Set<string>()
-    sets.forEach((set) => {
-      set.tags.forEach((tag) => tagSet.add(tag))
-    })
-    return Array.from(tagSet).sort()
-  }, [sets])
+  // ─── Memoized context values ───────────────────────────────────────────────
 
-  const refreshSets = useCallback(async () => {
-    await fetchSets()
-  }, [fetchSets])
+  // List context re-creates only when list state changes (sets, loading, pagination)
+  const listValue = useMemo<SetListContextType>(() => ({
+    sets,
+    hasMore,
+    isLoadingMore,
+    isLoaded,
+    isLoading,
+    error,
+    getAllTags,
+    loadMore,
+    refreshSets,
+  }), [sets, hasMore, isLoadingMore, isLoaded, isLoading, error, getAllTags, loadMore, refreshSets])
+
+  // Actions context: all callbacks are stable (setsRef pattern) so this is created once
+  const actionsValue = useMemo<SetActionsContextType>(() => ({
+    addSet,
+    getSet,
+    updateSet,
+    updateChunkMode,
+    updateSessionState,
+    updateProgress,
+    markFamiliarizeComplete,
+    updateEncodeProgress,
+    updateTestScore,
+    updateReviewedChunks,
+    updateMarkedChunks,
+    updateTags,
+    deleteSet,
+    deleteAudioFile,
+    getAudioUrl,
+  }), [
+    addSet, getSet, updateSet, updateChunkMode, updateSessionState, updateProgress,
+    markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateReviewedChunks,
+    updateMarkedChunks, updateTags, deleteSet, deleteAudioFile, getAudioUrl,
+  ])
 
   return (
-    <MemorizationContext.Provider value={{ 
-      sets, 
-      isLoaded,
-      isLoading,
-      error,
-      addSet, 
-      getSet, 
-      updateSet, 
-      updateChunkMode, 
-      updateSessionState,
-      updateProgress,
-      markFamiliarizeComplete,
-      updateEncodeProgress,
-      updateTestScore,
-      updateReviewedChunks,
-      updateMarkedChunks,
-      updateTags,
-      getAllTags,
-      deleteSet,
-      deleteAudioFile,
-      getAudioUrl,
-      refreshSets,
-    }}>
-      {children}
-    </MemorizationContext.Provider>
+    <SetListContext.Provider value={listValue}>
+      <SetActionsContext.Provider value={actionsValue}>
+        {children}
+      </SetActionsContext.Provider>
+    </SetListContext.Provider>
   )
 }
 
-export function useMemorization() {
-  const context = useContext(MemorizationContext)
-  if (context === undefined) {
-    throw new Error("useMemorization must be used within a MemorizationProvider")
-  }
+// ─── Hooks ────────────────────────────────────────────────────────────────────
+
+export function useSetList(): SetListContextType {
+  const context = useContext(SetListContext)
+  if (!context) throw new Error("useSetList must be used within MemorizationProvider")
   return context
+}
+
+export function useSetActions(): SetActionsContextType {
+  const context = useContext(SetActionsContext)
+  if (!context) throw new Error("useSetActions must be used within MemorizationProvider")
+  return context
+}
+
+// Backward-compatible combined hook — existing consumers need no changes
+export function useMemorization(): MemorizationContextType {
+  return { ...useSetList(), ...useSetActions() }
 }
