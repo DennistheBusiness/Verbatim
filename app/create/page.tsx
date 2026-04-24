@@ -15,7 +15,7 @@ import { ContentInputTabs, type InputMethod } from "@/components/content-input-t
 import { VoiceRecorder } from "@/components/voice-recorder"
 import { ChunkPreview } from "@/components/chunk-preview"
 import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
-import { FileText, Type, Layers, X, Wand2, AlertCircle } from "lucide-react"
+import { FileText, Type, Layers, X, Wand2, AlertCircle, Plus } from "lucide-react"
 
 export default function CreatePage() {
   const router = useRouter()
@@ -27,7 +27,7 @@ export default function CreatePage() {
   const [tagInput, setTagInput] = useState("")
   const [touched, setTouched] = useState({ title: false, content: false })
   const [inputMethod, setInputMethod] = useState<InputMethod>("text")
-  const [contentSource, setContentSource] = useState<InputMethod>("text") // Track actual content source
+  const [contentSource, setContentSource] = useState<InputMethod>("text")
   const [originalFilename, setOriginalFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
 
@@ -51,20 +51,14 @@ export default function CreatePage() {
   }
 
   const handleVoiceRecording = (blob: Blob, transcription: string) => {
-    console.log('📝 Voice recording received in create page:', {
-      transcriptionLength: transcription.length,
-      blobSize: blob.size,
-      hasBlob: !!blob
-    })
     setContent(transcription)
     setAudioBlob(blob)
     setOriginalFilename("voice-recording.webm")
-    setContentSource("voice") // Mark as voice source for DB
-    setInputMethod("text") // Switch back to text tab to show the content
+    setContentSource("voice")
+    setInputMethod("text")
     setTouched((prev) => ({ ...prev, content: true }))
   }
 
-  // Helper functions for chunking (from context but inline for preview)
   const parseIntoLines = (text: string) => {
     return text.replace(/\r\n/g, "\n").split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
   }
@@ -85,137 +79,67 @@ export default function CreatePage() {
 
   const parseIntoSentences = (text: string) => {
     let normalized = text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
-    
     if (!normalized) return []
-    
     COMMON_ABBREVIATIONS.forEach((abbr, idx) => {
-      const placeholder = `__ABBR${idx}__`
-      normalized = normalized.split(abbr).join(placeholder)
+      normalized = normalized.split(abbr).join(`__ABBR${idx}__`)
     })
-    
     const rawSentences = normalized.split(/(?<=[.!?])\s+/)
-    
-    const sentences = rawSentences.map((sent) => {
+    return rawSentences.map((sent) => {
       let restored = sent
       COMMON_ABBREVIATIONS.forEach((abbr, idx) => {
-        const placeholder = `__ABBR${idx}__`
-        restored = restored.split(placeholder).join(abbr)
+        restored = restored.split(`__ABBR${idx}__`).join(abbr)
       })
       return restored.trim()
     }).filter((s) => s.length > 0)
-    
-    console.log('🔍 parseIntoSentences:', { 
-      inputLength: text.length, 
-      normalizedLength: normalized.length,
-      rawSentencesCount: rawSentences.length,
-      sentencesCount: sentences.length,
-      sentences: sentences.slice(0, 3) // First 3 for debugging
-    })
-    
-    return sentences
   }
 
   const parseCustomChunks = (text: string) => {
-    const result = text
+    return text
       .replace(/\r\n/g, "\n")
       .split(/\/+/)
       .map((chunk) => chunk.trim())
       .filter((chunk) => chunk.length > 0)
-    
-    console.log('🔍 parseCustomChunks:', {
-      inputLength: text.length,
-      chunksCount: result.length,
-      chunks: result.slice(0, 3) // First 3 for debugging
-    })
-    
-    return result
   }
 
   const generatePreviewChunks = (text: string, mode: ChunkMode) => {
     if (!text || !text.trim()) return []
-    
     switch (mode) {
-      case "line":
-        return parseIntoLines(text)
-      case "paragraph":
-        return parseIntoParagraphs(text)
-      case "sentence":
-        return parseIntoSentences(text)
-      case "custom":
-        return parseCustomChunks(text)
-      default:
-        return parseIntoParagraphs(text)
+      case "line":      return parseIntoLines(text)
+      case "paragraph": return parseIntoParagraphs(text)
+      case "sentence":  return parseIntoSentences(text)
+      case "custom":    return parseCustomChunks(text)
+      default:          return parseIntoParagraphs(text)
     }
   }
 
-  // Live stats
   const stats = useMemo(() => {
     const trimmed = content.trim()
-    if (!trimmed) {
-      return { words: 0, lines: 0, paragraphs: 0, sentences: 0, customChunks: 0, chunks: 0 }
-    }
-    
+    if (!trimmed) return { words: 0, chunks: 0 }
     const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
-    const lines = parseIntoLines(trimmed).length
-    const paragraphs = parseIntoParagraphs(trimmed).length
-    const sentences = parseIntoSentences(trimmed).length
-    const customChunks = parseCustomChunks(trimmed).length
-    
-    let chunks = paragraphs
-    if (chunkMode === "line") chunks = lines
-    else if (chunkMode === "sentence") chunks = sentences
-    else if (chunkMode === "custom") chunks = customChunks
-    
-    console.log('📊 Stats calculated:', {
-      chunkMode,
-      words,
-      lines,
-      paragraphs,
-      sentences,
-      customChunks,
-      finalChunks: chunks
-    })
-    
-    return { words, lines, paragraphs, sentences, customChunks, chunks }
+    const chunks = generatePreviewChunks(trimmed, chunkMode).length
+    return { words, chunks }
   }, [content, chunkMode])
 
-  const previewChunks = useMemo(() => {
-    return generatePreviewChunks(content, chunkMode)
-  }, [content, chunkMode])
+  const previewChunks = useMemo(() => generatePreviewChunks(content, chunkMode), [content, chunkMode])
 
-  // Validation
   const isTitleValid = title.trim().length > 0
   const isContentValid = content.trim().length > 0
   const isValid = isTitleValid && isContentValid
 
   const handleSave = async () => {
     if (!isValid) return
-    
-    console.log('💾 Attempting to save memorization set:', {
-      title: title.trim(),
-      contentLength: content.trim().length,
-      chunkMode,
-      tagsCount: tags.length,
-      hasAudioBlob: !!audioBlob,
-      audioBlobSize: audioBlob?.size,
-      originalFilename,
-      contentSource // Use contentSource, not inputMethod
-    })
-    
     try {
       const id = await addSet(
-        title.trim(), 
-        content.trim(), 
-        chunkMode, 
+        title.trim(),
+        content.trim(),
+        chunkMode,
         tags,
         audioBlob,
         originalFilename,
-        contentSource // Pass contentSource (actual source) not inputMethod (UI tab)
+        contentSource,
       )
-      console.log('✅ Memorization set created with ID:', id)
       router.push(`/memorization/${id}`)
-    } catch (error) {
-      console.error('❌ Failed to create memorization set:', error)
+    } catch {
       // Toast error is already shown in addSet
     }
   }
@@ -223,19 +147,30 @@ export default function CreatePage() {
   const handleTitleBlur = () => setTouched((prev) => ({ ...prev, title: true }))
   const handleContentBlur = () => setTouched((prev) => ({ ...prev, content: true }))
 
+  const chunkLabel = () => {
+    const n = stats.chunks
+    switch (chunkMode) {
+      case "line":      return `${n} line${n !== 1 ? "s" : ""}`
+      case "paragraph": return `${n} paragraph${n !== 1 ? "s" : ""}`
+      case "sentence":  return `${n} sentence${n !== 1 ? "s" : ""}`
+      case "custom":    return `${n} chunk${n !== 1 ? "s" : ""}`
+    }
+  }
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <Header title="Create Memorization" showBack />
-      
-      <main className="flex flex-1 flex-col p-4 pb-8">
-        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8">
-          {/* Form Fields */}
+      <Header title="New Memorization" showBack />
+
+      <main className="flex flex-1 flex-col p-4 pb-28">
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6">
+
           <FieldGroup>
+            {/* Title */}
             <Field data-invalid={touched.title && !isTitleValid ? true : undefined}>
               <FieldLabel htmlFor="title">Title</FieldLabel>
               <Input
                 id="title"
-                placeholder="e.g., Hamlet Soliloquy, Periodic Table, Speech Opening..."
+                placeholder="e.g., Hamlet Soliloquy, Gettysburg Address…"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleBlur}
@@ -246,65 +181,27 @@ export default function CreatePage() {
               )}
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="tags">Tags (optional)</FieldLabel>
-              <div className="flex gap-2">
-                <Input
-                  id="tags"
-                  placeholder="Add tags..."
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
-                  autoComplete="off"
-                />
-                <Button type="button" onClick={addTag} variant="secondary">
-                  Add
-                </Button>
-              </div>
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1">
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(tag)}
-                        className="ml-0.5 hover:text-destructive"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <FieldDescription>
-                Press Enter or click Add to create a tag
-              </FieldDescription>
-            </Field>
-            
+            {/* Content */}
             <Field data-invalid={touched.content && !isContentValid ? true : undefined}>
               <FieldLabel>Content to Memorize</FieldLabel>
               <ContentInputTabs
                 activeTab={inputMethod}
                 onTabChange={(method) => {
                   setInputMethod(method)
-                  // Reset audio when switching away from voice
-                  if (method === "text" && audioBlob) {
-                    setAudioBlob(null)
-                  }
+                  if (method === "text" && audioBlob) setAudioBlob(null)
                 }}
                 textContent={
                   <>
                     <Textarea
                       id="content"
-                      placeholder="Paste or type the text you want to memorize..."
-                      className="min-h-[240px] resize-none leading-relaxed"
+                      placeholder="Paste or type the text you want to memorize…"
+                      className="min-h-[200px] resize-none leading-relaxed"
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
                       onBlur={handleContentBlur}
                     />
                     <FieldDescription>
-                      Separate paragraphs with blank lines or use / to create custom chunks
+                      Separate paragraphs with blank lines, or use / to create custom chunks
                     </FieldDescription>
                   </>
                 }
@@ -316,125 +213,121 @@ export default function CreatePage() {
                 <p className="text-sm text-destructive">Please provide some content</p>
               )}
             </Field>
-            
+
+            {/* Chunk method */}
             <Field>
-              <FieldLabel>Chunking Method</FieldLabel>
-              <RadioGroup value={chunkMode} onValueChange={(value) => setChunkMode(value as ChunkMode)}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="line" id="line" />
-                    <Label htmlFor="line" className="flex-1 cursor-pointer font-normal">
-                      <div className="flex items-center gap-2">
-                        <Type className="size-4" />
-                        <span className="font-medium">By Line</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Split on line breaks</div>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="paragraph" id="paragraph" />
-                    <Label htmlFor="paragraph" className="flex-1 cursor-pointer font-normal">
-                      <div className="flex items-center gap-2">
-                        <FileText className="size-4" />
-                        <span className="font-medium">By Paragraph</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Split on blank lines</div>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="sentence" id="sentence" />
-                    <Label htmlFor="sentence" className="flex-1 cursor-pointer font-normal">
-                      <div className="flex items-center gap-2">
-                        <Layers className="size-4" />
-                        <span className="font-medium">By Sentence</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Split on punctuation</div>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
-                    <RadioGroupItem value="custom" id="custom" />
-                    <Label htmlFor="custom" className="flex-1 cursor-pointer font-normal">
-                      <div className="flex items-center gap-2">
-                        <Wand2 className="size-4" />
-                        <span className="font-medium">Custom</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">Use / separator</div>
-                    </Label>
-                  </div>
+              <FieldLabel>Split content by</FieldLabel>
+              <RadioGroup value={chunkMode} onValueChange={(v) => setChunkMode(v as ChunkMode)}>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "paragraph", Icon: FileText, label: "Paragraph", desc: "Blank lines" },
+                    { value: "sentence",  Icon: Layers,   label: "Sentence",  desc: "Punctuation" },
+                    { value: "line",      Icon: Type,     label: "Line",      desc: "Line breaks" },
+                    { value: "custom",    Icon: Wand2,    label: "Custom",    desc: "/ separator" },
+                  ].map(({ value, Icon, label, desc }) => (
+                    <div
+                      key={value}
+                      className="flex items-center gap-2.5 rounded-xl border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                    >
+                      <RadioGroupItem value={value} id={value} />
+                      <Label htmlFor={value} className="flex-1 cursor-pointer font-normal leading-none">
+                        <div className="flex items-center gap-1.5">
+                          <Icon className="size-3.5 text-muted-foreground" />
+                          <span className="font-medium text-sm">{label}</span>
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">{desc}</div>
+                      </Label>
+                    </div>
+                  ))}
                 </div>
               </RadioGroup>
 
               {chunkMode === "sentence" && (
-                <Alert className="mt-3">
+                <Alert className="mt-2">
                   <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
-                    Sentence detection handles common abbreviations (Mr., Dr., W.M., etc.)
+                    Handles common abbreviations (Mr., Dr., W.M., etc.)
                   </AlertDescription>
                 </Alert>
               )}
-
               {chunkMode === "custom" && (
-                <Alert className="mt-3">
+                <Alert className="mt-2">
                   <AlertCircle className="size-4" />
                   <AlertDescription className="text-sm">
-                    Use / anywhere in your text to manually separate chunks
+                    Use / anywhere in your text to set chunk boundaries
                   </AlertDescription>
                 </Alert>
               )}
+            </Field>
 
-              <FieldDescription>
-                Choose how to divide the content into practice chunks
-              </FieldDescription>
+            {/* Tags */}
+            <Field>
+              <FieldLabel>Tags <span className="text-muted-foreground font-normal">(optional)</span></FieldLabel>
+              <div className="relative">
+                <Input
+                  id="tags"
+                  placeholder="Type a tag and press Enter…"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  autoComplete="off"
+                  className="pr-10"
+                />
+                {tagInput.trim() && (
+                  <button
+                    type="button"
+                    onClick={addTag}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                )}
+              </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+                      {tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </Field>
           </FieldGroup>
 
-          {/* Live Stats */}
+          {/* Live stats + chunk preview */}
           {content.trim() && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-6 rounded-xl bg-muted/50 px-4 py-3">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-4 rounded-xl bg-muted/50 px-4 py-3">
+                <div className="flex items-center gap-1.5 text-sm">
                   <Type className="size-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    <span className="font-medium tabular-nums">{stats.words}</span>
-                    <span className="text-muted-foreground"> word{stats.words !== 1 ? "s" : ""}</span>
-                  </span>
+                  <span className="font-semibold tabular-nums">{stats.words}</span>
+                  <span className="text-muted-foreground">words</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <span className="text-muted-foreground/30">·</span>
+                <div className="flex items-center gap-1.5 text-sm">
                   <Layers className="size-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    <span className="font-medium tabular-nums">{stats.chunks}</span>
-                    <span className="text-muted-foreground"> 
-                      {chunkMode === "line" && `line${stats.chunks !== 1 ? "s" : ""}`}
-                      {chunkMode === "paragraph" && `paragraph${stats.chunks !== 1 ? "s" : ""}`}
-                      {chunkMode === "sentence" && `sentence${stats.chunks !== 1 ? "s" : ""}`}
-                      {chunkMode === "custom" && `chunk${stats.chunks !== 1 ? "s" : ""}`}
-                    </span>
-                  </span>
+                  <span className="font-semibold tabular-nums text-primary">{chunkLabel()}</span>
                 </div>
               </div>
-
-              {/* Chunk Preview */}
               <ChunkPreview chunks={previewChunks} mode={chunkMode} />
             </div>
           )}
 
-          {/* Spacer */}
-          <div className="flex-1 min-h-4" />
+        </div>
+      </main>
 
-          {/* Save Button */}
-          <Button 
-            onClick={handleSave} 
-            disabled={!isValid}
-            className="w-full"
-            size="lg"
-          >
+      {/* Sticky save bar */}
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 p-4 pb-safe backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto max-w-2xl">
+          <Button onClick={handleSave} disabled={!isValid} className="w-full" size="lg">
             Create Memorization
           </Button>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
