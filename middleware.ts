@@ -52,6 +52,28 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Admin routes - server-side role check (no client trust)
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/auth/login'
+      redirectUrl.searchParams.set('redirectedFrom', pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.user_role !== 'admin') {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/'
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
   // Protected routes - redirect to login if not authenticated
   const protectedPaths = ['/create', '/edit', '/memorization', '/migrate']
   const isProtectedPath = pathname === '/' || protectedPaths.some((path) =>
