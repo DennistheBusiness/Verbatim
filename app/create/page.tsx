@@ -66,7 +66,7 @@ export default function CreatePage() {
 
   // Helper functions for chunking (from context but inline for preview)
   const parseIntoLines = (text: string) => {
-    return text.split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+    return text.replace(/\r\n/g, "\n").split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
   }
 
   const parseIntoParagraphs = (text: string) => {
