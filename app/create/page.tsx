@@ -14,7 +14,7 @@ import { Header } from "@/components/header"
 import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
 import { VoiceRecorder } from "@/components/voice-recorder"
 import { ChunkPreview } from "@/components/chunk-preview"
-import { useMemorization, type ChunkMode } from "@/lib/memorization-context"
+import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
 import { FileText, Type, Layers, X, Wand2, AlertCircle, Plus } from "lucide-react"
 
 export default function CreatePage() {
@@ -30,6 +30,7 @@ export default function CreatePage() {
   const [contentSource, setContentSource] = useState<InputMethod>("text")
   const [originalFilename, setOriginalFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
 
   const addTag = () => {
     const trimmedTag = tagInput.trim()
@@ -50,9 +51,10 @@ export default function CreatePage() {
     }
   }
 
-  const handleVoiceRecording = (blob: Blob, transcription: string) => {
+  const handleVoiceRecording = (blob: Blob, transcription: string, words: TranscriptWord[]) => {
     setContent(transcription)
     setAudioBlob(blob)
+    setTranscriptWords(words)
     setOriginalFilename("voice-recording.webm")
     setContentSource("voice")
     setInputMethod("text")
@@ -137,6 +139,8 @@ export default function CreatePage() {
         audioBlob,
         originalFilename,
         contentSource,
+        content.trim() && contentSource === "voice" ? content.trim() : null,
+        transcriptWords.length > 0 ? transcriptWords : null,
       )
       router.push(`/memorization/${id}`)
     } catch {

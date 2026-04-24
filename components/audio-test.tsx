@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { compareTexts, type ComparisonResult, type WordComparisonStatus } from "@/lib/text-utils"
-import { Mic, Square, CheckCircle2, XCircle, AlertTriangle, Trophy, TrendingUp, BookOpen, FileText, Headphones, RefreshCcw, Eye, EyeOff } from "lucide-react"
+import { Mic, Square, CheckCircle2, XCircle, AlertTriangle, Trophy, TrendingUp, BookOpen, FileText, Headphones, RefreshCcw, Eye, EyeOff, Loader2 } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { useMemorization } from "@/lib/memorization-context"
 import { toast } from "sonner"
@@ -78,7 +78,6 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
   const [showOriginal, setShowOriginal] = useState(false)
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recognitionRef = useRef<any>(null)
   const chunksRef = useRef<Blob[]>([])
 
   // Get target content based on selection
@@ -112,13 +111,12 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
     setSelectedChunks([])
   }
 
-  // Start recording with transcription
+  // Start recording with AI transcription
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      
-      // Setup MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream)
+
+      const mediaRecorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 })
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 
@@ -128,48 +126,23 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
         }
       }
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' })
         setRecordedBlob(blob)
         stream.getTracks().forEach(track => track.stop())
-        stopTranscription()
-      }
 
-      // Setup Web Speech API for live transcription
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition()
-        recognition.continuous = true
-        recognition.interimResults = true
-        recognition.lang = 'en-US'
-
-        let finalTranscript = ''
-        
-        recognition.onresult = (event: any) => {
-          let interimTranscript = ''
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcriptPiece = event.results[i][0].transcript
-            if (event.results[i].isFinal) {
-              finalTranscript += transcriptPiece + ' '
-            } else {
-              interimTranscript += transcriptPiece
-            }
-          }
-
-          setTranscript(finalTranscript + interimTranscript)
-          setIsTranscribing(true)
+        setIsTranscribing(true)
+        try {
+          const formData = new FormData()
+          formData.append("audio", blob, "recording.webm")
+          const res = await fetch("/api/transcribe", { method: "POST", body: formData })
+          const data = await res.json()
+          if (data.text) setTranscript(data.text)
+        } catch {
+          toast.error("Transcription failed — you can type your answer manually")
+        } finally {
+          setIsTranscribing(false)
         }
-
-        recognition.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error)
-          if (event.error !== 'no-speech') {
-            toast.error('Transcription error: ' + event.error)
-          }
-        }
-
-        recognition.start()
-        recognitionRef.current = recognition
       }
 
       mediaRecorder.start()
@@ -177,8 +150,7 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
       setTranscript("")
       setIsTranscribing(false)
       toast.success('Recording started')
-    } catch (error) {
-      console.error('Error starting recording:', error)
+    } catch {
       toast.error('Could not access microphone')
     }
   }
@@ -188,16 +160,7 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop()
       setIsRecording(false)
-      setIsTranscribing(false)
       toast.success('Recording stopped')
-    }
-  }
-
-  // Stop transcription
-  const stopTranscription = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop()
-      recognitionRef.current = null
     }
   }
 
@@ -339,7 +302,7 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
   }
 
   // Recording screen
-  if (isRecording || (recordedBlob && !isSubmitted)) {
+  if (isRecording || isTranscribing || (recordedBlob && !isSubmitted)) {
     return (
       <div className="flex flex-col gap-4">
         {/* Recording status */}
@@ -356,6 +319,18 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
                       <h3 className="font-semibold">Recording...</h3>
                       <p className="text-sm text-muted-foreground">
                         Speak clearly and at a natural pace
+                      </p>
+                    </div>
+                  </>
+                ) : isTranscribing ? (
+                  <>
+                    <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+                      <Loader2 className="size-6 text-primary animate-spin" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Transcribing with AI…</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Processing your recording
                       </p>
                     </div>
                   </>
@@ -389,9 +364,9 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
           <CardContent className="flex flex-col gap-3 py-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">
-                {isRecording ? "Live Transcript" : "Your Transcript"}
+                {isRecording ? "Recording…" : "Your Transcript"}
               </h3>
-              {!isRecording && (
+              {!isRecording && !isTranscribing && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -401,8 +376,15 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
                 </Button>
               )}
             </div>
-            
-            {isEditing ? (
+
+            {isTranscribing ? (
+              <div className="flex min-h-[200px] items-center justify-center rounded-md border bg-muted/30 p-4">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <Loader2 className="size-6 animate-spin" />
+                  <p className="text-sm">Transcribing with AI…</p>
+                </div>
+              </div>
+            ) : isEditing ? (
               <Textarea
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
@@ -412,32 +394,25 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
             ) : (
               <div className="min-h-[200px] rounded-md border bg-muted/30 p-4">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {transcript || (isRecording ? "Listening..." : "No transcript available")}
+                  {transcript || (isRecording ? "Listening…" : "No transcript available")}
                 </p>
               </div>
-            )}
-            
-            {isTranscribing && isRecording && (
-              <Badge variant="outline" className="w-fit">
-                <div className="mr-2 size-2 rounded-full bg-primary animate-pulse" />
-                Transcribing...
-              </Badge>
             )}
           </CardContent>
         </Card>
 
         {/* Actions */}
-        {!isRecording && (
+        {!isRecording && !isTranscribing && (
           <div className="flex flex-col gap-2">
-            <Button 
-              onClick={handleSubmit} 
+            <Button
+              onClick={handleSubmit}
               disabled={!transcript.trim()}
               className="w-full"
             >
               Submit for Grading
             </Button>
-            <Button 
-              onClick={retryRecording} 
+            <Button
+              onClick={retryRecording}
               variant="outline"
               className="w-full"
             >

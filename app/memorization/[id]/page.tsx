@@ -13,8 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info } from "lucide-react"
 import { toast } from "sonner"
-import { AudioPlayer } from "@/components/audio-player"
-import { createClient } from "@/lib/supabase/client"
+import { TimedAudioPlayer } from "@/components/timed-audio-player"
 
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
@@ -67,7 +66,7 @@ interface MemorizationDetailPageProps {
 
 export default function MemorizationDetailPage({ params }: MemorizationDetailPageProps) {
   const { id } = use(params)
-  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks } = useMemorization()
+  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl } = useMemorization()
   const set = getSet(id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
@@ -78,23 +77,13 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [showTTSPlayer, setShowTTSPlayer] = useState(false)
   const [showMarkedOnly, setShowMarkedOnly] = useState(false)
   const [showSystemInfo, setShowSystemInfo] = useState(false)
-  const supabase = createClient()
 
-  // Fetch audio URL if available
+  // Fetch audio URL via cached context helper (24-hour signed URL)
   useEffect(() => {
-    const fetchAudioUrl = async () => {
-      if (set?.audioFilePath) {
-        const { data } = await supabase.storage
-          .from('audio-recordings')
-          .createSignedUrl(set.audioFilePath, 60 * 60) // 1 hour expiry
-        
-        if (data?.signedUrl) {
-          setAudioUrl(data.signedUrl)
-        }
-      }
+    if (set?.audioFilePath) {
+      getAudioUrl(id).then(url => setAudioUrl(url))
     }
-    fetchAudioUrl()
-  }, [set?.audioFilePath, supabase])
+  }, [set?.id, set?.audioFilePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Text-to-speech player handlers
   const handleOpenTTSPlayer = () => {
@@ -632,10 +621,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
                     <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
                   </div>
-                  <AudioPlayer
+                  <TimedAudioPlayer
                     audioUrl={audioUrl}
-                    mode="full"
-                    onDelete={undefined}
+                    transcript={set.transcript}
+                    transcriptWords={set.transcriptWords}
                   />
                 </CardContent>
               </Card>
