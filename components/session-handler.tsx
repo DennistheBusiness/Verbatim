@@ -24,7 +24,7 @@ export function SessionHandler() {
       const { data: { session } } = await supabase.auth.getSession()
       
       // If no session and not on public pages, redirect to login
-      const publicPaths = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password', '/auth/callback']
+      const publicPaths = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password', '/auth/callback', '/landing']
       const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
       
       if (!session && !isPublicPath) {
@@ -80,7 +80,7 @@ export function SessionHandler() {
         console.error('❌ Session check error:', error)
         toast.error('Session expired. Please sign in again.')
         router.push('/auth/login')
-      } else if (!session && !pathname.startsWith('/auth/')) {
+      } else if (!session && !pathname.startsWith('/auth/') && !pathname.startsWith('/landing')) {
         toast.error('Your session has expired. Please sign in again.')
         router.push('/auth/login')
       }
