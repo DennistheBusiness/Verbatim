@@ -1,6 +1,33 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
+export function ScoreChartSkeleton() {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-12" />
+        </div>
+        <div className="flex gap-1.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-20 rounded-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-2.5">
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-5 w-8" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-[180px] w-full rounded-md md:h-[240px]" />
+      </CardContent>
+    </Card>
+  )
+}
+
 export function LibrarySkeletons() {
   return (
     <div className="flex flex-col gap-5 p-4">

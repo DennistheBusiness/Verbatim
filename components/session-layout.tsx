@@ -14,6 +14,7 @@ interface SessionLayoutProps {
   setTitle: string
   onBack: () => void
   children: React.ReactNode
+  contextAction?: React.ReactNode
   primaryAction?: {
     label: string
     onClick: () => void
@@ -33,6 +34,7 @@ export function SessionLayout({
   setTitle,
   onBack,
   children,
+  contextAction,
   primaryAction,
   secondaryAction,
   showBottomActions = true,
@@ -81,15 +83,20 @@ export function SessionLayout({
 
         {/* Context strip: step · title · set name */}
         <div className="border-t bg-muted/30 px-4 py-2">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            {step && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{step}</span>
-                <span className="text-[11px] text-muted-foreground/60">·</span>
-                <span className="text-[11px] font-medium text-muted-foreground">{title}</span>
-              </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              {step && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">{step}</span>
+                  <span className="text-[11px] text-muted-foreground/60">·</span>
+                  <span className="text-[11px] font-medium text-muted-foreground">{title}</span>
+                </div>
+              )}
+              <p className="truncate text-sm font-medium leading-tight text-foreground">{setTitle}</p>
+            </div>
+            {contextAction && (
+              <div className="shrink-0">{contextAction}</div>
             )}
-            <p className="truncate text-sm font-medium leading-tight text-foreground">{setTitle}</p>
           </div>
         </div>
       </header>

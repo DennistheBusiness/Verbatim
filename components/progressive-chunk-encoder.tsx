@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
@@ -63,6 +63,11 @@ export function ProgressiveChunkEncoder({
   const [correctCount, setCorrectCount] = useState(0)
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isLevelComplete, setIsLevelComplete] = useState(false)
+
+  // Refs so the keydown handler always reads the latest values without stale closures
+  const currentIndexRef = useRef(0)
+  const lockedRef = useRef(false) // true during error display delay — blocks double-advance
+  const wordsRef = useRef<WordStatus[]>([])
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [levelResults, setLevelResults] = useState<Record<Level, LevelResults | null>>({
     1: null,
@@ -85,6 +90,7 @@ export function ProgressiveChunkEncoder({
             isHiddenInLevel2: false,
           }))
         )
+        currentIndexRef.current = 0
         setCurrentIndex(0)
       } else if (level === 2) {
         // Level 2: Random 40-60% of words hidden
@@ -111,6 +117,7 @@ export function ProgressiveChunkEncoder({
             isHiddenInLevel2: hiddenIndices.has(i),
           }))
         )
+        currentIndexRef.current = firstHiddenIndex
         setCurrentIndex(firstHiddenIndex)
       } else {
         // Level 3: All words hidden (original behavior)
@@ -123,9 +130,11 @@ export function ProgressiveChunkEncoder({
             isHiddenInLevel2: false,
           }))
         )
+        currentIndexRef.current = 0
         setCurrentIndex(0)
       }
 
+      lockedRef.current = false
       setCorrectCount(0)
       setIncorrectCount(0)
       setIsLevelComplete(false)
@@ -137,99 +146,89 @@ export function ProgressiveChunkEncoder({
     initializeLevel(currentLevel)
   }, [currentLevel, initializeLevel])
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentIndexRef.current = currentIndex
+  }, [currentIndex])
+
+  useEffect(() => {
+    wordsRef.current = words
+  }, [words])
+
   const findNextWordToType = useCallback(
     (fromIndex: number): number => {
       if (currentLevel === 2) {
-        for (let i = fromIndex; i < words.length; i++) {
-          if (words[i].isHiddenInLevel2 && words[i].state !== "revealed") {
+        for (let i = fromIndex; i < wordsRef.current.length; i++) {
+          if (wordsRef.current[i].isHiddenInLevel2 && wordsRef.current[i].state !== "revealed") {
             return i
           }
         }
-        return words.length
+        return wordsRef.current.length
       }
       return fromIndex
     },
-    [currentLevel, words]
+    [currentLevel]
   )
 
   const handleKeyPress = useCallback(
     (e: KeyboardEvent) => {
-      if (isLevelComplete || words.length === 0) return
+      if (isLevelComplete || wordsRef.current.length === 0) return
+      if (lockedRef.current) return // blocked during error delay
 
       const key = e.key.toLowerCase()
-
       if (!/^[a-z]$/.test(key)) return
 
-      const currentWord = words[currentIndex]
-      if (!currentWord) return
+      const idx = currentIndexRef.current
 
-      if (key === currentWord.word.firstLetter) {
-        // Correct letter
-        setCorrectCount((c) => c + 1)
-        setWords((prev) =>
-          prev.map((w, i) => {
-            if (i === currentIndex) {
-              return { ...w, state: "revealed" as WordState }
-            }
-            return w
-          })
-        )
+      setWords((prev) => {
+        const currentWord = prev[idx]
+        if (!currentWord) return prev
 
-        const nextIndex = findNextWordToType(currentIndex + 1)
-
-        if (nextIndex >= words.length) {
-          setIsLevelComplete(true)
-        } else {
-          setWords((prev) =>
-            prev.map((w, i) => {
-              if (i === nextIndex) {
-                return { ...w, state: "active" as WordState }
-              }
-              return w
-            })
-          )
-          setCurrentIndex(nextIndex)
-        }
-      } else {
-        // Incorrect letter
-        setIncorrectCount((c) => c + 1)
-        setWords((prev) =>
-          prev.map((w, i) =>
-            i === currentIndex
-              ? { ...w, state: "error" as WordState, showError: true, wasIncorrect: true }
-              : w
-          )
-        )
-
-        setTimeout(() => {
-          setWords((prev) =>
-            prev.map((w, i) => {
-              if (i === currentIndex) {
-                return { ...w, state: "revealed" as WordState, showError: false, wasIncorrect: true }
-              }
-              return w
-            })
-          )
-
-          const nextIndex = findNextWordToType(currentIndex + 1)
-
-          if (nextIndex >= words.length) {
+        if (key === currentWord.word.firstLetter) {
+          // Correct — advance immediately
+          setCorrectCount((c) => c + 1)
+          const nextIndex = findNextWordToType(idx + 1)
+          if (nextIndex >= wordsRef.current.length) {
             setIsLevelComplete(true)
           } else {
-            setWords((prev) =>
-              prev.map((w, i) => {
-                if (i === nextIndex) {
-                  return { ...w, state: "active" as WordState }
-                }
+            currentIndexRef.current = nextIndex
+            setCurrentIndex(nextIndex)
+          }
+          return prev.map((w, i) => {
+            if (i === idx) return { ...w, state: "revealed" as WordState }
+            if (i === nextIndex) return { ...w, state: "active" as WordState }
+            return w
+          })
+        } else {
+          // Incorrect — lock input, show error, then advance after delay
+          lockedRef.current = true
+          setIncorrectCount((c) => c + 1)
+
+          setTimeout(() => {
+            const nextIndex = findNextWordToType(idx + 1)
+            setWords((p) =>
+              p.map((w, i) => {
+                if (i === idx) return { ...w, state: "revealed" as WordState, showError: false, wasIncorrect: true }
+                if (i === nextIndex) return { ...w, state: "active" as WordState }
                 return w
               })
             )
-            setCurrentIndex(nextIndex)
-          }
-        }, 800)
-      }
+            if (nextIndex >= wordsRef.current.length) {
+              setIsLevelComplete(true)
+            } else {
+              currentIndexRef.current = nextIndex
+              setCurrentIndex(nextIndex)
+            }
+            lockedRef.current = false
+          }, 800)
+
+          return prev.map((w, i) =>
+            i === idx ? { ...w, state: "error" as WordState, showError: true, wasIncorrect: true } : w
+          )
+        }
+      })
     },
-    [currentIndex, isLevelComplete, words, currentLevel, findNextWordToType]
+    [isLevelComplete, findNextWordToType]
   )
 
   useEffect(() => {

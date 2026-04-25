@@ -182,7 +182,15 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
     setIsEditing(false)
     
     // Save test score
-    updateTestScore(setId, "audioTest", comparison.accuracy)
+    const singleChunkId =
+      testMode === "chunks" && selectedChunks.length === 1
+        ? selectedChunks[0]
+        : null
+    updateTestScore(setId, "audioTest", comparison.accuracy, {
+      totalWords: comparison.totalExpected,
+      correctWords: comparison.correctCount,
+      chunkId: singleChunkId,
+    })
     toast.success("Progress saved")
   }
 
