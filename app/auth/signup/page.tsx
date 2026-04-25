@@ -51,7 +51,7 @@ export default function SignupPage() {
       } else if (data.session) {
         // Email confirmation is off — user is logged in immediately
         toast.success('Account created!')
-        router.push('/')
+        router.push('/onboarding')
       } else {
         // Fallback if confirmation is still enabled on the Supabase project
         toast.success('Account created! Please check your email to confirm.')

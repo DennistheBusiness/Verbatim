@@ -607,6 +607,28 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </CardContent>
             </Card>
 
+            {/* Flashcard Mode CTA */}
+            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
+              <CardContent className="flex gap-4 py-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                  <BookMarked className="size-5 text-primary" />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-medium text-foreground">Flashcard Mode</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
+                      {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
+                    </p>
+                  </div>
+                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
+                    Start Flashcards
+                    <ArrowRight className="size-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Listen Section — combined when recording exists, TTS-only when not */}
             {audioUrl ? (
               showTTSPlayer ? (
@@ -711,27 +733,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </Card>
             )}
 
-            {/* Flashcard Mode CTA */}
-            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
-              <CardContent className="flex gap-4 py-4">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                  <BookMarked className="size-5 text-primary" />
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  <div className="flex flex-col gap-1">
-                    <h3 className="font-medium text-foreground">Try Flashcard Mode</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
-                      {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
-                    </p>
-                  </div>
-                  <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">
-                    Start Flashcards
-                    <ArrowRight className="size-4 ml-2" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </>
         )}
       </SessionLayout>

@@ -457,12 +457,13 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           toast.error("Audio file must be 10 MB or smaller")
           throw new Error("Audio file too large")
         }
-        if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
+        if (!ALLOWED_AUDIO_TYPES.some(t => audioBlob.type === t || audioBlob.type.startsWith(t + ";"))) {
           toast.error("Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.")
           throw new Error("Unsupported audio type: " + audioBlob.type)
         }
 
-        const fileExtension = audioBlob.type.includes("webm") ? "webm" : "mp4"
+        const baseType = audioBlob.type.split(";")[0]
+        const fileExtension = baseType.includes("webm") ? "webm" : baseType.includes("ogg") ? "ogg" : baseType.includes("wav") ? "wav" : "mp4"
         const fileName = `${effectiveUserId}/${id}.${fileExtension}`
 
         const { error: uploadError } = await supabase.storage
@@ -629,7 +630,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           toast.error("Audio file must be 10 MB or smaller")
           throw new Error("Audio file too large")
         }
-        if (!ALLOWED_AUDIO_TYPES.includes(audioBlob.type)) {
+        if (!ALLOWED_AUDIO_TYPES.some(t => audioBlob.type === t || audioBlob.type.startsWith(t + ";"))) {
           toast.error("Unsupported audio format. Please use webm, mp4, ogg, wav, or mp3.")
           throw new Error("Unsupported audio type: " + audioBlob.type)
         }
@@ -638,7 +639,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           await deleteAudioFile(set.audioFilePath)
         }
 
-        const fileExtension = audioBlob.type.includes("webm") ? "webm" : "mp4"
+        const baseType = audioBlob.type.split(";")[0]
+        const fileExtension = baseType.includes("webm") ? "webm" : baseType.includes("ogg") ? "ogg" : baseType.includes("wav") ? "wav" : "mp4"
         const fileName = `${user.id}/${id}.${fileExtension}`
 
         const { error: uploadError } = await supabase.storage

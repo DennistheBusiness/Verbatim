@@ -2,24 +2,38 @@
 
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Header } from "@/components/header"
 import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
 import { VoiceRecorder } from "@/components/voice-recorder"
 import { ChunkPreview } from "@/components/chunk-preview"
 import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
-import { FileText, Type, Layers, X, Wand2, AlertCircle, Plus } from "lucide-react"
+import { FileText, Type, Layers, Wand2, X, Plus } from "lucide-react"
+
+type Step = "form" | "chunking"
+
+const CHUNK_MODES: {
+  value: ChunkMode
+  icon: typeof FileText
+  label: string
+  desc: string
+}[] = [
+  { value: "paragraph", icon: FileText, label: "Paragraph", desc: "Split at blank lines — great for speeches & prose" },
+  { value: "sentence",  icon: Layers,   label: "Sentence",  desc: "Split at punctuation — ideal for dense text" },
+  { value: "line",      icon: Type,     label: "Line",      desc: "Split at line breaks — perfect for poetry & scripts" },
+  { value: "custom",    icon: Wand2,    label: "Custom",    desc: "Use / in your text to set your own boundaries" },
+]
 
 export default function CreatePage() {
   const router = useRouter()
   const { addSet } = useMemorization()
+
+  const [step, setStep] = useState<Step>("form")
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [chunkMode, setChunkMode] = useState<ChunkMode>("paragraph")
@@ -31,25 +45,62 @@ export default function CreatePage() {
   const [originalFilename, setOriginalFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
+  const [isSaving, setIsSaving] = useState(false)
 
-  const addTag = () => {
-    const trimmedTag = tagInput.trim()
-    if (trimmedTag && !tags.includes(trimmedTag)) {
-      setTags([...tags, trimmedTag])
-      setTagInput("")
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const parseIntoLines = (text: string) =>
+    text.replace(/\r\n/g, "\n").split(/\n/).map(l => l.trim()).filter(Boolean)
+
+  const parseIntoParagraphs = (text: string) =>
+    text.replace(/\r\n/g, "\n").split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean)
+
+  const ABBR = ["W.M.","S.W.","J.W.","W.B.","R.W.","M.W.","V.W.","Mr.","Mrs.","Ms.","Dr.","Prof.","Sr.","Jr.","etc.","e.g.","i.e.","vs.","Inc.","Ltd.","Co."]
+
+  const parseIntoSentences = (text: string) => {
+    let s = text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
+    if (!s) return []
+    ABBR.forEach((a, i) => { s = s.split(a).join(`__A${i}__`) })
+    return s.split(/(?<=[.!?])\s+/).map(sent => {
+      let r = sent
+      ABBR.forEach((a, i) => { r = r.split(`__A${i}__`).join(a) })
+      return r.trim()
+    }).filter(Boolean)
+  }
+
+  const parseCustomChunks = (text: string) =>
+    text.replace(/\r\n/g, "\n").split(/\/+/).map(c => c.trim()).filter(Boolean)
+
+  const getChunks = (text: string, mode: ChunkMode) => {
+    if (!text.trim()) return []
+    switch (mode) {
+      case "line":      return parseIntoLines(text)
+      case "paragraph": return parseIntoParagraphs(text)
+      case "sentence":  return parseIntoSentences(text)
+      case "custom":    return parseCustomChunks(text)
     }
   }
 
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
+  const previewChunks = useMemo(() => getChunks(content, chunkMode), [content, chunkMode])
+
+  const wordCount = useMemo(() => {
+    const t = content.trim()
+    return t ? t.split(/\s+/).filter(Boolean).length : 0
+  }, [content])
+
+  const countLabel = (mode: ChunkMode) => {
+    const n = getChunks(content, mode).length
+    const unit = mode === "paragraph" ? "paragraph" : mode === "sentence" ? "sentence" : mode === "line" ? "line" : "chunk"
+    return `${n} ${unit}${n !== 1 ? "s" : ""}`
   }
 
-  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      addTag()
-    }
-  }
+  // ── Validation ────────────────────────────────────────────────────────────
+
+  const isTitleValid   = title.trim().length > 0
+  const isContentValid = content.trim().length > 0
+  const isValid        = isTitleValid && isContentValid
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleVoiceRecording = (blob: Blob, transcription: string, words: TranscriptWord[]) => {
     setContent(transcription)
@@ -58,108 +109,154 @@ export default function CreatePage() {
     setOriginalFilename("voice-recording.webm")
     setContentSource("voice")
     setInputMethod("text")
-    setTouched((prev) => ({ ...prev, content: true }))
+    setTouched(p => ({ ...p, content: true }))
   }
 
-  const parseIntoLines = (text: string) => {
-    return text.replace(/\r\n/g, "\n").split(/\n/).map((line) => line.trim()).filter((line) => line.length > 0)
+  const addTag = () => {
+    const t = tagInput.trim()
+    if (t && !tags.includes(t)) { setTags([...tags, t]); setTagInput("") }
   }
 
-  const parseIntoParagraphs = (text: string) => {
-    return text
-      .replace(/\r\n/g, "\n")
-      .split(/\n\s*\n+/)
-      .map((para) => para.trim())
-      .filter((para) => para.length > 0)
+  const handleTagKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); addTag() }
   }
 
-  const COMMON_ABBREVIATIONS = [
-    "W.M.", "S.W.", "J.W.", "W.B.", "R.W.", "M.W.", "V.W.",
-    "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.",
-    "etc.", "e.g.", "i.e.", "vs.", "Inc.", "Ltd.", "Co."
-  ]
-
-  const parseIntoSentences = (text: string) => {
-    let normalized = text.replace(/\r\n/g, "\n").replace(/\n+/g, " ").replace(/\s+/g, " ").trim()
-    if (!normalized) return []
-    COMMON_ABBREVIATIONS.forEach((abbr, idx) => {
-      normalized = normalized.split(abbr).join(`__ABBR${idx}__`)
-    })
-    const rawSentences = normalized.split(/(?<=[.!?])\s+/)
-    return rawSentences.map((sent) => {
-      let restored = sent
-      COMMON_ABBREVIATIONS.forEach((abbr, idx) => {
-        restored = restored.split(`__ABBR${idx}__`).join(abbr)
-      })
-      return restored.trim()
-    }).filter((s) => s.length > 0)
+  const handleContinue = () => {
+    setTouched({ title: true, content: true })
+    if (isValid) setStep("chunking")
   }
 
-  const parseCustomChunks = (text: string) => {
-    return text
-      .replace(/\r\n/g, "\n")
-      .split(/\/+/)
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0)
-  }
-
-  const generatePreviewChunks = (text: string, mode: ChunkMode) => {
-    if (!text || !text.trim()) return []
-    switch (mode) {
-      case "line":      return parseIntoLines(text)
-      case "paragraph": return parseIntoParagraphs(text)
-      case "sentence":  return parseIntoSentences(text)
-      case "custom":    return parseCustomChunks(text)
-      default:          return parseIntoParagraphs(text)
-    }
-  }
-
-  const stats = useMemo(() => {
-    const trimmed = content.trim()
-    if (!trimmed) return { words: 0, chunks: 0 }
-    const words = trimmed.split(/\s+/).filter((w) => w.length > 0).length
-    const chunks = generatePreviewChunks(trimmed, chunkMode).length
-    return { words, chunks }
-  }, [content, chunkMode])
-
-  const previewChunks = useMemo(() => generatePreviewChunks(content, chunkMode), [content, chunkMode])
-
-  const isTitleValid = title.trim().length > 0
-  const isContentValid = content.trim().length > 0
-  const isValid = isTitleValid && isContentValid
-
-  const handleSave = async () => {
-    if (!isValid) return
+  const doSave = async (mode: ChunkMode) => {
+    if (!isValid || isSaving) return
+    setIsSaving(true)
     try {
       const id = await addSet(
-        title.trim(),
-        content.trim(),
-        chunkMode,
-        tags,
-        audioBlob,
-        originalFilename,
-        contentSource,
-        content.trim() && contentSource === "voice" ? content.trim() : null,
+        title.trim(), content.trim(), mode, tags,
+        audioBlob, originalFilename, contentSource,
+        contentSource === "voice" ? content.trim() : null,
         transcriptWords.length > 0 ? transcriptWords : null,
       )
       router.push(`/memorization/${id}`)
     } catch {
-      // Toast error is already shown in addSet
+      setIsSaving(false)
     }
   }
 
-  const handleTitleBlur = () => setTouched((prev) => ({ ...prev, title: true }))
-  const handleContentBlur = () => setTouched((prev) => ({ ...prev, content: true }))
+  // ── Chunking step ─────────────────────────────────────────────────────────
 
-  const chunkLabel = () => {
-    const n = stats.chunks
-    switch (chunkMode) {
-      case "line":      return `${n} line${n !== 1 ? "s" : ""}`
-      case "paragraph": return `${n} paragraph${n !== 1 ? "s" : ""}`
-      case "sentence":  return `${n} sentence${n !== 1 ? "s" : ""}`
-      case "custom":    return `${n} chunk${n !== 1 ? "s" : ""}`
-    }
+  if (step === "chunking") {
+    return (
+      <div className="flex min-h-svh flex-col bg-background">
+        <Header title="Split Your Content" showBack onBack={() => setStep("form")} />
+
+        <main className="flex flex-1 flex-col px-4 pt-5 pb-36">
+          <div className="mx-auto w-full max-w-lg flex flex-col gap-6">
+
+            {/* Header copy */}
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg font-semibold tracking-tight">Choose a chunk style</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Chunks are the pieces you'll memorize one at a time. Pick the split that feels natural for your content.
+              </p>
+            </div>
+
+            {/* Mode cards */}
+            <div className="flex flex-col gap-2.5">
+              {CHUNK_MODES.map(({ value, icon: Icon, label, desc }) => {
+                const selected = chunkMode === value
+                const count = content.trim() ? getChunks(content, value).length : null
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setChunkMode(value)}
+                    className={cn(
+                      "w-full flex items-center gap-4 rounded-2xl border-2 px-4 py-4 text-left transition-all duration-150 active:scale-[0.985]",
+                      selected
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "border-border bg-card hover:border-muted-foreground/30 hover:bg-accent/40"
+                    )}
+                  >
+                    {/* Icon */}
+                    <div className={cn(
+                      "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                      selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}>
+                      <Icon className="size-5" />
+                    </div>
+
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("font-semibold text-sm", selected ? "text-primary" : "text-foreground")}>
+                          {label}
+                        </span>
+                        {count !== null && (
+                          <span className={cn(
+                            "text-xs font-medium tabular-nums px-1.5 py-0.5 rounded-full",
+                            selected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          )}>
+                            {countLabel(value)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{desc}</p>
+                    </div>
+
+                    {/* Selection ring */}
+                    <div className={cn(
+                      "size-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors",
+                      selected ? "border-primary bg-primary" : "border-border"
+                    )}>
+                      {selected && <div className="size-2 rounded-full bg-primary-foreground" />}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Live preview */}
+            {previewChunks.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preview</p>
+                <ChunkPreview chunks={previewChunks} mode={chunkMode} defaultOpen />
+              </div>
+            )}
+
+            {/* Changeable later note */}
+            <p className="text-xs text-center text-muted-foreground/60">
+              This setting can be changed later from the set detail page.
+            </p>
+
+          </div>
+        </main>
+
+        {/* Sticky CTA */}
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 py-4 pb-safe">
+          <div className="mx-auto max-w-lg flex flex-col gap-2">
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={() => doSave(chunkMode)}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground text-sm"
+              onClick={() => doSave("paragraph")}
+              disabled={isSaving}
+            >
+              Skip — use Paragraph
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
+
+  // ── Form step ─────────────────────────────────────────────────────────────
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -177,7 +274,7 @@ export default function CreatePage() {
                 placeholder="e.g., Hamlet Soliloquy, Gettysburg Address…"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleTitleBlur}
+                onBlur={() => setTouched(p => ({ ...p, title: true }))}
                 autoComplete="off"
               />
               {touched.title && !isTitleValid && (
@@ -202,7 +299,7 @@ export default function CreatePage() {
                       className="min-h-[200px] resize-none leading-relaxed"
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      onBlur={handleContentBlur}
+                      onBlur={() => setTouched(p => ({ ...p, content: true }))}
                     />
                     <FieldDescription>
                       Separate paragraphs with blank lines, or use / to create custom chunks
@@ -218,52 +315,6 @@ export default function CreatePage() {
               )}
             </Field>
 
-            {/* Chunk method */}
-            <Field>
-              <FieldLabel>Split content by</FieldLabel>
-              <RadioGroup value={chunkMode} onValueChange={(v) => setChunkMode(v as ChunkMode)}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    { value: "paragraph", Icon: FileText, label: "Paragraph", desc: "Blank lines" },
-                    { value: "sentence",  Icon: Layers,   label: "Sentence",  desc: "Punctuation" },
-                    { value: "line",      Icon: Type,     label: "Line",      desc: "Line breaks" },
-                    { value: "custom",    Icon: Wand2,    label: "Custom",    desc: "/ separator" },
-                  ].map(({ value, Icon, label, desc }) => (
-                    <div
-                      key={value}
-                      className="flex items-center gap-2.5 rounded-xl border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
-                    >
-                      <RadioGroupItem value={value} id={value} />
-                      <Label htmlFor={value} className="flex-1 cursor-pointer font-normal leading-none">
-                        <div className="flex items-center gap-1.5">
-                          <Icon className="size-3.5 text-muted-foreground" />
-                          <span className="font-medium text-sm">{label}</span>
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">{desc}</div>
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </RadioGroup>
-
-              {chunkMode === "sentence" && (
-                <Alert className="mt-2">
-                  <AlertCircle className="size-4" />
-                  <AlertDescription className="text-sm">
-                    Handles common abbreviations (Mr., Dr., W.M., etc.)
-                  </AlertDescription>
-                </Alert>
-              )}
-              {chunkMode === "custom" && (
-                <Alert className="mt-2">
-                  <AlertCircle className="size-4" />
-                  <AlertDescription className="text-sm">
-                    Use / anywhere in your text to set chunk boundaries
-                  </AlertDescription>
-                </Alert>
-              )}
-            </Field>
-
             {/* Tags */}
             <Field>
               <FieldLabel>Tags <span className="text-muted-foreground font-normal">(optional)</span></FieldLabel>
@@ -273,7 +324,7 @@ export default function CreatePage() {
                   placeholder="Type a tag and press Enter…"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagKeyDown}
+                  onKeyDown={handleTagKey}
                   autoComplete="off"
                   className="pr-10"
                 />
@@ -292,7 +343,7 @@ export default function CreatePage() {
                   {tags.map((tag) => (
                     <Badge key={tag} variant="secondary" className="gap-1 pr-1">
                       {tag}
-                      <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">
+                      <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} className="hover:text-destructive">
                         <X className="size-3" />
                       </button>
                     </Badge>
@@ -302,32 +353,22 @@ export default function CreatePage() {
             </Field>
           </FieldGroup>
 
-          {/* Live stats + chunk preview */}
+          {/* Word count pill */}
           {content.trim() && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-4 rounded-xl bg-muted/50 px-4 py-3">
-                <div className="flex items-center gap-1.5 text-sm">
-                  <Type className="size-4 text-muted-foreground" />
-                  <span className="font-semibold tabular-nums">{stats.words}</span>
-                  <span className="text-muted-foreground">words</span>
-                </div>
-                <span className="text-muted-foreground/30">·</span>
-                <div className="flex items-center gap-1.5 text-sm">
-                  <Layers className="size-4 text-muted-foreground" />
-                  <span className="font-semibold tabular-nums text-primary">{chunkLabel()}</span>
-                </div>
-              </div>
-              <ChunkPreview chunks={previewChunks} mode={chunkMode} />
+            <div className="flex items-center gap-1.5 self-start rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+              <Type className="size-3.5" />
+              <span className="font-medium tabular-nums">{wordCount}</span>
+              <span>words</span>
             </div>
           )}
 
         </div>
       </main>
 
-      {/* Sticky save bar */}
+      {/* Sticky CTA */}
       <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 p-4 pb-safe backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="mx-auto max-w-2xl">
-          <Button onClick={handleSave} disabled={!isValid} className="w-full" size="lg">
+          <Button onClick={handleContinue} disabled={!isValid} className="w-full" size="lg">
             Create Memorization
           </Button>
         </div>

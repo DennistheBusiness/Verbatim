@@ -2,6 +2,20 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // Hostname-based routing: squaredthought.com → landing page (no auth)
+  const host = request.headers.get('host') || ''
+  const isMarketingHost =
+    host === 'squaredthought.com' ||
+    host === 'www.squaredthought.com'
+
+  if (isMarketingHost) {
+    const { pathname } = request.nextUrl
+    if (pathname === '/' || pathname === '') {
+      return NextResponse.rewrite(new URL('/landing', request.url))
+    }
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
