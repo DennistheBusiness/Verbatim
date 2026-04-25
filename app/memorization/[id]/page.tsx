@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, Info } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
 
@@ -23,7 +23,9 @@ import { FlashcardViewer } from "@/components/flashcard-viewer"
 import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
 import { AudioTest } from "@/components/audio-test"
 import { MobileMemoNav } from "@/components/mobile-memo-nav"
+import { ScoreChart } from "@/components/score-chart"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test"
 
@@ -78,6 +80,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [contentExpanded, setContentExpanded] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showTTSPlayer, setShowTTSPlayer] = useState(false)
+  const [showListenOptions, setShowListenOptions] = useState(false)
   const [showMarkedOnly, setShowMarkedOnly] = useState(false)
   const [showSystemInfo, setShowSystemInfo] = useState(false)
 
@@ -541,6 +544,19 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Familiarize"
         setTitle={set.title}
         onBack={exitFamiliarize}
+        contextAction={
+          <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="line">Line</SelectItem>
+              <SelectItem value="paragraph">Paragraph</SelectItem>
+              <SelectItem value="sentence">Sentence</SelectItem>
+              <SelectItem value="custom">Custom (/)</SelectItem>
+            </SelectContent>
+          </Select>
+        }
         primaryAction={hasContent ? {
           label: "Continue to Training",
           onClick: continueToEncode,
@@ -590,25 +606,80 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </CardContent>
             </Card>
 
-            {/* Audio Playback */}
-            {audioUrl && (
-              <Card className="border-blue-500/20 bg-blue-500/5">
-                <CardContent className="flex flex-col gap-3 py-4">
-                  <div className="flex items-center gap-2">
-                    <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
-                    <h3 className="text-sm font-medium text-foreground">Audio Recording</h3>
-                  </div>
-                  <TimedAudioPlayer
-                    audioUrl={audioUrl}
-                    transcript={set.transcript}
-                    transcriptWords={set.transcriptWords}
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Text-to-Speech Player or CTA */}
-            {showTTSPlayer ? (
+            {/* Listen Section — combined when recording exists, TTS-only when not */}
+            {audioUrl ? (
+              showTTSPlayer ? (
+                <TextToSpeechPlayer
+                  content={set.content}
+                  onClose={handleCloseTTSPlayer}
+                />
+              ) : (
+                <Card className="border-purple-500/20 bg-purple-500/5">
+                  <CardContent className="flex flex-col gap-3 py-4">
+                    {!showListenOptions ? (
+                      <div className="flex gap-4">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+                          <Headphones className="size-5 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div className="flex flex-1 flex-col gap-2">
+                          <div className="flex flex-col gap-1">
+                            <h3 className="font-medium text-foreground">Listen</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Play your recording or have AI read the content aloud to you.
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => setShowListenOptions(true)}
+                            className="w-full sm:w-auto"
+                            size="sm"
+                          >
+                            <Headphones className="size-4 mr-2" />
+                            Listen
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium text-foreground">Choose how to listen</h3>
+                          <button
+                            onClick={() => setShowListenOptions(false)}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                            <div className="mb-2 flex items-center gap-2">
+                              <Headphones className="size-4 text-blue-600 dark:text-blue-400" />
+                              <span className="text-sm font-medium">Your Recording</span>
+                            </div>
+                            <TimedAudioPlayer
+                              audioUrl={audioUrl}
+                              transcript={set.transcript}
+                              transcriptWords={set.transcriptWords}
+                            />
+                          </div>
+                          <button
+                            onClick={handleOpenTTSPlayer}
+                            className="flex items-center gap-3 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 text-left hover:bg-purple-500/10 transition-colors"
+                          >
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
+                              <Volume2 className="size-4 text-purple-600 dark:text-purple-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">AI Read Aloud</p>
+                              <p className="text-xs text-muted-foreground">Have the computer read it to you</p>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            ) : showTTSPlayer ? (
               <TextToSpeechPlayer
                 content={set.content}
                 onClose={handleCloseTTSPlayer}
@@ -776,6 +847,19 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Encode"
         setTitle={set.title}
         onBack={exitChunkSelect}
+        contextAction={
+          <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="line">Line</SelectItem>
+              <SelectItem value="paragraph">Paragraph</SelectItem>
+              <SelectItem value="sentence">Sentence</SelectItem>
+              <SelectItem value="custom">Custom (/)</SelectItem>
+            </SelectContent>
+          </Select>
+        }
         primaryAction={hasContent ? {
           label: "Start from Beginning",
           onClick: () => startPractice(0),
@@ -858,6 +942,19 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitTestSelect}
         showBottomActions={false}
+        contextAction={
+          <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="line">Line</SelectItem>
+              <SelectItem value="paragraph">Paragraph</SelectItem>
+              <SelectItem value="sentence">Sentence</SelectItem>
+              <SelectItem value="custom">Custom (/)</SelectItem>
+            </SelectContent>
+          </Select>
+        }
       >
         {/* Instructions */}
         <div className="rounded-lg bg-muted/50 p-3">
@@ -1092,17 +1189,33 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title={set.title} 
         showBack 
         action={
-          <Button 
-            variant="outline"
-            size="sm" 
-            className="gap-1.5 hidden md:flex"
-            asChild
-          >
-            <Link href={`/edit/${set.id}`}>
-              <Edit3 className="size-3.5" />
-              <span className="text-sm">Edit</span>
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setShowSystemInfo(true)}
+              aria-label="How the system works"
+            >
+              <HelpCircle className="size-5" />
+            </Button>
+            {hasResumePoint() && (
+              <Button size="sm" className="gap-1.5" onClick={handleResume}>
+                <ArrowRight className="size-3.5" />
+                <span className="text-sm">Resume</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 hidden md:flex"
+              asChild
+            >
+              <Link href={`/edit/${set.id}`}>
+                <Edit3 className="size-3.5" />
+                <span className="text-sm">Edit</span>
+              </Link>
+            </Button>
+          </div>
         }
       />
       
@@ -1147,124 +1260,48 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </div>
         </div>
 
-        {/* How It Works Info Card */}
-        {!showSystemInfo ? (
-          <Card className="border-blue-500/20 bg-blue-500/5">
-            <CardContent className="p-4">
-              <button 
-                onClick={() => setShowSystemInfo(true)}
-                className="flex w-full items-center justify-between gap-3 text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-                    <Info className="size-5 text-blue-600" />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <h3 className="text-sm font-semibold text-foreground">How the system works</h3>
-                    <p className="text-xs text-muted-foreground">Quick overview of the 3-step method</p>
-                  </div>
-                </div>
-                <ChevronDown className="size-4 text-muted-foreground shrink-0" />
-              </button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-blue-500/20 bg-blue-500/5">
-            <CardContent className="flex flex-col gap-4 p-4">
-              <button 
-                onClick={() => setShowSystemInfo(false)}
-                className="flex w-full items-center justify-between gap-3 text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-                    <Info className="size-5 text-blue-600" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground">How the system works</h3>
-                </div>
-                <ChevronUp className="size-4 text-muted-foreground shrink-0" />
-              </button>
-              
-              <div className="flex flex-col gap-3 text-sm">
-                <div className="flex items-start gap-2.5">
-                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 mt-0.5">
-                    <span className="text-xs font-bold text-blue-600">1</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground mb-1">Familiarize</p>
-                    <p className="text-muted-foreground">Read through your content multiple times. Use flashcard mode to review chunk-by-chunk.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-2.5">
-                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 mt-0.5">
-                    <span className="text-xs font-bold text-purple-600">2</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground mb-1">Encode with First Letter Method</p>
-                    <p className="text-muted-foreground">Train your memory in 3 progressive levels. Start seeing first letters, then gradually less, until you can recall from memory alone.</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-2.5">
-                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 mt-0.5">
-                    <span className="text-xs font-bold text-green-600">3</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground mb-1">Test Your Recall</p>
-                    <p className="text-muted-foreground">Prove your mastery with multiple test modes: first letters only, full typing, or audio recording.</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Progress Over Time */}
+        <ScoreChart setId={id} onStartTest={handleTest} />
 
-        {/* Resume/Continue CTA */}
-        {hasResumePoint() ? (
-          <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
-            <CardContent className="p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/20">
-                  <ArrowRight className="size-6 text-primary" />
+        <Dialog open={showSystemInfo} onOpenChange={setShowSystemInfo}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>How the system works</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 text-sm">
+              <div className="flex items-start gap-2.5">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 mt-0.5">
+                  <span className="text-xs font-bold text-blue-600">1</span>
                 </div>
-                <div className="flex flex-1 flex-col gap-3">
-                  <div className="flex flex-col gap-1">
-                    <h3 className="font-semibold text-primary">Resume where you left off</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Last practiced {formatDate(set.sessionState.lastVisitedAt!)}
-                    </p>
-                  </div>
-                  <Button onClick={handleResume} className="w-full sm:w-auto">
-                    <ArrowRight className="size-4" />
-                    Continue Learning
-                  </Button>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground mb-1">Familiarize</p>
+                  <p className="text-muted-foreground">Read through your content multiple times. Use flashcard mode to review chunk-by-chunk.</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5">
-            <CardContent className="p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/20">
-                  <Target className="size-6 text-primary" />
+
+              <div className="flex items-start gap-2.5">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 mt-0.5">
+                  <span className="text-xs font-bold text-purple-600">2</span>
                 </div>
-                <div className="flex flex-1 flex-col gap-3">
-                  <div className="flex flex-col gap-1">
-                    <h3 className="font-semibold text-primary">Ready to start?</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Begin with the recommended path
-                    </p>
-                  </div>
-                  <Button onClick={handleRecommendedPath} className="w-full sm:w-auto">
-                    <Target className="size-4" />
-                    Start Learning
-                  </Button>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground mb-1">Encode with First Letter Method</p>
+                  <p className="text-muted-foreground">Train your memory in 3 progressive levels. Start seeing first letters, then gradually less, until you can recall from memory alone.</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
+
+              <div className="flex items-start gap-2.5">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 mt-0.5">
+                  <span className="text-xs font-bold text-green-600">3</span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground mb-1">Test Your Recall</p>
+                  <p className="text-muted-foreground">Prove your mastery with multiple test modes: first letters only, full typing, or audio recording.</p>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
 
         {/* Step Cards */}
         <div className="flex flex-col gap-3">

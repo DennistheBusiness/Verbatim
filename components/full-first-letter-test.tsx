@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
@@ -55,6 +55,12 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
 
+  // Refs so the keydown handler always reads the latest values without stale closures
+  const currentIndexRef = useRef(0)
+  const lockedRef = useRef(false) // true during the error display delay — blocks double-advance
+  const wordsLengthRef = useRef(0)
+  const hasSavedRef = useRef(false) // prevents the save effect from firing more than once per attempt
+
   const initializeWords = useCallback(() => {
     const parsed = parseWords(content)
     setWords(
@@ -65,6 +71,10 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         wasIncorrect: false,
       }))
     )
+    currentIndexRef.current = 0
+    lockedRef.current = false
+    hasSavedRef.current = false
+    wordsLengthRef.current = parsed.length
     setCurrentIndex(0)
     setCorrectCount(0)
     setIncorrectCount(0)
@@ -75,70 +85,74 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     initializeWords()
   }, [initializeWords])
 
+  // Keep refs in sync with state so the handler reads latest values
+  useEffect(() => {
+    currentIndexRef.current = currentIndex
+  }, [currentIndex])
+
+  useEffect(() => {
+    wordsLengthRef.current = words.length
+  }, [words.length])
+
   const handleKeyPress = useCallback(
     (e: KeyboardEvent) => {
-      if (isComplete || words.length === 0) return
-      
+      if (isComplete || wordsLengthRef.current === 0) return
+      if (lockedRef.current) return // blocked during error delay
+
       const key = e.key.toLowerCase()
-      
-      // Only handle single letter keys
       if (!/^[a-z]$/.test(key)) return
 
-      const currentWord = words[currentIndex]
-      if (!currentWord) return
+      const idx = currentIndexRef.current
 
-      if (key === currentWord.word.firstLetter) {
-        // Correct letter
-        setCorrectCount((c) => c + 1)
-        setWords((prev) =>
-          prev.map((w, i) => {
-            if (i === currentIndex) {
-              return { ...w, state: "revealed" }
-            }
-            if (i === currentIndex + 1) {
-              return { ...w, state: "active" }
-            }
-            return w
-          })
-        )
+      setWords((prev) => {
+        const currentWord = prev[idx]
+        if (!currentWord) return prev
 
-        if (currentIndex + 1 >= words.length) {
-          setIsComplete(true)
-        } else {
-          setCurrentIndex((i) => i + 1)
-        }
-      } else {
-        // Incorrect letter
-        setIncorrectCount((c) => c + 1)
-        setWords((prev) =>
-          prev.map((w, i) =>
-            i === currentIndex ? { ...w, state: "error", showError: true, wasIncorrect: true } : w
-          )
-        )
-
-        // Show error briefly, then move to next word
-        setTimeout(() => {
-          setWords((prev) =>
-            prev.map((w, i) => {
-              if (i === currentIndex) {
-                return { ...w, state: "revealed", showError: false, wasIncorrect: true }
-              }
-              if (i === currentIndex + 1) {
-                return { ...w, state: "active" }
-              }
-              return w
-            })
-          )
-
-          if (currentIndex + 1 >= words.length) {
+        if (key === currentWord.word.firstLetter) {
+          // Correct — advance immediately
+          setCorrectCount((c) => c + 1)
+          const next = idx + 1
+          if (next >= wordsLengthRef.current) {
             setIsComplete(true)
           } else {
-            setCurrentIndex((i) => i + 1)
+            currentIndexRef.current = next
+            setCurrentIndex(next)
           }
-        }, 600)
-      }
+          return prev.map((w, i) => {
+            if (i === idx) return { ...w, state: "revealed" as WordState }
+            if (i === next) return { ...w, state: "active" as WordState }
+            return w
+          })
+        } else {
+          // Incorrect — lock input, show error, then advance after delay
+          lockedRef.current = true
+          setIncorrectCount((c) => c + 1)
+
+          setTimeout(() => {
+            const next = idx + 1
+            setWords((p) =>
+              p.map((w, i) => {
+                if (i === idx) return { ...w, state: "revealed" as WordState, showError: false, wasIncorrect: true }
+                if (i === next) return { ...w, state: "active" as WordState }
+                return w
+              })
+            )
+            if (next >= wordsLengthRef.current) {
+              setIsComplete(true)
+            } else {
+              currentIndexRef.current = next
+              setCurrentIndex(next)
+            }
+            lockedRef.current = false
+          }, 600)
+
+          return prev.map((w, i) =>
+            i === idx ? { ...w, state: "error" as WordState, showError: true, wasIncorrect: true } : w
+          )
+        }
+      })
     },
-    [currentIndex, isComplete, words]
+    [isComplete]
   )
 
   useEffect(() => {
@@ -146,15 +160,20 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Save test score when completed
+  // Save test score when completed — guard ensures this fires exactly once per attempt
   useEffect(() => {
-    if (isComplete && (correctCount > 0 || incorrectCount > 0)) {
+    if (isComplete && !hasSavedRef.current) {
+      hasSavedRef.current = true
       const totalAttempts = correctCount + incorrectCount
       const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
-      updateTestScore(setId, "firstLetter", accuracy)
+      updateTestScore(setId, "firstLetter", accuracy, {
+        totalWords: totalAttempts,
+        correctWords: correctCount,
+      })
       toast.success("Progress saved")
     }
-  }, [isComplete, correctCount, incorrectCount, setId, updateTestScore])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComplete])
 
   const totalAttempts = correctCount + incorrectCount
   const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0

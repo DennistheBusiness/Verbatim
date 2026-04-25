@@ -66,7 +66,10 @@ export function TypingTest({ setId, content, onBack }: TypingTestProps) {
     setIsSubmitted(true)
     
     // Save test score
-    updateTestScore(setId, "fullText", comparison.accuracy)
+    updateTestScore(setId, "fullText", comparison.accuracy, {
+      totalWords: comparison.totalExpected,
+      correctWords: comparison.correctCount,
+    })
     toast.success("Progress saved")
   }
 

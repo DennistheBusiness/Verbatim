@@ -107,7 +107,7 @@ interface SetActionsContextType {
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
   markFamiliarizeComplete: (id: string) => Promise<void>
   updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => Promise<void>
-  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number) => Promise<void>
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => Promise<void>
   updateReviewedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateTags: (id: string, tags: string[]) => Promise<void>
@@ -915,11 +915,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase, patchSet])
 
-  const updateTestScore = useCallback(async (
-    id: string,
-    testType: "firstLetter" | "fullText" | "audioTest",
-    score: number,
-  ) => {
+  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => {
     try {
       const set = setsRef.current.find((s) => s.id === id)
       if (!set) throw new Error("Set not found")
@@ -952,6 +948,31 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         })
         .eq("id", id)
       if (error) throw error
+
+      // Record historical attempt (fire-and-forget — never block the progress save)
+      const modeMap: Record<typeof testType, string> = {
+        firstLetter: 'first_letter',
+        fullText: 'full_text',
+        audioTest: 'audio',
+      }
+      supabase
+        .from('test_attempts')
+        .insert({
+          set_id: id,
+          mode: modeMap[testType],
+          score,
+          total_words: meta?.totalWords ?? 0,
+          correct_words: meta?.correctWords ?? 0,
+          chunk_id: meta?.chunkId ?? null,
+        })
+        .then(({ error: insertError }) => {
+          if (insertError) {
+            console.error('Error recording test attempt:', insertError)
+            if (process.env.NODE_ENV === 'development') {
+              toast.error(`test_attempts insert failed: ${insertError.message}`)
+            }
+          }
+        })
 
       patchSet(id, (s) => ({
         ...s,

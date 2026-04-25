@@ -174,6 +174,54 @@ export type Database = {
           },
         ]
       }
+      test_attempts: {
+        Row: {
+          chunk_id: string | null
+          correct_words: number
+          created_at: string
+          id: string
+          mode: string
+          score: number
+          set_id: string
+          total_words: number
+        }
+        Insert: {
+          chunk_id?: string | null
+          correct_words?: number
+          created_at?: string
+          id?: string
+          mode: string
+          score: number
+          set_id: string
+          total_words?: number
+        }
+        Update: {
+          chunk_id?: string | null
+          correct_words?: number
+          created_at?: string
+          id?: string
+          mode?: string
+          score?: number
+          set_id?: string
+          total_words?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_attempts_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "memorization_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "test_attempts_chunk_id_fkey"
+            columns: ["chunk_id"]
+            isOneToOne: false
+            referencedRelation: "chunks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tags: {
         Row: {
           created_at: string
