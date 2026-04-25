@@ -14,6 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
+      chunk_progress: {
+        Row: {
+          id: string
+          user_id: string
+          set_id: string
+          chunk_id: string
+          ease_factor: number
+          interval_days: number
+          repetitions: number
+          last_score: number | null
+          last_reviewed_at: string | null
+          next_review_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          set_id: string
+          chunk_id: string
+          ease_factor?: number
+          interval_days?: number
+          repetitions?: number
+          last_score?: number | null
+          last_reviewed_at?: string | null
+          next_review_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          set_id?: string
+          chunk_id?: string
+          ease_factor?: number
+          interval_days?: number
+          repetitions?: number
+          last_score?: number | null
+          last_reviewed_at?: string | null
+          next_review_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chunk_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chunk_progress_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "memorization_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chunk_progress_chunk_id_fkey"
+            columns: ["chunk_id"]
+            isOneToOne: false
+            referencedRelation: "chunks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chunks: {
         Row: {
           created_at: string
@@ -59,6 +123,8 @@ export type Database = {
           original_filename: string | null
           progress: Json
           recommended_step: string
+          repetition_config: Json
+          repetition_mode: string
           reviewed_chunks: Json | null
           session_state: Json
           title: string
@@ -77,6 +143,8 @@ export type Database = {
           original_filename?: string | null
           progress?: Json
           recommended_step?: string
+          repetition_config?: Json
+          repetition_mode?: string
           reviewed_chunks?: Json | null
           session_state?: Json
           title: string
@@ -95,6 +163,8 @@ export type Database = {
           original_filename?: string | null
           progress?: Json
           recommended_step?: string
+          repetition_config?: Json
+          repetition_mode?: string
           reviewed_chunks?: Json | null
           session_state?: Json
           title?: string

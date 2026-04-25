@@ -36,20 +36,24 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: fullName,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
       if (error) {
         toast.error(error.message)
+      } else if (data.session) {
+        // Email confirmation is off — user is logged in immediately
+        toast.success('Account created!')
+        router.push('/')
       } else {
+        // Fallback if confirmation is still enabled on the Supabase project
         toast.success('Account created! Please check your email to confirm.')
         router.push('/auth/login')
       }

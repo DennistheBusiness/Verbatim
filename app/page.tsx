@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, memo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Plus, BookOpen, Search, X, Edit3, HelpCircle,
+  Plus, BookOpen, Search, X, Edit3, HelpCircle, CalendarClock,
   Clock, Check, Sparkles, Target, Mic, ChevronRight, Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,8 @@ import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
 import { OnboardingTip } from "@/components/onboarding-tip"
 import { LibrarySkeletons } from "@/components/loading-skeletons"
+import { TodaysPracticeBanner } from "@/components/todays-practice-banner"
+import { TrialDisclaimerModal } from "@/components/trial-disclaimer-modal"
 import { useSetList, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
@@ -385,10 +387,18 @@ export default function HomePage() {
         title="Library"
         showBranding={true}
         action={
-          <Button variant="ghost" size="icon-sm" onClick={handleShowTour} title="View Tour">
-            <HelpCircle className="size-5" />
-            <span className="sr-only">View Tour</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" asChild>
+              <Link href="/schedules">
+                <CalendarClock className="size-4" />
+                <span className="hidden sm:inline text-xs">Schedules</span>
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={handleShowTour} title="View Tour">
+              <HelpCircle className="size-5" />
+              <span className="sr-only">View Tour</span>
+            </Button>
+          </div>
         }
       />
 
@@ -418,6 +428,9 @@ export default function HomePage() {
           </Empty>
         ) : (
           <>
+            {/* Today's Practice */}
+            <TodaysPracticeBanner />
+
             {/* Count + create */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
@@ -526,6 +539,7 @@ export default function HomePage() {
 
       <MobileLibraryNav />
       <OnboardingTip page="home" delay={3000} />
+      <TrialDisclaimerModal />
     </div>
   )
 }

@@ -9,9 +9,28 @@ import { sanitizeText, sanitizeTags } from "@/lib/sanitize"
 import { getSupabaseErrorMessage } from "@/components/error-display"
 import { identifyUser, trackSessionStart, updateUserProperties, trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
+import { computeNextSRS, gradeFromScore, manualIntervalDays, type SRSGrade } from "@/lib/srs"
 
 export type ChunkMode = "line" | "paragraph" | "sentence" | "custom"
 export type InputMethod = "text" | "voice"
+export type RepetitionMode = "ai" | "manual" | "off"
+
+export interface RepetitionConfig {
+  frequency?: number
+  period?: "day" | "week" | "month"
+}
+
+export interface ChunkProgressRow {
+  id: string
+  chunk_id: string
+  set_id: string
+  ease_factor: number
+  interval_days: number
+  repetitions: number
+  last_score: number | null
+  last_reviewed_at: string | null
+  next_review_at: string
+}
 export type { TranscriptWord } from "@/app/api/transcribe/route"
 
 export interface Chunk {
@@ -66,6 +85,8 @@ export interface MemorizationSet {
   progress: Progress
   sessionState: SessionState
   recommendedStep: RecommendedStep
+  repetitionMode: RepetitionMode
+  repetitionConfig: RepetitionConfig
   tags: string[]
   audioFilePath?: string | null
   originalFilename?: string | null
@@ -114,6 +135,9 @@ interface SetActionsContextType {
   deleteSet: (id: string) => Promise<void>
   deleteAudioFile: (audioFilePath: string) => Promise<void>
   getAudioUrl: (setId: string) => Promise<string | null>
+  updateRepetitionMode: (setId: string, mode: RepetitionMode, config?: RepetitionConfig) => Promise<void>
+  upsertChunkProgress: (setId: string, chunkId: string, score: number) => Promise<{ nextReviewAt: Date; grade: SRSGrade } | null>
+  getDueChunks: (setId: string) => Promise<ChunkProgressRow[]>
 }
 
 // Combined for backward compatibility
@@ -255,6 +279,8 @@ function transformSetRow(set: any): MemorizationSet {
     progress: (set.progress || createInitialProgress()) as Progress,
     sessionState: (set.session_state || createInitialSessionState()) as SessionState,
     recommendedStep: set.recommended_step as RecommendedStep,
+    repetitionMode: (set.repetition_mode || "ai") as RepetitionMode,
+    repetitionConfig: (set.repetition_config || {}) as RepetitionConfig,
     tags: (set.set_tags || []).map((st: any) => st.tag.name),
     audioFilePath: set.audio_file_path || null,
     originalFilename: set.original_filename || null,
@@ -1162,6 +1188,123 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     return data.signedUrl
   }, [supabase])
 
+  // ─── Spaced Repetition ────────────────────────────────────────────────────
+
+  const updateRepetitionMode = useCallback(async (setId: string, mode: RepetitionMode, config?: RepetitionConfig) => {
+    try {
+      const { error } = await supabase
+        .from("memorization_sets")
+        .update({ repetition_mode: mode, repetition_config: (config ?? {}) as Record<string, unknown> })
+        .eq("id", setId)
+      if (error) throw error
+      patchSet(setId, (s) => ({ ...s, repetitionMode: mode, repetitionConfig: config ?? {} }))
+
+      // When switching to manual mode, reschedule all existing chunk_progress rows
+      // for this set so reviews start appearing at the new frequency immediately.
+      if (mode === "manual" && config?.frequency && config?.period) {
+        const intervalMs = manualIntervalDays(config.frequency, config.period) * 86_400_000
+        const { data: rows } = await supabase
+          .from("chunk_progress")
+          .select("id, last_reviewed_at")
+          .eq("set_id", setId)
+
+        if (rows && rows.length > 0) {
+          await Promise.all(
+            rows.map((row) => {
+              const base = row.last_reviewed_at ? new Date(row.last_reviewed_at).getTime() : Date.now()
+              const nextReviewAt = new Date(base + intervalMs).toISOString()
+              return supabase
+                .from("chunk_progress")
+                .update({ next_review_at: nextReviewAt, interval_days: manualIntervalDays(config.frequency!, config.period!) })
+                .eq("id", row.id)
+            })
+          )
+        }
+      }
+    } catch (err) {
+      console.error("Error updating repetition mode:", err)
+      toast.error(getSupabaseErrorMessage(err))
+      throw err
+    }
+  }, [supabase, patchSet])
+
+  const upsertChunkProgress = useCallback(async (
+    setId: string,
+    chunkId: string,
+    score: number,
+  ): Promise<{ nextReviewAt: Date; grade: SRSGrade } | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return null
+
+      const set = setsRef.current.find((s) => s.id === setId)
+      if (!set || set.repetitionMode === "off") return null
+
+      // Fetch existing state for this chunk
+      const { data: existing } = await supabase
+        .from("chunk_progress")
+        .select("ease_factor, interval_days, repetitions")
+        .eq("user_id", user.id)
+        .eq("chunk_id", chunkId)
+        .maybeSingle()
+
+      const currentState = {
+        easeFactor: existing?.ease_factor ?? 2.5,
+        intervalDays: existing?.interval_days ?? 1,
+        repetitions: existing?.repetitions ?? 0,
+      }
+
+      const grade = gradeFromScore(score)
+      const next = computeNextSRS(currentState, grade)
+
+      // Manual mode overrides the interval but keeps SM-2 stats for display
+      const intervalDays = set.repetitionMode === "manual" && set.repetitionConfig.frequency && set.repetitionConfig.period
+        ? manualIntervalDays(set.repetitionConfig.frequency, set.repetitionConfig.period)
+        : next.intervalDays
+
+      const nextReviewAt = new Date()
+      nextReviewAt.setTime(nextReviewAt.getTime() + intervalDays * 86_400_000)
+
+      await supabase
+        .from("chunk_progress")
+        .upsert({
+          user_id: user.id,
+          set_id: setId,
+          chunk_id: chunkId,
+          ease_factor: next.easeFactor,
+          interval_days: intervalDays,
+          repetitions: next.repetitions,
+          last_score: score,
+          last_reviewed_at: new Date().toISOString(),
+          next_review_at: nextReviewAt.toISOString(),
+        }, { onConflict: "user_id,chunk_id" })
+
+      return { nextReviewAt, grade }
+    } catch (err) {
+      console.error("Error upserting chunk progress:", err)
+      return null
+    }
+  }, [supabase])
+
+  const getDueChunks = useCallback(async (setId: string): Promise<ChunkProgressRow[]> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return []
+      const { data, error } = await supabase
+        .from("chunk_progress")
+        .select("id, chunk_id, set_id, ease_factor, interval_days, repetitions, last_score, last_reviewed_at, next_review_at")
+        .eq("set_id", setId)
+        .eq("user_id", user.id)
+        .lte("next_review_at", new Date().toISOString())
+        .order("ease_factor", { ascending: true })
+      if (error) throw error
+      return (data ?? []) as ChunkProgressRow[]
+    } catch (err) {
+      console.error("Error fetching due chunks:", err)
+      return []
+    }
+  }, [supabase])
+
   // ─── Memoized context values ───────────────────────────────────────────────
 
   // List context re-creates only when list state changes (sets, loading, pagination)
@@ -1194,10 +1337,14 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     deleteSet,
     deleteAudioFile,
     getAudioUrl,
+    updateRepetitionMode,
+    upsertChunkProgress,
+    getDueChunks,
   }), [
     addSet, getSet, updateSet, updateChunkMode, updateSessionState, updateProgress,
     markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateReviewedChunks,
     updateMarkedChunks, updateTags, deleteSet, deleteAudioFile, getAudioUrl,
+    updateRepetitionMode, upsertChunkProgress, getDueChunks,
   ])
 
   return (
