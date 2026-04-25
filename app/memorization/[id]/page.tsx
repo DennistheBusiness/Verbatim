@@ -24,6 +24,7 @@ import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
 import { AudioTest } from "@/components/audio-test"
 import { MobileMemoNav } from "@/components/mobile-memo-nav"
 import { ScoreChart } from "@/components/score-chart"
+import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -71,7 +72,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   // useSetList for reactive data (re-renders when this set's progress updates)
   const { isLoaded, sets } = useSetList()
   // useSetActions for stable mutation callbacks (never change identity)
-  const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl } = useSetActions()
+  const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl, updateRepetitionMode } = useSetActions()
   const set = sets.find((s) => s.id === id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
@@ -1302,6 +1303,12 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </DialogContent>
         </Dialog>
 
+        {/* Spaced Repetition */}
+        <SRToggle
+          mode={set.repetitionMode}
+          config={set.repetitionConfig}
+          onModeChange={(mode, config) => updateRepetitionMode(id, mode, config)}
+        />
 
         {/* Step Cards */}
         <div className="flex flex-col gap-3">

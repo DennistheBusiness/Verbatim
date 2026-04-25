@@ -59,11 +59,11 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
         )}
         
         {showBranding ? (
-          <div className="flex items-center gap-2 flex-1">
-            <Image 
-              src="/verbatim-logo-icon.png" 
-              alt="Verbatim" 
-              width={32} 
+          <Link href="/" className="flex items-center gap-2 flex-1">
+            <Image
+              src="/verbatim-logo-icon.png"
+              alt="Verbatim"
+              width={32}
               height={32}
               className="shrink-0"
             />
@@ -75,9 +75,20 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
                 by Squared Thought
               </span>
             </div>
-          </div>
+          </Link>
         ) : (
-          <h1 className="text-lg font-semibold truncate flex-1">{title}</h1>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Link href="/" className="shrink-0" aria-label="Home">
+              <Image
+                src="/verbatim-logo-icon.png"
+                alt="Verbatim"
+                width={22}
+                height={22}
+                className="shrink-0"
+              />
+            </Link>
+            <h1 className="text-base font-semibold truncate">{title}</h1>
+          </div>
         )}
         
         {action && (

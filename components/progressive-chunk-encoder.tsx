@@ -68,6 +68,7 @@ export function ProgressiveChunkEncoder({
   const currentIndexRef = useRef(0)
   const lockedRef = useRef(false) // true during error display delay — blocks double-advance
   const wordsRef = useRef<WordStatus[]>([])
+  const isLevelCompleteRef = useRef(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [levelResults, setLevelResults] = useState<Record<Level, LevelResults | null>>({
     1: null,
@@ -93,32 +94,27 @@ export function ProgressiveChunkEncoder({
         currentIndexRef.current = 0
         setCurrentIndex(0)
       } else if (level === 2) {
-        // Level 2: Random 40-60% of words hidden
+        // Level 2: 40-60% of words are blanked out as a challenge, but ALL words
+        // must be typed. Non-hidden words show as amber hints; hidden ones are blank.
         const hidePercentage = 0.4 + Math.random() * 0.2
         const totalToHide = Math.max(1, Math.floor(parsed.length * hidePercentage))
-        
+
         const hiddenIndices = new Set<number>()
         while (hiddenIndices.size < totalToHide) {
           hiddenIndices.add(Math.floor(Math.random() * parsed.length))
         }
 
-        const firstHiddenIndex = parsed.findIndex((_, i) => hiddenIndices.has(i))
-
         setWords(
           parsed.map((word, i) => ({
             word,
-            state: hiddenIndices.has(i)
-              ? i === firstHiddenIndex
-                ? ("active" as WordState)
-                : ("hidden" as WordState)
-              : ("shown" as WordState),
+            state: i === 0 ? ("active" as WordState) : ("shown" as WordState),
             showError: false,
             wasIncorrect: false,
             isHiddenInLevel2: hiddenIndices.has(i),
           }))
         )
-        currentIndexRef.current = firstHiddenIndex
-        setCurrentIndex(firstHiddenIndex)
+        currentIndexRef.current = 0
+        setCurrentIndex(0)
       } else {
         // Level 3: All words hidden (original behavior)
         setWords(
@@ -147,88 +143,72 @@ export function ProgressiveChunkEncoder({
   }, [currentLevel, initializeLevel])
 
   // Keep refs in sync with state
-  useEffect(() => {
-    currentIndexRef.current = currentIndex
-  }, [currentIndex])
+  useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
+  useEffect(() => { wordsRef.current = words }, [words])
+  useEffect(() => { isLevelCompleteRef.current = isLevelComplete }, [isLevelComplete])
 
-  useEffect(() => {
-    wordsRef.current = words
-  }, [words])
-
-  const findNextWordToType = useCallback(
-    (fromIndex: number): number => {
-      if (currentLevel === 2) {
-        for (let i = fromIndex; i < wordsRef.current.length; i++) {
-          if (wordsRef.current[i].isHiddenInLevel2 && wordsRef.current[i].state !== "revealed") {
-            return i
-          }
-        }
-        return wordsRef.current.length
-      }
-      return fromIndex
-    },
-    [currentLevel]
-  )
+  // All levels advance sequentially through every word — stable ref, no deps
+  const findNextWordToType = useCallback((fromIndex: number): number => fromIndex, [])
 
   const handleKeyPress = useCallback(
     (e: KeyboardEvent) => {
-      if (isLevelComplete || wordsRef.current.length === 0) return
+      if (isLevelCompleteRef.current || wordsRef.current.length === 0) return
       if (lockedRef.current) return // blocked during error delay
 
       const key = e.key.toLowerCase()
       if (!/^[a-z]$/.test(key)) return
 
       const idx = currentIndexRef.current
+      const currentWord = wordsRef.current[idx]
+      if (!currentWord) return
 
-      setWords((prev) => {
-        const currentWord = prev[idx]
-        if (!currentWord) return prev
+      if (key === currentWord.word.firstLetter) {
+        // Correct — all side effects outside the updater to prevent Strict Mode double-fire
+        setCorrectCount((c) => c + 1)
+        const nextIndex = findNextWordToType(idx + 1)
+        if (nextIndex >= wordsRef.current.length) {
+          setIsLevelComplete(true)
+        } else {
+          currentIndexRef.current = nextIndex
+          setCurrentIndex(nextIndex)
+        }
+        setWords((prev) =>
+          prev.map((w, i) => {
+            if (i === idx) return { ...w, state: "revealed" as WordState }
+            if (i === nextIndex) return { ...w, state: "active" as WordState }
+            return w
+          })
+        )
+      } else {
+        // Incorrect — lock input, show error, then advance after delay
+        lockedRef.current = true
+        setIncorrectCount((c) => c + 1)
+        setWords((prev) =>
+          prev.map((w, i) =>
+            i === idx ? { ...w, state: "error" as WordState, showError: true, wasIncorrect: true } : w
+          )
+        )
 
-        if (key === currentWord.word.firstLetter) {
-          // Correct — advance immediately
-          setCorrectCount((c) => c + 1)
+        setTimeout(() => {
           const nextIndex = findNextWordToType(idx + 1)
+          setWords((p) =>
+            p.map((w, i) => {
+              if (i === idx) return { ...w, state: "revealed" as WordState, showError: false, wasIncorrect: true }
+              if (i === nextIndex) return { ...w, state: "active" as WordState }
+              return w
+            })
+          )
           if (nextIndex >= wordsRef.current.length) {
             setIsLevelComplete(true)
           } else {
             currentIndexRef.current = nextIndex
             setCurrentIndex(nextIndex)
           }
-          return prev.map((w, i) => {
-            if (i === idx) return { ...w, state: "revealed" as WordState }
-            if (i === nextIndex) return { ...w, state: "active" as WordState }
-            return w
-          })
-        } else {
-          // Incorrect — lock input, show error, then advance after delay
-          lockedRef.current = true
-          setIncorrectCount((c) => c + 1)
-
-          setTimeout(() => {
-            const nextIndex = findNextWordToType(idx + 1)
-            setWords((p) =>
-              p.map((w, i) => {
-                if (i === idx) return { ...w, state: "revealed" as WordState, showError: false, wasIncorrect: true }
-                if (i === nextIndex) return { ...w, state: "active" as WordState }
-                return w
-              })
-            )
-            if (nextIndex >= wordsRef.current.length) {
-              setIsLevelComplete(true)
-            } else {
-              currentIndexRef.current = nextIndex
-              setCurrentIndex(nextIndex)
-            }
-            lockedRef.current = false
-          }, 800)
-
-          return prev.map((w, i) =>
-            i === idx ? { ...w, state: "error" as WordState, showError: true, wasIncorrect: true } : w
-          )
-        }
-      })
+          lockedRef.current = false
+        }, 800)
+      }
     },
-    [isLevelComplete, findNextWordToType]
+    [findNextWordToType]
   )
 
   useEffect(() => {
@@ -261,7 +241,11 @@ export function ProgressiveChunkEncoder({
       updateEncodeProgress(setId, currentLevel, completedLevelResult.accuracy)
       toast.success("Progress saved")
     }
-    
+
+    // Reset isLevelComplete in the same batch as currentLevel change so the
+    // useEffect([isLevelComplete, ..., currentLevel]) doesn't re-fire with
+    // the old completion state when currentLevel changes.
+    setIsLevelComplete(false)
     setShowSuccessDialog(false)
     if (currentLevel < 3) {
       setCurrentLevel(((currentLevel + 1) as Level))
@@ -485,12 +469,23 @@ export function ProgressiveChunkEncoder({
                 </span>
               </div>
               <span className="text-muted-foreground tabular-nums">
-                {currentLevel === 2
-                  ? `${words.filter((w) => w.isHiddenInLevel2 && w.state === "revealed").length} / ${
-                      words.filter((w) => w.isHiddenInLevel2).length
-                    }`
-                  : `${currentIndex + 1} / ${words.length}`}
+                {currentIndex + 1} / {words.length}
               </span>
+            </div>
+          )}
+
+          {/* Fallback controls when dialog is dismissed via X — prevents user getting stuck */}
+          {isLevelComplete && !showSuccessDialog && !allLevelsComplete && (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              {currentLevel < 3 && (
+                <Button onClick={handleContinueToNextLevel} size="sm" className="w-full gap-2">
+                  Continue to Level {currentLevel + 1}
+                  <ArrowRight className="size-4" />
+                </Button>
+              )}
+              <Button onClick={handleRetryLevel} variant="outline" size="sm" className="w-full">
+                Retry Level {currentLevel}
+              </Button>
             </div>
           )}
 
@@ -602,44 +597,7 @@ export function ProgressiveChunkEncoder({
 function WordBlock({ status, level }: { status: WordStatus; level: Level }) {
   const { word, state, showError, wasIncorrect, isHiddenInLevel2 } = status
 
-  // Level 2: Show words that aren't hidden
-  if (level === 2 && !isHiddenInLevel2 && state === "shown") {
-    return (
-      <span className="rounded bg-muted/50 px-2 py-1 font-mono text-muted-foreground">
-        {word.word}
-      </span>
-    )
-  }
-
-  // Level 1: Show all words initially, including active word
-  if (level === 1 && (state === "shown" || state === "active")) {
-    return (
-      <span className={`rounded px-2 py-1 font-mono ${
-        state === "active" 
-          ? "bg-primary/20 text-primary ring-2 ring-primary" 
-          : "bg-muted/50 text-foreground"
-      }`}>
-        {word.word}
-      </span>
-    )
-  }
-
-  if (state === "hidden") {
-    return (
-      <span className="rounded bg-muted px-2 py-1 font-mono text-muted-foreground">
-        {"_".repeat(Math.min(word.word.length, 8))}
-      </span>
-    )
-  }
-
-  if (state === "active") {
-    return (
-      <span className="animate-pulse rounded bg-primary/20 px-2 py-1 font-mono text-primary ring-2 ring-primary">
-        {"_".repeat(Math.min(word.word.length, 8))}
-      </span>
-    )
-  }
-
+  // Error — always shown over any other state
   if (state === "error" && showError) {
     return (
       <span className="rounded bg-red-100 px-2 py-1 font-mono text-red-600 ring-2 ring-red-500 dark:bg-red-900/30 dark:text-red-400">
@@ -649,18 +607,49 @@ function WordBlock({ status, level }: { status: WordStatus; level: Level }) {
     )
   }
 
-  // Revealed state - show red if it was incorrect, green if correct
-  if (wasIncorrect) {
+  // Revealed — green if correct, red if incorrect
+  if (state === "revealed") {
+    return wasIncorrect ? (
+      <span className="rounded bg-red-100 px-2 py-1 font-mono text-red-600 dark:bg-red-900/30 dark:text-red-400">{word.word}</span>
+    ) : (
+      <span className="rounded bg-green-100 px-2 py-1 font-mono text-green-700 dark:bg-green-900/30 dark:text-green-400">{word.word}</span>
+    )
+  }
+
+  // Level 1: all words show text. Level 2 hint words (non-hidden): show text with amber tint.
+  const isTextVisible = level === 1 || (level === 2 && !isHiddenInLevel2)
+
+  if (isTextVisible) {
+    if (state === "active") {
+      return (
+        <span className="rounded bg-primary/20 px-2 py-1 font-mono text-primary ring-2 ring-primary">
+          {word.word}
+        </span>
+      )
+    }
     return (
-      <span className="rounded bg-red-100 px-2 py-1 font-mono text-red-600 dark:bg-red-900/30 dark:text-red-400">
+      <span className={`rounded px-2 py-1 font-mono ${
+        level === 2
+          ? "bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+          : "bg-muted/50 text-foreground"
+      }`}>
         {word.word}
       </span>
     )
   }
 
+  // Level 2 hidden + Level 3: show blank underscores
+  if (state === "active") {
+    return (
+      <span className="animate-pulse rounded bg-primary/20 px-2 py-1 font-mono text-primary ring-2 ring-primary">
+        {"_".repeat(Math.min(word.word.length, 8))}
+      </span>
+    )
+  }
+
   return (
-    <span className="rounded bg-green-100 px-2 py-1 font-mono text-green-700 dark:bg-green-900/30 dark:text-green-400">
-      {word.word}
+    <span className="rounded bg-muted px-2 py-1 font-mono text-muted-foreground">
+      {"_".repeat(Math.min(word.word.length, 8))}
     </span>
   )
 }
