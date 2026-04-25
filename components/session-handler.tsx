@@ -19,6 +19,15 @@ export function SessionHandler() {
   const supabase = createClient()
 
   useEffect(() => {
+    // Marketing site — no auth redirects, ever
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'squaredthought.com' ||
+        window.location.hostname === 'www.squaredthought.com')
+    ) {
+      return
+    }
+
     // Check initial session
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
