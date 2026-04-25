@@ -14,6 +14,7 @@ import type { ChunkMode } from "@/lib/memorization-context"
 interface ChunkPreviewProps {
   chunks: string[]
   mode: ChunkMode
+  defaultOpen?: boolean
 }
 
 const getModeIcon = (mode: ChunkMode) => {
@@ -46,13 +47,13 @@ const getModeLabel = (mode: ChunkMode) => {
   }
 }
 
-export function ChunkPreview({ chunks, mode }: ChunkPreviewProps) {
+export function ChunkPreview({ chunks, mode, defaultOpen = false }: ChunkPreviewProps) {
   if (chunks.length === 0) {
     return null
   }
 
   return (
-    <Accordion type="single" collapsible className="w-full">
+    <Accordion type="single" collapsible className="w-full" defaultValue={defaultOpen ? "preview" : undefined}>
       <AccordionItem value="preview">
         <AccordionTrigger className="hover:no-underline">
           <div className="flex items-center gap-2">

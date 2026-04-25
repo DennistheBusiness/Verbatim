@@ -72,9 +72,6 @@ export function OnboardingTip({ page = "home", delay = 2000 }: OnboardingTipProp
   const relevantTips = TIPS.filter(tip => !tip.page || tip.page === "all" || tip.page === page)
 
   useEffect(() => {
-    // Don't show tips until the user has acknowledged the trial disclaimer
-    if (!localStorage.getItem("verbatim_trial_disclaimer_seen")) return
-
     const dismissedTips = getDismissedTips()
     const allDismissed = relevantTips.every(tip => dismissedTips.includes(tip.id))
 

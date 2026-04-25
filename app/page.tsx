@@ -16,10 +16,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { Header } from "@/components/header"
 import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
-import { OnboardingTip } from "@/components/onboarding-tip"
 import { LibrarySkeletons } from "@/components/loading-skeletons"
 import { TodaysPracticeBanner } from "@/components/todays-practice-banner"
-import { TrialDisclaimerModal } from "@/components/trial-disclaimer-modal"
 import { useSetList, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
@@ -538,8 +536,6 @@ export default function HomePage() {
       </main>
 
       <MobileLibraryNav />
-      <OnboardingTip page="home" delay={3000} />
-      <TrialDisclaimerModal />
     </div>
   )
 }
