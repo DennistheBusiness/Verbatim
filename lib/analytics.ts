@@ -35,7 +35,7 @@ export function initializeAnalytics(): void {
   try {
     posthog.init(apiKey, {
       api_host: apiHost || 'https://us.i.posthog.com',
-      person_profiles: 'identified_only', // Only create profiles for identified users
+      person_profiles: 'always',
       loaded: (posthog) => {
         if (process.env.NODE_ENV === 'development') {
           console.log('[Analytics] PostHog initialized successfully')
@@ -47,7 +47,6 @@ export function initializeAnalytics(): void {
       autocapture: false, // Disable automatic event capture for cleaner data
       
       // Privacy settings
-      respect_dnt: true, // Respect Do Not Track browser setting
       disable_session_recording: true, // No session recording
       disable_persistence: false, // Allow cookies for session tracking
       

@@ -137,9 +137,15 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
           formData.append("audio", blob, "recording.webm")
           const res = await fetch("/api/transcribe", { method: "POST", body: formData })
           const data = await res.json()
-          if (data.text) setTranscript(data.text)
+          if (data.text) {
+            setTranscript(data.text)
+          } else {
+            setIsEditing(true)
+            toast.warning("AI transcription unavailable — type your answer below")
+          }
         } catch {
-          toast.error("Transcription failed — you can type your answer manually")
+          setIsEditing(true)
+          toast.error("Transcription failed — type your answer below")
         } finally {
           setIsTranscribing(false)
         }
@@ -250,6 +256,34 @@ export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTe
             </div>
           </CardContent>
         </Card>
+      </div>
+    )
+  }
+
+  // Full test ready-to-record screen
+  if (testMode === "full" && !isRecording && !isTranscribing && !recordedBlob) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-sm text-muted-foreground">
+            When you're ready, press record and recite the full passage from memory.
+          </p>
+        </div>
+        <Card className="border-primary/20">
+          <CardContent className="flex items-center gap-4 py-5">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <FileText className="size-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold">Full Passage</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{wordCount} words · {chunks.length} {chunkMode === "paragraph" ? "paragraph" : "sentence"}{chunks.length !== 1 ? "s" : ""}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Button onClick={startRecording} size="lg" className="w-full gap-2">
+          <Mic className="size-4" />
+          Start Recording
+        </Button>
       </div>
     )
   }

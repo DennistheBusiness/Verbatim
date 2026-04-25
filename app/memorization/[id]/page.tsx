@@ -1,9 +1,9 @@
 "use client"
 
-import { use, useState, useEffect } from "react"
+import { use, useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Header } from "@/components/header"
-import { useMemorization, countWords, type ChunkMode } from "@/lib/memorization-context"
+import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -68,8 +68,11 @@ interface MemorizationDetailPageProps {
 
 export default function MemorizationDetailPage({ params }: MemorizationDetailPageProps) {
   const { id } = use(params)
-  const { getSet, updateChunkMode, isLoaded, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl } = useMemorization()
-  const set = getSet(id)
+  // useSetList for reactive data (re-renders when this set's progress updates)
+  const { isLoaded, sets } = useSetList()
+  // useSetActions for stable mutation callbacks (never change identity)
+  const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl } = useSetActions()
+  const set = sets.find((s) => s.id === id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [familiarizeSubView, setFamiliarizeSubView] = useState<"landing" | "reader">("landing")
@@ -88,20 +91,135 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     }
   }, [set?.id, set?.audioFilePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Text-to-speech player handlers
-  const handleOpenTTSPlayer = () => {
-    setShowTTSPlayer(true)
-  }
+  // ─── Stable callbacks (defined before early returns so useCallback is unconditional) ───
 
-  const handleCloseTTSPlayer = () => {
-    setShowTTSPlayer(false)
-  }
+  const handleOpenTTSPlayer = useCallback(() => setShowTTSPlayer(true), [])
+  const handleCloseTTSPlayer = useCallback(() => setShowTTSPlayer(false), [])
+  const handleChunkModeChange = useCallback((mode: ChunkMode) => {
+    updateChunkMode(id, mode)
+  }, [id, updateChunkMode])
 
-  const handleChunkModeChange = (mode: ChunkMode) => {
-    if (set) {
-      updateChunkMode(set.id, mode)
+  // Encode navigation
+  const startPractice = useCallback((index: number) => {
+    setPracticeChunkIndex(index)
+    setPageMode("practice")
+    updateSessionState(id, { currentStep: "encode", currentChunkIndex: index })
+  }, [id, updateSessionState])
+
+  const exitPractice = useCallback(() => {
+    setPracticeChunkIndex(null)
+    setPageMode("chunk-select")
+  }, [])
+
+  const finishEncoding = useCallback(() => {
+    setPracticeChunkIndex(null)
+    setPageMode("view")
+    updateSessionState(id, { currentStep: null, currentChunkIndex: null, currentEncodeStage: null })
+  }, [id, updateSessionState])
+
+  const continueFromEncodeToTest = useCallback(() => {
+    setPracticeChunkIndex(null)
+    setPageMode("test-select")
+  }, [])
+
+  // Retry / next-chunk handlers for ProgressiveChunkEncoder
+  const handleRetryEntireSelection = useCallback(() => {
+    setPracticeChunkIndex(null)
+    setTimeout(() => setPracticeChunkIndex(-1), 0)
+  }, [])
+
+  const handleNextChunk = useCallback(() => {
+    if (practiceChunkIndex !== null) {
+      const newIndex = practiceChunkIndex + 1
+      setPracticeChunkIndex(newIndex)
+      updateSessionState(id, { currentChunkIndex: newIndex })
     }
-  }
+  }, [practiceChunkIndex, id, updateSessionState])
+
+  const handleRetryChunk = useCallback(() => {
+    const idx = practiceChunkIndex
+    setPracticeChunkIndex(null)
+    setTimeout(() => setPracticeChunkIndex(idx), 0)
+  }, [practiceChunkIndex])
+
+  // Familiarize navigation
+  const handleFamiliarize = useCallback(() => {
+    setPageMode("familiarize")
+    setFamiliarizeSubView("landing")
+    updateSessionState(id, { currentStep: "familiarize", currentChunkIndex: null, currentEncodeStage: null })
+  }, [id, updateSessionState])
+
+  const exitFamiliarize = useCallback(() => {
+    setPageMode("view")
+    updateSessionState(id, { currentStep: null })
+  }, [id, updateSessionState])
+
+  const continueToEncode = useCallback(() => {
+    markFamiliarizeComplete(id)
+    toast.success("Progress saved")
+    setPageMode("chunk-select")
+  }, [id, markFamiliarizeComplete])
+
+  // Flashcard navigation
+  const handleFlashcards = useCallback(() => {
+    setPageMode("flashcards")
+    setShowMarkedOnly(false)
+    updateSessionState(id, { currentStep: "familiarize", currentChunkIndex: 0 })
+  }, [id, updateSessionState])
+
+  const exitFlashcards = useCallback(() => {
+    setPageMode("familiarize")
+    setShowMarkedOnly(false)
+    updateSessionState(id, { currentChunkIndex: null })
+  }, [id, updateSessionState])
+
+  const continueFromFlashcards = useCallback(() => {
+    markFamiliarizeComplete(id)
+    toast.success("Progress saved")
+    setPageMode("chunk-select")
+  }, [id, markFamiliarizeComplete])
+
+  // Encode chunk-select navigation
+  const handleEncode = useCallback(() => {
+    setPageMode("chunk-select")
+    updateSessionState(id, { currentStep: "encode", currentChunkIndex: null, currentEncodeStage: null })
+  }, [id, updateSessionState])
+
+  const exitChunkSelect = useCallback(() => setPageMode("view"), [])
+
+  // Test navigation
+  const handleTest = useCallback(() => {
+    setPageMode("test-select")
+    updateSessionState(id, { currentStep: "test", currentChunkIndex: null, currentEncodeStage: null })
+  }, [id, updateSessionState])
+
+  const exitTestSelect = useCallback(() => setPageMode("view"), [])
+
+  const startFirstLetterTest = useCallback(() => {
+    setPageMode("first-letter-test")
+    updateSessionState(id, { currentStep: "test" })
+  }, [id, updateSessionState])
+
+  const exitFirstLetterTest = useCallback(() => setPageMode("test-select"), [])
+
+  const finishTesting = useCallback(() => {
+    setPageMode("view")
+    updateSessionState(id, { currentStep: null })
+  }, [id, updateSessionState])
+
+  const startTypingTest = useCallback(() => {
+    setPageMode("typing-test")
+    updateSessionState(id, { currentStep: "test" })
+  }, [id, updateSessionState])
+
+  const exitTypingTest = useCallback(() => setPageMode("test-select"), [])
+
+  const startAudioTest = useCallback(() => {
+    setPageMode("audio-test")
+    updateSessionState(id, { currentStep: "test" })
+  }, [id, updateSessionState])
+
+  const exitAudioTest = useCallback(() => setPageMode("test-select"), [])
 
   if (!isLoaded) {
     return (
@@ -144,147 +262,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const chunks = set.chunks
   const wordCount = countWords(set.content)
   const hasContent = chunks.length > 0 && wordCount > 0
-
-  const startPractice = (index: number) => {
-    setPracticeChunkIndex(index)
-    setPageMode("practice")
-    updateSessionState(id, {
-      currentStep: "encode",
-      currentChunkIndex: index,
-    })
-  }
-
-  const exitPractice = () => {
-    setPracticeChunkIndex(null)
-    setPageMode("chunk-select")
-  }
-
-  const finishEncoding = () => {
-    setPracticeChunkIndex(null)
-    setPageMode("view")
-    updateSessionState(id, {
-      currentStep: null,
-      currentChunkIndex: null,
-      currentEncodeStage: null,
-    })
-  }
-
-  const continueFromEncodeToTest = () => {
-    setPracticeChunkIndex(null)
-    setPageMode("test-select")
-  }
-
-  const handleFamiliarize = () => {
-    setPageMode("familiarize")
-    setFamiliarizeSubView("landing")
-    updateSessionState(id, {
-      currentStep: "familiarize",
-      currentChunkIndex: null,
-      currentEncodeStage: null,
-    })
-  }
-
-  const exitFamiliarize = () => {
-    setPageMode("view")
-    updateSessionState(id, {
-      currentStep: null,
-    })
-  }
-
-  const continueToEncode = () => {
-    markFamiliarizeComplete(id)
-    toast.success("Progress saved")
-    setPageMode("chunk-select")
-  }
-
-  const handleFlashcards = () => {
-    setPageMode("flashcards")
-    setShowMarkedOnly(false) // Reset filter when entering
-    updateSessionState(id, {
-      currentStep: "familiarize",
-      currentChunkIndex: 0,
-    })
-  }
-
-  const exitFlashcards = () => {
-    setPageMode("familiarize")
-    setShowMarkedOnly(false) // Reset filter when exiting
-    updateSessionState(id, {
-      currentChunkIndex: null,
-    })
-  }
-
-  const continueFromFlashcards = () => {
-    markFamiliarizeComplete(id)
-    toast.success("Progress saved")
-    setPageMode("chunk-select")
-  }
-
-  const handleEncode = () => {
-    setPageMode("chunk-select")
-    updateSessionState(id, {
-      currentStep: "encode",
-      currentChunkIndex: null,
-      currentEncodeStage: null,
-    })
-  }
-
-  const exitChunkSelect = () => {
-    setPageMode("view")
-  }
-
-  const handleTest = () => {
-    setPageMode("test-select")
-    updateSessionState(id, {
-      currentStep: "test",
-      currentChunkIndex: null,
-      currentEncodeStage: null,
-    })
-  }
-
-  const exitTestSelect = () => {
-    setPageMode("view")
-  }
-
-  const startFirstLetterTest = () => {
-    setPageMode("first-letter-test")
-    updateSessionState(id, {
-      currentStep: "test",
-    })
-  }
-
-  const exitFirstLetterTest = () => {
-    setPageMode("test-select")
-  }
-
-  const finishTesting = () => {
-    setPageMode("view")
-    updateSessionState(id, {
-      currentStep: null,
-    })
-  }
-
-  const startTypingTest = () => {
-    setPageMode("typing-test")
-    updateSessionState(id, {
-      currentStep: "test",
-    })
-  }
-
-  const exitTypingTest = () => {
-    setPageMode("test-select")
-  }
-
-  const startAudioTest = () => {
-    setPageMode("audio-test")
-    updateSessionState(id, {
-      currentStep: "test",
-    })
-  }
-
-  const exitAudioTest = () => {
-    setPageMode("test-select")
-  }
 
   // Helper functions for progress hub
   type StepStatus = "not-started" | "in-progress" | "complete"
@@ -1126,11 +1103,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   if (pageMode === "practice" && practiceChunkIndex !== null) {
     // Handle entire selection mode
     if (practiceChunkIndex === -1) {
-      const handleRetryEntireSelection = () => {
-        setPracticeChunkIndex(null)
-        setTimeout(() => setPracticeChunkIndex(-1), 0)
-      }
-
       return (
         <SessionLayout
           step="Step 2"
@@ -1139,7 +1111,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           onBack={exitPractice}
           showBottomActions={false}
         >
-          <ProgressiveChunkEncoder 
+          <ProgressiveChunkEncoder
             setId={id}
             chunk={set.content}
             chunkIndex={0}
@@ -1154,7 +1126,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     }
 
     const currentChunk = chunks[practiceChunkIndex]
-    
+
     // Guard against invalid chunk index
     if (!currentChunk) {
       return (
@@ -1186,22 +1158,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     }
 
     const hasNextChunk = practiceChunkIndex < chunks.length - 1
-    
-    const handleNextChunk = () => {
-      if (hasNextChunk) {
-        const newIndex = practiceChunkIndex + 1
-        setPracticeChunkIndex(newIndex)
-        updateSessionState(id, {
-          currentChunkIndex: newIndex,
-        })
-      }
-    }
-
-    const handleRetryChunk = () => {
-      // Force re-render by setting to null then back
-      setPracticeChunkIndex(null)
-      setTimeout(() => setPracticeChunkIndex(practiceChunkIndex), 0)
-    }
     
     return (
       <SessionLayout

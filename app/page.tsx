@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, memo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Plus, BookOpen, Search, X, Edit3, HelpCircle,
-  Clock, Check, Sparkles, Target, Mic, ChevronRight,
+  Clock, Check, Sparkles, Target, Mic, ChevronRight, Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -18,7 +18,7 @@ import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
 import { OnboardingTip } from "@/components/onboarding-tip"
 import { LibrarySkeletons } from "@/components/loading-skeletons"
-import { useMemorization, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
+import { useSetList, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
 import { cn } from "@/lib/utils"
@@ -167,11 +167,113 @@ const ACCENT_BORDER: Record<RecommendedStep, string> = {
   test:        "border-l-emerald-400",
 }
 
+// ─── SetCard ──────────────────────────────────────────────────────────────
+
+interface SetCardProps {
+  set: MemorizationSet
+  onNavigate: (id: string) => void
+}
+
+const SetCard = memo(function SetCard({ set, onNavigate }: SetCardProps) {
+  const stepStates = getStepStates(set)
+  const lastPracticed = set.sessionState.lastVisitedAt
+  const wc = countWords(set.content)
+  const bestScore = getBestTestScore(set)
+  const isAllDone = stepStates.every((s) => s === "complete")
+  const hasAudio = !!(set.createdFrom === "voice" || set.audioFilePath)
+
+  return (
+    <Card
+      className={cn(
+        "group overflow-hidden border-l-[3px] transition-all active:scale-[0.99] cursor-pointer touch-manipulation",
+        isAllDone ? "border-l-emerald-400" : ACCENT_BORDER[set.recommendedStep],
+      )}
+      onClick={() => onNavigate(set.id)}
+    >
+      <CardContent className="flex flex-col gap-4 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-bold leading-snug text-foreground line-clamp-2 flex-1 text-[17px] tracking-tight">
+            {set.title}
+          </h3>
+          <NextStepPill recommended={set.recommendedStep} isAllDone={isAllDone} />
+        </div>
+
+        <StepTrack states={stepStates} />
+
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="size-3 shrink-0" />
+              {lastPracticed ? formatDate(lastPracticed) : "New"}
+            </span>
+
+            <span className="text-muted-foreground/30 text-xs">·</span>
+
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {wc} words
+            </span>
+
+            {bestScore !== null && (
+              <>
+                <span className="text-muted-foreground/30 text-xs">·</span>
+                <span
+                  className={cn(
+                    "text-xs font-semibold tabular-nums",
+                    bestScore >= 90 ? "text-emerald-600 dark:text-emerald-400" :
+                    bestScore >= 70 ? "text-amber-600 dark:text-amber-400" :
+                    "text-red-500",
+                  )}
+                >
+                  {bestScore}%
+                </span>
+              </>
+            )}
+
+            {hasAudio && (
+              <Mic className="size-3 text-muted-foreground/50 shrink-0" />
+            )}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 h-7 gap-1 px-2 text-xs opacity-50 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+            asChild
+          >
+            <Link
+              href={`/edit/${set.id}`}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              <Edit3 className="size-3" />
+              Edit
+            </Link>
+          </Button>
+        </div>
+
+        {set.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {set.tags.slice(0, 3).map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-xs h-5 px-2 font-normal">
+                {tag}
+              </Badge>
+            ))}
+            {set.tags.length > 3 && (
+              <Badge variant="secondary" className="text-xs h-5 px-2 font-normal">
+                +{set.tags.length - 3}
+              </Badge>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+})
+
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
   const router = useRouter()
-  const { sets, isLoaded, getAllTags } = useMemorization()
+  const { sets, isLoaded, getAllTags, hasMore, isLoadingMore, loadMore } = useSetList()
   const [showSplash, setShowSplash] = useState(true)
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -395,110 +497,27 @@ export default function HomePage() {
               </Empty>
             ) : (
               <div className="flex flex-col gap-3">
-                {filteredSets.map((set) => {
-                  const stepStates = getStepStates(set)
-                  const lastPracticed = set.sessionState.lastVisitedAt
-                  const wc = countWords(set.content)
-                  const bestScore = getBestTestScore(set)
-                  const isAllDone = stepStates.every((s) => s === "complete")
-                  const hasAudio = !!(set.createdFrom === "voice" || set.audioFilePath)
+                {filteredSets.map((set) => (
+                  <SetCard key={set.id} set={set} onNavigate={(id) => router.push(`/memorization/${id}`)} />
+                ))}
 
-                  return (
-                    <Card
-                      key={set.id}
-                      className={cn(
-                        "group overflow-hidden border-l-[3px] transition-all active:scale-[0.99] cursor-pointer touch-manipulation",
-                        isAllDone ? "border-l-emerald-400" : ACCENT_BORDER[set.recommendedStep],
-                      )}
-                      onClick={() => router.push(`/memorization/${set.id}`)}
-                    >
-                      <CardContent className="flex flex-col gap-4 p-4">
-                        {/* Title + next-step pill */}
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="font-bold leading-snug text-foreground line-clamp-2 flex-1 text-[17px] tracking-tight">
-                            {set.title}
-                          </h3>
-                          <NextStepPill recommended={set.recommendedStep} isAllDone={isAllDone} />
-                        </div>
-
-                        {/* 3-step visual track */}
-                        <StepTrack states={stepStates} />
-
-                        {/* Metadata row */}
-                        <div className="flex items-center justify-between gap-2 pt-0.5">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            {/* Last practiced */}
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="size-3 shrink-0" />
-                              {lastPracticed ? formatDate(lastPracticed) : "New"}
-                            </span>
-
-                            <span className="text-muted-foreground/30 text-xs">·</span>
-
-                            {/* Word count */}
-                            <span className="text-xs text-muted-foreground tabular-nums">
-                              {wc} words
-                            </span>
-
-                            {/* Best score badge */}
-                            {bestScore !== null && (
-                              <>
-                                <span className="text-muted-foreground/30 text-xs">·</span>
-                                <span
-                                  className={cn(
-                                    "text-xs font-semibold tabular-nums",
-                                    bestScore >= 90 ? "text-emerald-600 dark:text-emerald-400" :
-                                    bestScore >= 70 ? "text-amber-600 dark:text-amber-400" :
-                                    "text-red-500",
-                                  )}
-                                >
-                                  {bestScore}%
-                                </span>
-                              </>
-                            )}
-
-                            {/* Audio/voice indicator */}
-                            {hasAudio && (
-                              <Mic className="size-3 text-muted-foreground/50 shrink-0" />
-                            )}
-                          </div>
-
-                          {/* Edit button */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="shrink-0 h-7 gap-1 px-2 text-xs opacity-50 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                            asChild
-                          >
-                            <Link
-                              href={`/edit/${set.id}`}
-                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            >
-                              <Edit3 className="size-3" />
-                              Edit
-                            </Link>
-                          </Button>
-                        </div>
-
-                        {/* Tags */}
-                        {set.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {set.tags.slice(0, 3).map((tag) => (
-                              <Badge key={tag} variant="secondary" className="text-xs h-5 px-2 font-normal">
-                                {tag}
-                              </Badge>
-                            ))}
-                            {set.tags.length > 3 && (
-                              <Badge variant="secondary" className="text-xs h-5 px-2 font-normal">
-                                +{set.tags.length - 3}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
+                {hasMore && !searchQuery && selectedTags.length === 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={loadMore}
+                    disabled={isLoadingMore}
+                    className="w-full gap-2"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                )}
               </div>
             )}
           </>
