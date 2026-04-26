@@ -9,10 +9,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Field, FieldGroup, FieldLabel, FieldDescription } from "@/components/ui/field"
 import { Header } from "@/components/header"
-import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
+import { ContentInputTabs, type InputMethod as InputTab } from "@/components/content-input-tabs"
 import { VoiceRecorder } from "@/components/voice-recorder"
+import { ImageTextExtractor } from "@/components/image-text-extractor"
 import { ChunkPreview } from "@/components/chunk-preview"
-import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
+import { useMemorization, type ChunkMode, type TranscriptWord, type InputMethod } from "@/lib/memorization-context"
 import { FileText, Type, Layers, Wand2, X, Plus } from "lucide-react"
 
 type Step = "form" | "chunking"
@@ -40,7 +41,7 @@ export default function CreatePage() {
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
   const [touched, setTouched] = useState({ title: false, content: false })
-  const [inputMethod, setInputMethod] = useState<InputMethod>("text")
+  const [inputMethod, setInputMethod] = useState<InputTab>("text")
   const [contentSource, setContentSource] = useState<InputMethod>("text")
   const [originalFilename, setOriginalFilename] = useState<string | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
@@ -108,6 +109,13 @@ export default function CreatePage() {
     setTranscriptWords(words)
     setOriginalFilename("voice-recording.webm")
     setContentSource("voice")
+    setInputMethod("text")
+    setTouched(p => ({ ...p, content: true }))
+  }
+
+  const handleImageExtraction = (text: string) => {
+    setContent(text)
+    setContentSource("text")
     setInputMethod("text")
     setTouched(p => ({ ...p, content: true }))
   }
@@ -308,6 +316,9 @@ export default function CreatePage() {
                 }
                 voiceContent={
                   <VoiceRecorder onRecordingComplete={handleVoiceRecording} />
+                }
+                imageContent={
+                  <ImageTextExtractor onComplete={handleImageExtraction} />
                 }
               />
               {touched.content && !isContentValid && (

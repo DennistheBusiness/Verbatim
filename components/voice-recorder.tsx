@@ -357,7 +357,7 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
         <div className="flex flex-col items-center gap-3 py-4 text-center">
           <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm font-medium">Transcribing with AI…</p>
-          <p className="text-xs text-muted-foreground">Groq Whisper is generating an accurate transcript</p>
+          <p className="text-xs text-muted-foreground">Using AI to transcribe your recording</p>
         </div>
       </Card>
     )

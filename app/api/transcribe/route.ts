@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transcrib
     if (!response.ok) {
       const err = await response.text()
       console.error('Groq transcription error:', err)
-      return NextResponse.json({ text: '', words: [], error: `Groq error: ${response.status}` }, { status: 200 })
+      return NextResponse.json({ text: '', words: [], error: 'AI transcription failed. Please try again.' }, { status: 200 })
     }
 
     const data = await response.json()
