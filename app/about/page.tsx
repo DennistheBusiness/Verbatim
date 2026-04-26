@@ -56,9 +56,9 @@ export default function AboutPage() {
 
         {/* The Method */}
         <div className="flex flex-col gap-4">
-          <h2 className="text-2xl font-bold">The First Letter Method</h2>
+          <h2 className="text-2xl font-bold">Memory Techniques</h2>
           <p className="text-muted-foreground">
-            At the heart of Verbatim is the first letter encoding technique — a powerful method proven to enhance recall through progressive revelation.
+            Verbatim is built around a growing toolkit of proven memory techniques. First-letter encoding is one of them — more methods, including mnemonic generation, are on the way.
           </p>
           
           <Card>
@@ -85,10 +85,10 @@ export default function AboutPage() {
               
               <div className="mt-6 space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">How it works:</strong> Your brain sees the first letter as a retrieval cue, triggering recall of the full word. Through 3 progressive levels, we gradually reduce these cues until you can recall the entire text from memory alone.
+                  <strong className="text-foreground">How it works:</strong> Your brain uses the first letter as a retrieval cue, triggering recall of the full word. Three progressive levels gradually reduce those cues until you can recall the entire text from memory alone.
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Why it works:</strong> This method leverages your brain's natural pattern recognition and contextual memory, building strong neural pathways that make recall effortless.
+                  <strong className="text-foreground">Why it works:</strong> First-letter encoding leverages your brain's natural pattern recognition, building strong neural pathways that make recall more reliable under pressure.
                 </p>
               </div>
             </CardContent>

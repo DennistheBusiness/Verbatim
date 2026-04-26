@@ -24,6 +24,9 @@ function createLimiter(requests: number, window: `${number} ${"ms" | "s" | "m" |
 // 20 transcriptions per user per hour — limits Groq spend per user
 export const transcribeLimiter = createLimiter(20, "1 h")
 
+// 30 OCR extractions per user per hour — limits Groq vision spend per user
+export const ocrLimiter = createLimiter(30, "1 h")
+
 // 200 requests per user per minute for admin panel actions
 export const adminLimiter = createLimiter(200, "1 m")
 
