@@ -63,8 +63,8 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
             <Image
               src="/verbatim-logo-icon.png"
               alt="Verbatim"
-              width={32}
-              height={32}
+              width={44}
+              height={44}
               className="shrink-0"
             />
             <div className="flex flex-col">
@@ -82,8 +82,8 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
               <Image
                 src="/verbatim-logo-icon.png"
                 alt="Verbatim"
-                width={22}
-                height={22}
+                width={32}
+                height={32}
                 className="shrink-0"
               />
             </Link>
