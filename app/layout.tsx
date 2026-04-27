@@ -30,12 +30,10 @@ export const metadata: Metadata = {
   generator: 'Verbatim by Squared Thought',
   icons: {
     icon: [
-      {
-        url: '/verbatim-logo-icon.png',
-        type: 'image/png',
-      },
+      { url: '/favicon.png', type: 'image/png' },
     ],
-    apple: '/verbatim-logo-icon.png',
+    apple: { url: '/apple-icon.png', sizes: '180x180' },
+    shortcut: '/favicon.png',
   },
 }
 

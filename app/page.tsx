@@ -328,6 +328,13 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    // ?fresh=1 comes from the OAuth callback — always show splash on fresh login
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("fresh") === "1") {
+      sessionStorage.removeItem("verbatim-splash-seen")
+      window.history.replaceState({}, "", "/")
+      return
+    }
     const hasSeenSplash = sessionStorage.getItem("verbatim-splash-seen")
     if (hasSeenSplash) setShowSplash(false)
   }, [])

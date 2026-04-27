@@ -11,6 +11,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Redirect to home page after successful authentication
-  return NextResponse.redirect(`${origin}/`)
+  // Redirect to home page — fresh=1 tells the client to show the splash
+  return NextResponse.redirect(`${origin}/?fresh=1`)
 }
