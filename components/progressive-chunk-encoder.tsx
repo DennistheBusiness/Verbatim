@@ -470,6 +470,18 @@ export function ProgressiveChunkEncoder({
             </div>
           </div>
 
+          {/* Start CTA at top — visible before scrolling */}
+          {!isLevelComplete && !hasStarted && (
+            <Button
+              onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
+              className="w-full gap-2"
+              size="lg"
+            >
+              <Keyboard className="size-4" />
+              Start Typing
+            </Button>
+          )}
+
           {/* Words display */}
           <div className="flex flex-wrap gap-2">
             {words.map((wordStatus, i) => (
