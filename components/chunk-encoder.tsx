@@ -41,6 +41,7 @@ export function ChunkEncoder({
   const [correctCount, setCorrectCount] = useState(0)
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
+  const [mobileValue, setMobileValue] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
   const initializeWords = useCallback(() => {
@@ -147,14 +148,13 @@ export function ChunkEncoder({
     return null
   }
 
-  // Route mobile keyboard input into the existing key handler
-  const handleMobileInput = (e: React.FormEvent<HTMLInputElement>) => {
-    const data = (e.nativeEvent as InputEvent).data
-    if (data) {
-      const key = data.slice(-1).toLowerCase()
+  const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    if (val.length > 0) {
+      const key = val.slice(-1).toLowerCase()
       if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
     }
-    ;(e.target as HTMLInputElement).value = ""
+    setMobileValue("")
   }
 
   return (
@@ -179,13 +179,13 @@ export function ChunkEncoder({
         {!isComplete && (
           <input
             ref={inputRef}
-            onInput={handleMobileInput}
+            value={mobileValue}
+            onChange={handleMobileChange}
             inputMode="text"
             autoCapitalize="none"
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            defaultValue=""
             placeholder="Tap here to type…"
             className="w-full rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-muted-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary focus:bg-primary/10 focus:ring-0"
           />

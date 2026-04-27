@@ -57,9 +57,11 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
 
   // Refs so the keydown handler always reads the latest values without stale closures
   const currentIndexRef = useRef(0)
-  const lockedRef = useRef(false) // true during the error display delay — blocks double-advance
+  const lockedRef = useRef(false)
   const wordsLengthRef = useRef(0)
-  const hasSavedRef = useRef(false) // prevents the save effect from firing more than once per attempt
+  const hasSavedRef = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [mobileValue, setMobileValue] = useState("")
 
   const initializeWords = useCallback(() => {
     const parsed = parseWords(content)
@@ -166,13 +168,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     if (!isComplete && !isMobile) inputRef.current?.focus()
   }, [isComplete])
 
-  const handleMobileInput = (e: React.FormEvent<HTMLInputElement>) => {
-    const data = (e.nativeEvent as InputEvent).data
-    if (data) {
-      const key = data.slice(-1).toLowerCase()
+  const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    if (val.length > 0) {
+      const key = val.slice(-1).toLowerCase()
       if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
     }
-    ;(e.target as HTMLInputElement).value = ""
+    setMobileValue("")
   }
 
   // Save test score when completed — guard ensures this fires exactly once per attempt
@@ -334,13 +336,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       {/* Tap-to-type input — visible so mobile browsers open the keyboard on tap */}
       <input
         ref={inputRef}
-        onInput={handleMobileInput}
+        value={mobileValue}
+        onChange={handleMobileChange}
         inputMode="text"
         autoCapitalize="none"
         autoCorrect="off"
         autoComplete="off"
         spellCheck={false}
-        defaultValue=""
         placeholder="Tap here to type…"
         className="w-full rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-muted-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary focus:bg-primary/10 focus:ring-0"
       />
