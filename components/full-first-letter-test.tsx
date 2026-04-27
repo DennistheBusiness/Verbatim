@@ -164,13 +164,11 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Auto-focus on desktop only; mobile uses the Start button (user gesture required)
+  // Auto-focus the hidden input on desktop so keydown listeners work immediately.
+  // Does NOT set hasStarted — that requires an explicit tap on the Start button.
   useEffect(() => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    if (!isComplete && !isMobile) {
-      setHasStarted(true)
-      inputRef.current?.focus()
-    }
+    if (!isComplete && !isMobile) inputRef.current?.focus()
   }, [isComplete])
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

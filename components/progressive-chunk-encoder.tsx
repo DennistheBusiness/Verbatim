@@ -220,13 +220,11 @@ export function ProgressiveChunkEncoder({
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Auto-focus on desktop; mobile uses the Start button (user gesture required)
+  // Auto-focus the hidden input on desktop so keydown listeners work immediately.
+  // Does NOT set hasStarted — that requires an explicit tap on the Start button.
   useEffect(() => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    if (!isLevelComplete && !isMobile) {
-      setHasStarted(true)
-      inputRef.current?.focus()
-    }
+    if (!isLevelComplete && !isMobile) inputRef.current?.focus()
   }, [isLevelComplete])
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
