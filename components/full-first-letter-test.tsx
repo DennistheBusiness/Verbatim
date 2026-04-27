@@ -160,9 +160,10 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Auto-focus hidden input for mobile keyboard on mount and after retry
+  // Auto-focus on desktop only; mobile requires a direct user tap to open keyboard
   useEffect(() => {
-    if (!isComplete) inputRef.current?.focus()
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (!isComplete && !isMobile) inputRef.current?.focus()
   }, [isComplete])
 
   const handleMobileInput = (e: React.FormEvent<HTMLInputElement>) => {
@@ -300,20 +301,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
 
   // Test in progress
   return (
-    <div className="flex flex-1 flex-col gap-4" onClick={() => inputRef.current?.focus()}>
-      {/* Hidden input — gives mobile keyboard a target */}
-      <input
-        ref={inputRef}
-        onInput={handleMobileInput}
-        inputMode="text"
-        autoCapitalize="none"
-        autoCorrect="off"
-        autoComplete="off"
-        spellCheck={false}
-        className="absolute opacity-0 w-0 h-0 pointer-events-none"
-        defaultValue=""
-        aria-hidden="true"
-      />
+    <div className="flex flex-1 flex-col gap-4">
       {/* Progress Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
@@ -342,6 +330,20 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       <p className="text-center text-sm text-muted-foreground">
         {currentIndex + 1} of {words.length} words
       </p>
+
+      {/* Tap-to-type input — visible so mobile browsers open the keyboard on tap */}
+      <input
+        ref={inputRef}
+        onInput={handleMobileInput}
+        inputMode="text"
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        defaultValue=""
+        placeholder="Tap here to type…"
+        className="w-full rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-muted-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary focus:bg-primary/10 focus:ring-0"
+      />
 
       {/* Words Display */}
       <Card className="flex-1">

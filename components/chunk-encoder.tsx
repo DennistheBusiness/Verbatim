@@ -134,9 +134,10 @@ export function ChunkEncoder({
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Auto-focus the hidden input so the mobile keyboard is available immediately
+  // Auto-focus on desktop (works); on mobile the user must tap the input area
   useEffect(() => {
-    if (!isComplete) inputRef.current?.focus()
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (!isComplete && !isMobile) inputRef.current?.focus()
   }, [isComplete])
 
   const totalAttempts = correctCount + incorrectCount
@@ -157,21 +158,7 @@ export function ChunkEncoder({
   }
 
   return (
-    <Card onClick={() => inputRef.current?.focus()}>
-      {/* Hidden input — gives mobile keyboard a target to type into */}
-      <input
-        ref={inputRef}
-        onInput={handleMobileInput}
-        inputMode="text"
-        autoCapitalize="none"
-        autoCorrect="off"
-        autoComplete="off"
-        spellCheck={false}
-        className="absolute opacity-0 w-0 h-0 pointer-events-none"
-        readOnly={false}
-        defaultValue=""
-        aria-hidden="true"
-      />
+    <Card>
       <CardContent className="flex flex-col gap-4 py-5">
         <div className="flex items-center gap-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
@@ -187,6 +174,22 @@ export function ChunkEncoder({
             <WordBlock key={i} status={wordStatus} />
           ))}
         </div>
+
+        {/* Tap-to-type input — visible so mobile browsers open the keyboard on tap */}
+        {!isComplete && (
+          <input
+            ref={inputRef}
+            onInput={handleMobileInput}
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            defaultValue=""
+            placeholder="Tap here to type…"
+            className="w-full rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-muted-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary focus:bg-primary/10 focus:ring-0"
+          />
+        )}
 
         {!isComplete && (
           <div className="flex items-center justify-between border-t pt-4 text-sm">
