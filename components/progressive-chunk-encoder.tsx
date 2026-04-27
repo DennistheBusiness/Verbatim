@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
-import { Check, X, Trophy, ArrowRight, Sparkles, Target } from "lucide-react"
+import { Check, X, Trophy, ArrowRight, Sparkles, Target, Keyboard } from "lucide-react"
 import { useMemorization } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import {
@@ -63,6 +63,9 @@ export function ProgressiveChunkEncoder({
   const [correctCount, setCorrectCount] = useState(0)
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isLevelComplete, setIsLevelComplete] = useState(false)
+  const [mobileValue, setMobileValue] = useState("")
+  const [hasStarted, setHasStarted] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Refs so the keydown handler always reads the latest values without stale closures
   const currentIndexRef = useRef(0)
@@ -134,6 +137,7 @@ export function ProgressiveChunkEncoder({
       setCorrectCount(0)
       setIncorrectCount(0)
       setIsLevelComplete(false)
+      setHasStarted(false)
     },
     [chunk]
   )
@@ -215,6 +219,24 @@ export function ProgressiveChunkEncoder({
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
+
+  // Auto-focus on desktop; mobile uses the Start button (user gesture required)
+  useEffect(() => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (!isLevelComplete && !isMobile) {
+      setHasStarted(true)
+      inputRef.current?.focus()
+    }
+  }, [isLevelComplete])
+
+  const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    if (val.length > 0) {
+      const key = val.slice(-1).toLowerCase()
+      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+    }
+    setMobileValue("")
+  }
 
   useEffect(() => {
     if (isLevelComplete) {
@@ -454,6 +476,40 @@ export function ProgressiveChunkEncoder({
               <WordBlock key={i} status={wordStatus} level={currentLevel} />
             ))}
           </div>
+
+          {/* Hidden input captures keyboard input; Start button opens it on mobile */}
+          <input
+            ref={inputRef}
+            value={mobileValue}
+            onChange={handleMobileChange}
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            className="sr-only"
+            aria-hidden="true"
+          />
+
+          {!isLevelComplete && !hasStarted && (
+            <Button
+              onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
+              className="w-full gap-2"
+              size="lg"
+            >
+              <Keyboard className="size-4" />
+              Start Typing
+            </Button>
+          )}
+
+          {!isLevelComplete && hasStarted && (
+            <button
+              onClick={() => inputRef.current?.focus()}
+              className="text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Tap here if keyboard closed
+            </button>
+          )}
 
           {/* Live stats */}
           {!isLevelComplete && (

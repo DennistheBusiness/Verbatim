@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { ResultsScreen } from "@/components/results-screen"
-import { Check, X } from "lucide-react"
+import { Check, X, Keyboard } from "lucide-react"
 
 interface ChunkEncoderProps {
   chunk: string
@@ -42,6 +42,7 @@ export function ChunkEncoder({
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
   const [mobileValue, setMobileValue] = useState("")
+  const [hasStarted, setHasStarted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const initializeWords = useCallback(() => {
@@ -58,6 +59,7 @@ export function ChunkEncoder({
     setCorrectCount(0)
     setIncorrectCount(0)
     setIsComplete(false)
+    setHasStarted(false)
   }, [chunk])
 
   useEffect(() => {
@@ -135,10 +137,13 @@ export function ChunkEncoder({
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
-  // Auto-focus on desktop (works); on mobile the user must tap the input area
+  // Auto-focus on desktop; mobile uses the Start button (user gesture required)
   useEffect(() => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    if (!isComplete && !isMobile) inputRef.current?.focus()
+    if (!isComplete && !isMobile) {
+      setHasStarted(true)
+      inputRef.current?.focus()
+    }
   }, [isComplete])
 
   const totalAttempts = correctCount + incorrectCount
@@ -175,7 +180,7 @@ export function ChunkEncoder({
           ))}
         </div>
 
-        {/* Tap-to-type input — visible so mobile browsers open the keyboard on tap */}
+        {/* Hidden input captures keyboard input; Start button opens it on mobile */}
         {!isComplete && (
           <input
             ref={inputRef}
@@ -186,9 +191,29 @@ export function ChunkEncoder({
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            placeholder="Tap here to type…"
-            className="w-full rounded-lg border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-muted-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary focus:bg-primary/10 focus:ring-0"
+            className="sr-only"
+            aria-hidden="true"
           />
+        )}
+
+        {!isComplete && !hasStarted && (
+          <Button
+            onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
+            className="w-full gap-2"
+            size="lg"
+          >
+            <Keyboard className="size-4" />
+            Start Typing
+          </Button>
+        )}
+
+        {!isComplete && hasStarted && (
+          <button
+            onClick={() => inputRef.current?.focus()}
+            className="text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Tap here if keyboard closed
+          </button>
         )}
 
         {!isComplete && (
