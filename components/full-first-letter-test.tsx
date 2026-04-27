@@ -160,6 +160,20 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
+  // Auto-focus hidden input for mobile keyboard on mount and after retry
+  useEffect(() => {
+    if (!isComplete) inputRef.current?.focus()
+  }, [isComplete])
+
+  const handleMobileInput = (e: React.FormEvent<HTMLInputElement>) => {
+    const data = (e.nativeEvent as InputEvent).data
+    if (data) {
+      const key = data.slice(-1).toLowerCase()
+      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+    }
+    ;(e.target as HTMLInputElement).value = ""
+  }
+
   // Save test score when completed — guard ensures this fires exactly once per attempt
   useEffect(() => {
     if (isComplete && !hasSavedRef.current) {
@@ -286,7 +300,20 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
 
   // Test in progress
   return (
-    <div className="flex flex-1 flex-col gap-4">
+    <div className="flex flex-1 flex-col gap-4" onClick={() => inputRef.current?.focus()}>
+      {/* Hidden input — gives mobile keyboard a target */}
+      <input
+        ref={inputRef}
+        onInput={handleMobileInput}
+        inputMode="text"
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        className="absolute opacity-0 w-0 h-0 pointer-events-none"
+        defaultValue=""
+        aria-hidden="true"
+      />
       {/* Progress Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">

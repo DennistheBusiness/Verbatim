@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { ResultsScreen } from "@/components/results-screen"
@@ -41,6 +41,7 @@ export function ChunkEncoder({
   const [correctCount, setCorrectCount] = useState(0)
   const [incorrectCount, setIncorrectCount] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const initializeWords = useCallback(() => {
     const parsed = parseWords(chunk)
@@ -133,6 +134,11 @@ export function ChunkEncoder({
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [handleKeyPress])
 
+  // Auto-focus the hidden input so the mobile keyboard is available immediately
+  useEffect(() => {
+    if (!isComplete) inputRef.current?.focus()
+  }, [isComplete])
+
   const totalAttempts = correctCount + incorrectCount
   const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
 
@@ -140,8 +146,32 @@ export function ChunkEncoder({
     return null
   }
 
+  // Route mobile keyboard input into the existing key handler
+  const handleMobileInput = (e: React.FormEvent<HTMLInputElement>) => {
+    const data = (e.nativeEvent as InputEvent).data
+    if (data) {
+      const key = data.slice(-1).toLowerCase()
+      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+    }
+    ;(e.target as HTMLInputElement).value = ""
+  }
+
   return (
-    <Card>
+    <Card onClick={() => inputRef.current?.focus()}>
+      {/* Hidden input — gives mobile keyboard a target to type into */}
+      <input
+        ref={inputRef}
+        onInput={handleMobileInput}
+        inputMode="text"
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        className="absolute opacity-0 w-0 h-0 pointer-events-none"
+        readOnly={false}
+        defaultValue=""
+        aria-hidden="true"
+      />
       <CardContent className="flex flex-col gap-4 py-5">
         <div className="flex items-center gap-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
