@@ -67,8 +67,8 @@ export function SessionLayout({
             <Image
               src="/verbatim-logo-icon.png"
               alt="Verbatim"
-              width={36}
-              height={36}
+              width={44}
+              height={44}
               className="shrink-0"
             />
             <span className="text-base font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
