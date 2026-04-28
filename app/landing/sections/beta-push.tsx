@@ -6,7 +6,7 @@ import { GoldButton } from "../components/gold-button"
 const VERBATIM_URL = "https://verbatim.squaredthought.com/auth/signup"
 
 const benefits = [
-  "Free during beta — no credit card",
+  "Free during beta no credit card",
   "Be part of the first cohort",
   "Help shape the product",
 ]

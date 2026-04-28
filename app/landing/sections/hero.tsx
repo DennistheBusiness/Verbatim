@@ -81,7 +81,7 @@ export function HeroSection() {
           transition={{ duration: 0.7, delay: 1.1 }}
           className="max-w-xl text-lg leading-relaxed text-[#7a7570]"
         >
-          A system for memorizing speeches, ceremonies, and ideas — without relying on notes.
+          A system for memorizing speeches, ceremonies, and ideas without relying on notes.
         </motion.p>
 
         {/* CTAs */}

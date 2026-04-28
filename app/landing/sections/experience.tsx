@@ -81,7 +81,7 @@ export function ExperienceSection() {
             <div className="flex flex-col gap-3">
               {[
                 "Words arriving without thinking.",
-                "Presence — not performance anxiety.",
+                "Presence not performance anxiety.",
                 "The room is yours.",
                 "You practiced the right way.",
               ].map((line, i) => (
