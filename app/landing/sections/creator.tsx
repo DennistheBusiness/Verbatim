@@ -18,7 +18,7 @@ export function CreatorSection() {
               fontStyle: "italic",
             }}
           >
-            "Built from real experience speaking under pressure — in lodge rooms, at podiums, and in moments where there&apos;s no safety net."
+            "Built from real experience speaking under pressure - in lodge rooms, at podiums, and in moments where there&apos;s no safety net."
           </blockquote>
         </AnimateIn>
 
