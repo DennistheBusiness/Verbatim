@@ -20,12 +20,11 @@ if (typeof window !== 'undefined') {
     advanced_disable_feature_flags: true,
     advanced_disable_feature_flags_on_first_load: true,
     disable_surveys: true,
+    flush_interval_ms: 2000,
     loaded: (ph) => {
       console.log('[PostHog] ✅ Initialized — distinct_id:', ph.get_distinct_id())
       console.log('[PostHog] Config — api_host:', ph.config.api_host, '| key:', ph.config.token?.slice(0, 8) + '...')
-      if (process.env.NODE_ENV === 'development') {
-        ph.debug()
-      }
+      ph.debug() // temp: enabled in all envs to diagnose missing events
     },
   })
 }
