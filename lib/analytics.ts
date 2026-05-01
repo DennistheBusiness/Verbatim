@@ -34,7 +34,8 @@ export function initializeAnalytics(): void {
   
   try {
     posthog.init(apiKey, {
-      api_host: apiHost || 'https://us.i.posthog.com',
+      api_host: '/ingest',           // proxy through our domain — bypasses ad blockers
+      ui_host: 'https://us.posthog.com', // PostHog dashboard link target
       person_profiles: 'always',
       loaded: (posthog) => {
         if (process.env.NODE_ENV === 'development') {

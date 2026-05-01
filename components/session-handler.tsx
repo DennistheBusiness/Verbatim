@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { identifyUser, resetUser } from '@/lib/analytics'
 
 /**
  * SessionHandler component
@@ -50,7 +51,7 @@ export function SessionHandler() {
 
       switch (event) {
         case 'SIGNED_OUT':
-          // Only show toast if user was previously signed in
+          resetUser()
           if (pathname !== '/auth/login') {
             toast.info('You have been signed out')
           }
@@ -58,22 +59,20 @@ export function SessionHandler() {
           break
 
         case 'TOKEN_REFRESHED':
-          console.log('✅ Session token refreshed')
           break
 
         case 'USER_UPDATED':
-          console.log('👤 User profile updated')
           break
 
         case 'PASSWORD_RECOVERY':
-          console.log('🔑 Password recovery initiated')
-          // Redirect to reset password page when user clicks email link
           router.push('/auth/reset-password')
           break
 
         case 'SIGNED_IN':
-          console.log('✅ User signed in')
-          // Redirect to home after login, but keep user on reset-password page
+          // Covers Google OAuth — email login identifies in the login page handler
+          if (session?.user) {
+            identifyUser(session.user.id, { email: session.user.email ?? undefined })
+          }
           if (pathname.startsWith('/auth/') && pathname !== '/auth/reset-password') {
             router.push('/')
           }

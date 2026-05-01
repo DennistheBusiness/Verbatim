@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import { trackEvent, identifyUser } from '@/lib/analytics'
+import { USER_LOGGED_IN } from '@/lib/analytics-events'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -20,9 +22,11 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) { toast.error(error.message) }
       else {
+        if (data.user) identifyUser(data.user.id, { email: data.user.email })
+        trackEvent(USER_LOGGED_IN, { method: 'email' })
         sessionStorage.removeItem("verbatim-splash-seen")
         window.location.href = '/'
       }
