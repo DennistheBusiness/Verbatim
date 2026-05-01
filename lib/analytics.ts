@@ -2,72 +2,11 @@
 
 import posthog from 'posthog-js'
 
-/**
- * Analytics Utility
- * 
- * Centralized wrapper for PostHog analytics.
- * Provides type-safe event tracking with graceful fallbacks.
- * 
- * @see lib/analytics-events.ts for event constants
- */
+// PostHog is initialized in components/posthog-provider.tsx at module level.
+// These helpers wrap posthog calls with SSR guards and dev logging.
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
-let isInitialized = false
-
-/**
- * Initialize PostHog client
- * Call this once in the root layout
- */
-export function initializeAnalytics(): void {
-  if (isInitialized) return
-  
-  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
-  const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST
-  
-  if (!apiKey || typeof window === 'undefined') {
-    console.warn('[Analytics] PostHog not initialized - missing API key or running in SSR')
-    return
-  }
-  
-  try {
-    posthog.init(apiKey, {
-      api_host: '/ingest',           // proxy through our domain — bypasses ad blockers
-      ui_host: 'https://us.posthog.com', // PostHog dashboard link target
-      person_profiles: 'always',
-      loaded: (posthog) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[Analytics] PostHog initialized successfully')
-          posthog.debug() // Enable debug mode in development
-        }
-      },
-      capture_pageview: false, // We'll manually capture pageviews
-      capture_pageleave: true, // Track when users leave pages
-      autocapture: false, // Disable automatic event capture for cleaner data
-      
-      // Privacy settings
-      disable_session_recording: true, // No session recording
-      disable_persistence: false, // Allow cookies for session tracking
-      
-      // Feature flags - disable to prevent 401 errors on free tier
-      advanced_disable_feature_flags: true, // Not using feature flags yet
-      advanced_disable_feature_flags_on_first_load: true,
-      disable_surveys: true, // Not using surveys
-    })
-    
-    isInitialized = true
-  } catch (error) {
-    console.error('[Analytics] Failed to initialize PostHog:', error)
-  }
-}
-
-/**
- * Check if analytics is available and initialized
- */
-export function isAnalyticsEnabled(): boolean {
-  return isInitialized && typeof window !== 'undefined' && posthog !== undefined
+function isAnalyticsEnabled(): boolean {
+  return typeof window !== 'undefined'
 }
 
 // ============================================================================
@@ -83,7 +22,7 @@ export function isAnalyticsEnabled(): boolean {
  */
 export function identifyUser(userId: string, properties?: Record<string, any>): void {
   if (!isAnalyticsEnabled()) return
-  
+
   try {
     posthog.identify(userId, {
       ...properties,
@@ -91,12 +30,9 @@ export function identifyUser(userId: string, properties?: Record<string, any>): 
         signup_date: properties?.signup_date || new Date().toISOString(),
       },
     })
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Analytics] User identified:', userId, properties)
-    }
+    console.log('[PostHog] 👤 User identified:', userId.slice(0, 8) + '...')
   } catch (error) {
-    console.error('[Analytics] Failed to identify user:', error)
+    console.error('[PostHog] ❌ Failed to identify user:', error)
   }
 }
 
@@ -105,15 +41,12 @@ export function identifyUser(userId: string, properties?: Record<string, any>): 
  */
 export function resetUser(): void {
   if (!isAnalyticsEnabled()) return
-  
+
   try {
     posthog.reset()
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Analytics] User identity reset')
-    }
+    console.log('[PostHog] 🔓 User identity reset')
   } catch (error) {
-    console.error('[Analytics] Failed to reset user:', error)
+    console.error('[PostHog] ❌ Failed to reset user:', error)
   }
 }
 
@@ -145,18 +78,15 @@ export function updateUserProperties(properties: Record<string, any>): void {
  */
 export function trackEvent(eventName: string, properties?: Record<string, any>): void {
   if (!isAnalyticsEnabled()) return
-  
+
   try {
     posthog.capture(eventName, {
       ...properties,
       timestamp: new Date().toISOString(),
     })
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Analytics] Event tracked:', eventName, properties)
-    }
+    console.log('[PostHog] 📊 Event captured:', eventName, properties ?? '')
   } catch (error) {
-    console.error('[Analytics] Failed to track event:', error)
+    console.error('[PostHog] ❌ Failed to capture event:', eventName, error)
   }
 }
 
