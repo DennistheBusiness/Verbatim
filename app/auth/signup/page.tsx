@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import { trackEvent, identifyUser } from '@/lib/analytics'
+import { USER_SIGNED_UP } from '@/lib/analytics-events'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -34,9 +36,16 @@ export default function SignupPage() {
       if (error) {
         toast.error(error.message)
       } else if (data.session) {
+        if (data.user) {
+          identifyUser(data.user.id, { email: data.user.email, signup_date: data.user.created_at })
+          trackEvent(USER_SIGNED_UP, { method: 'email' })
+        }
         toast.success('Account created!')
         router.push('/onboarding')
       } else {
+        if (data.user) {
+          trackEvent(USER_SIGNED_UP, { method: 'email' })
+        }
         toast.success('Account created! Please check your email to confirm.')
         router.push('/auth/login')
       }

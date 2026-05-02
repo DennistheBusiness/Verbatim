@@ -10,7 +10,7 @@ const features = [
   {
     icon: Layers,
     name: "Chunking",
-    desc: "Break any text into pieces your brain can hold — paragraphs, sentences, or lines.",
+    desc: "Break any text into pieces your brain can hold paragraphs, sentences, or lines.",
   },
   {
     icon: Type,

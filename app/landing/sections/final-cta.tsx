@@ -17,7 +17,7 @@ export function FinalCtaSection() {
         }}
       />
 
-      {/* Geometric mesh — very subtle */}
+      {/* Geometric mesh very subtle */}
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
         style={{ opacity: 0.03 }}

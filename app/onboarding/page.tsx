@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, Mic, Star, Upload, Zap } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
-import { BookOpen, CheckCircle2, ArrowRight, Brain, Lightbulb, Zap, Layers, BookMarked, Mic, Star, Eye, Target } from "lucide-react"
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -11,13 +12,10 @@ export default function OnboardingPage() {
   const [touchStart, setTouchStart] = useState(0)
   const [touchEnd, setTouchEnd] = useState(0)
 
-  const totalSteps = 4 // 0-4 = 5 screens
+  const totalSteps = 3 // 0-3 = 4 screens
 
   const handleComplete = () => {
-    // Set the flag so onboarding won't show again
     localStorage.setItem("hasSeenOnboarding", "true")
-    
-    // Navigate to library
     router.push("/")
   }
 
@@ -31,16 +29,17 @@ export default function OnboardingPage() {
     }
   }
 
+  const handleBack = () => {
+    if (step > 0) {
+      setStep(step - 1)
+    }
+  }
+
   const handleCreateFirst = () => {
     localStorage.setItem("hasSeenOnboarding", "true")
     router.push("/create")
   }
 
-  const handleGoToLibrary = () => {
-    handleComplete()
-  }
-
-  // Swipe gesture handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(e.targetTouches[0].clientX)
   }
@@ -51,502 +50,364 @@ export default function OnboardingPage() {
 
   const handleTouchEnd = () => {
     if (!touchStart || !touchEnd) return
-    
+
     const distance = touchStart - touchEnd
     const isLeftSwipe = distance > 50
     const isRightSwipe = distance < -50
-    
+
     if (isLeftSwipe && step < totalSteps) {
       handleContinue()
     }
+
     if (isRightSwipe && step > 0) {
-      setStep(step - 1)
+      handleBack()
     }
-    
-    // Reset
+
     setTouchStart(0)
     setTouchEnd(0)
   }
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' && step < totalSteps) {
+      if (e.key === "ArrowRight" && step < totalSteps) {
         handleContinue()
       }
-      if (e.key === 'ArrowLeft' && step > 0) {
-        setStep(step - 1)
+
+      if (e.key === "ArrowLeft" && step > 0) {
+        handleBack()
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
   }, [step])
 
-  // Progress indicator component
   const ProgressDots = () => (
     <div className="flex justify-center gap-2">
       {[...Array(totalSteps + 1)].map((_, i) => (
-        <div 
+        <div
           key={i}
           className={`size-2 rounded-full transition-all ${
-            i === step ? 'bg-primary w-6' : 'bg-muted'
+            i === step ? "bg-primary w-6" : "bg-muted"
           }`}
         />
       ))}
     </div>
   )
 
-  // Step 0: Welcome + Target Audiences
-  if (step === 0) {
-    return (
-      <div 
-        className="flex min-h-svh flex-col bg-background"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8 overflow-y-auto">
-          <div className="w-full max-w-3xl flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700 py-8">
-            
-            <ProgressDots />
-            
-            {/* Visual */}
-            <div className="flex justify-center">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-blue-500/20 to-green-500/20 blur-2xl" />
-                <div className="relative flex size-32 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/10 to-green-500/10 border-2 border-primary/20">
-                  <Brain className="size-16 text-primary" strokeWidth={1.5} />
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex flex-col gap-3 text-center">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">
-                Welcome to Verbatim
-              </h1>
-              <p className="text-base text-muted-foreground leading-relaxed max-w-2xl mx-auto">
-                Master any text with a proven 3-step memorization system designed to make recall effortless.
-              </p>
-            </div>
-
-            {/* Target Audiences Section */}
-            <div className="flex flex-col gap-4">
-              <h2 className="text-xl font-bold text-center">Perfect For</h2>
-              
-              <div className="grid sm:grid-cols-2 gap-4">
-                {/* Performers */}
-                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-pink-500/5 p-6 transition-all hover:shadow-lg hover:shadow-pink-500/10 hover:border-pink-500/30">
-                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-pink-500/10 to-purple-500/10 blur-2xl transition-all group-hover:scale-150" />
-                  <div className="relative flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">🎭</span>
-                      <h3 className="text-lg font-semibold">Performers</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Actors, speakers, and presenters memorizing scripts and speeches
-                    </p>
-                  </div>
-                </div>
-
-                {/* Students */}
-                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-blue-500/5 via-cyan-500/5 to-blue-500/5 p-6 transition-all hover:shadow-lg hover:shadow-blue-500/10 hover:border-blue-500/30">
-                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-blue-500/10 to-cyan-500/10 blur-2xl transition-all group-hover:scale-150" />
-                  <div className="relative flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">📚</span>
-                      <h3 className="text-lg font-semibold">Students</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Learning poems, historical documents, or presentation material
-                    </p>
-                  </div>
-                </div>
-
-                {/* Public Speakers */}
-                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-orange-500/5 via-red-500/5 to-orange-500/5 p-6 transition-all hover:shadow-lg hover:shadow-orange-500/10 hover:border-orange-500/30">
-                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-orange-500/10 to-red-500/10 blur-2xl transition-all group-hover:scale-150" />
-                  <div className="relative flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">🎤</span>
-                      <h3 className="text-lg font-semibold">Public Speakers</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Mastering keynotes, toasts, and important addresses
-                    </p>
-                  </div>
-                </div>
-
-                {/* Professionals */}
-                <div className="group relative overflow-hidden rounded-xl border bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-green-500/5 p-6 transition-all hover:shadow-lg hover:shadow-green-500/10 hover:border-green-500/30">
-                  <div className="absolute -right-8 -top-8 size-24 rounded-full bg-gradient-to-br from-green-500/10 to-emerald-500/10 blur-2xl transition-all group-hover:scale-150" />
-                  <div className="relative flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">⚖️</span>
-                      <h3 className="text-lg font-semibold">Professionals</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Lawyers, teachers, and anyone who needs word-perfect recall
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3 pt-4">
-              <Button 
-                size="lg" 
-                className="w-full gap-2"
-                onClick={handleContinue}
-              >
-                Show Me How
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="lg"
-                className="w-full text-muted-foreground"
-                onClick={handleSkip}
-              >
-                Skip Introduction
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  // Step 1: The 3-Step System
-  if (step === 1) {
-    return (
-      <div 
-        className="flex min-h-svh flex-col bg-background"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8">
-          <div className="w-full max-w-md flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            
-            <ProgressDots />
-            
-            {/* Visual - Step Diagram */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-blue-500/10 border-2 border-blue-500/30">
-                  <Eye className="size-6 text-blue-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-semibold text-foreground">Step 1: Familiarize</h3>
-                  <p className="text-sm text-muted-foreground">Read & understand your material</p>
-                </div>
-              </div>
-              
-              <div className="pl-6 border-l-2 border-muted h-4" />
-              
-              <div className="flex items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-purple-500/10 border-2 border-purple-500/30">
-                  <Brain className="size-6 text-purple-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-semibold text-foreground">Step 2: Encode</h3>
-                  <p className="text-sm text-muted-foreground">Build memory with the first letter method</p>
-                </div>
-              </div>
-              
-              <div className="pl-6 border-l-2 border-muted h-4" />
-              
-              <div className="flex items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-green-500/10 border-2 border-green-500/30">
-                  <Target className="size-6 text-green-600" />
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="font-semibold text-foreground">Step 3: Test</h3>
-                  <p className="text-sm text-muted-foreground">Prove your recall with multiple test modes</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex flex-col gap-3 text-center">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                Three simple steps to mastery
-              </h2>
-              <p className="text-base text-muted-foreground leading-relaxed">
-                Each step builds on the last, training your brain to remember exactly what you need.
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3">
-              <Button 
-                size="lg" 
-                className="w-full gap-2"
-                onClick={handleContinue}
-              >
-                Learn the Method
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={handleSkip}
-              >
-                Skip
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  // Step 2: The First Letter Method
-  if (step === 2) {
-    return (
-      <div 
-        className="flex min-h-svh flex-col bg-background"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8">
-          <div className="w-full max-w-md flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            
-            <ProgressDots />
-            
-            {/* Visual Example */}
-            <div className="flex flex-col gap-4 p-4 bg-muted/30 rounded-xl border">
-              <div className="flex items-start gap-2">
-                <Lightbulb className="size-5 text-amber-500 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground mb-2">Original Text:</p>
-                  <p className="text-sm text-muted-foreground">
-                    "To be or not to be, that is the question"
-                  </p>
-                </div>
-              </div>
-              
-              <div className="h-px bg-border" />
-              
-              <div className="flex items-start gap-2">
-                <Zap className="size-5 text-blue-500 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground mb-2">First Letters:</p>
-                  <div className="font-mono text-lg tracking-wider text-primary">
-                    T b o n t b, t i t q
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex flex-col gap-3 text-center">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                The First Letter Method
-              </h2>
-              <p className="text-base text-muted-foreground leading-relaxed">
-                Start by seeing first letters, then gradually reveal less until you can recall the entire text from memory. It's like training wheels for your brain.
-              </p>
-            </div>
-            
-            {/* Key Points */}
-            <div className="flex flex-col gap-3 text-left bg-primary/5 p-4 rounded-lg border border-primary/10">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="size-4 text-primary shrink-0 mt-1" />
-                <p className="text-sm text-foreground">
-                  <strong>3 progressive levels</strong> — Build confidence gradually
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="size-4 text-primary shrink-0 mt-1" />
-                <p className="text-sm text-foreground">
-                  <strong>Chunk-by-chunk</strong> — Master one piece at a time
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="size-4 text-primary shrink-0 mt-1" />
-                <p className="text-sm text-foreground">
-                  <strong>Proven technique</strong> — Used by memory champions
-                </p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3">
-              <Button 
-                size="lg" 
-                className="w-full gap-2"
-                onClick={handleContinue}
-              >
-                See Features
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={handleSkip}
-              >
-                Skip
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  // Step 3: Key Features
-  if (step === 3) {
-    return (
-      <div 
-        className="flex min-h-svh flex-col bg-background"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8">
-          <div className="w-full max-w-md flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            
-            <ProgressDots />
-
-            {/* Content */}
-            <div className="flex flex-col gap-3 text-center">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                Everything you need to succeed
-              </h2>
-              <p className="text-base text-muted-foreground leading-relaxed">
-                Powerful features designed to make memorization effortless.
-              </p>
-            </div>
-            
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-2 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex size-10 items-center justify-center rounded-full bg-blue-500/10">
-                  <BookMarked className="size-5 text-blue-600" />
-                </div>
-                <h3 className="font-semibold text-sm">Flashcard Mode</h3>
-                <p className="text-xs text-muted-foreground">
-                  Swipe through chunks, bookmark favorites
-                </p>
-              </div>
-              
-              <div className="flex flex-col gap-2 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex size-10 items-center justify-center rounded-full bg-purple-500/10">
-                  <Mic className="size-5 text-purple-600" />
-                </div>
-                <h3 className="font-semibold text-sm">Audio Recall</h3>
-                <p className="text-xs text-muted-foreground">
-                  Record yourself, get instant feedback
-                </p>
-              </div>
-              
-              <div className="flex flex-col gap-2 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex size-10 items-center justify-center rounded-full bg-green-500/10">
-                  <Layers className="size-5 text-green-600" />
-                </div>
-                <h3 className="font-semibold text-sm">Smart Chunking</h3>
-                <p className="text-xs text-muted-foreground">
-                  Auto-split by paragraph, sentence, or custom
-                </p>
-              </div>
-              
-              <div className="flex flex-col gap-2 p-4 bg-muted/30 rounded-lg border">
-                <div className="flex size-10 items-center justify-center rounded-full bg-amber-500/10">
-                  <Star className="size-5 text-amber-600" />
-                </div>
-                <h3 className="font-semibold text-sm">Progress Tracking</h3>
-                <p className="text-xs text-muted-foreground">
-                  See your mastery level at a glance
-                </p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3">
-              <Button 
-                size="lg" 
-                className="w-full gap-2"
-                onClick={handleContinue}
-              >
-                Get Started
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="w-full text-muted-foreground"
-                onClick={handleSkip}
-              >
-                Skip
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  // Step 4: Final - Get Started
-  return (
-    <div 
+  const ScreenShell = ({
+    children,
+    maxWidth = "max-w-3xl",
+  }: {
+    children: React.ReactNode
+    maxWidth?: string
+  }) => (
+    <div
       className="flex min-h-svh flex-col bg-background"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <main className="flex flex-1 flex-col items-center justify-center p-4 pb-8">
-        <div className="w-full max-w-md flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          
+      <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-4 pb-8">
+        <div className={`flex w-full flex-col gap-6 py-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ${maxWidth}`}>
+          <div className="flex items-center justify-between gap-3">
+            {step > 0 ? (
+              <Button variant="ghost" size="sm" className="gap-1" onClick={handleBack}>
+                <ChevronLeft className="size-4" />
+                Back
+              </Button>
+            ) : (
+              <div className="w-16" />
+            )}
+
+            <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Step {step + 1} of {totalSteps + 1}
+            </span>
+
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleSkip}>
+              Skip
+            </Button>
+          </div>
+
           <ProgressDots />
-          
-          {/* Visual */}
-          <div className="flex justify-center">
-            <div className="relative flex items-center justify-center">
-              <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-blue-500/20 to-green-500/20 blur-2xl" />
-              <div className="relative flex size-32 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/10 to-green-500/10 border-2 border-primary/20">
-                <BookOpen className="size-16 text-primary" strokeWidth={1.5} />
-              </div>
-            </div>
-          </div>
 
-          {/* Content */}
-          <div className="flex flex-col gap-3 text-center">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Ready to start memorizing?
-            </h2>
-            <p className="text-base text-muted-foreground leading-relaxed">
-              Create your first memorization set and experience the power of structured learning.
-            </p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-3">
-            <Button 
-              size="lg" 
-              className="w-full gap-2 brand-gradient-bg hover:opacity-90 transition-opacity"
-              onClick={handleCreateFirst}
-            >
-              <CheckCircle2 className="size-5" />
-              Create Your First Set
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="lg"
-              className="w-full text-muted-foreground"
-              onClick={handleGoToLibrary}
-            >
-              Browse Library
-            </Button>
-          </div>
+          {children}
         </div>
       </main>
     </div>
+  )
+
+  if (step === 0) {
+    return (
+      <ScreenShell>
+        <div className="flex justify-center">
+          <div className="relative flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-green-500/20 blur-2xl" />
+            <div className="relative flex size-28 items-center justify-center rounded-full border-2 border-primary/20 bg-gradient-to-br from-blue-500/10 to-green-500/10">
+              <Brain className="size-14 text-primary" strokeWidth={1.5} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 text-center">
+          <p className="text-sm font-medium text-primary">Who Verbatim is for</p>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Built for subscribers who need reliable, word-for-word recall
+          </h1>
+          <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Verbatim is for people learning scripts, speeches, passages, and presentations who want a clear system instead of guessing what to practice next.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-pink-500/5 p-5">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-3xl">🎭</span>
+              <h2 className="text-lg font-semibold">Performers</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Memorize monologues, scenes, and lyrics without losing the exact wording.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-gradient-to-br from-orange-500/5 via-red-500/5 to-orange-500/5 p-5">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-3xl">🎤</span>
+              <h2 className="text-lg font-semibold">Speakers</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Practice keynotes, sermons, toasts, and talks until delivery feels automatic.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-gradient-to-br from-blue-500/5 via-cyan-500/5 to-blue-500/5 p-5">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-3xl">📚</span>
+              <h2 className="text-lg font-semibold">Students</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Learn poems, source texts, quotations, and presentation material in manageable chunks.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-gradient-to-br from-green-500/5 via-emerald-500/5 to-green-500/5 p-5">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-3xl">⚖️</span>
+              <h2 className="text-lg font-semibold">Professionals</h2>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Keep testimony, teaching, and client-facing language sharp when precision matters.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-primary/5 p-4 text-left">
+          <p className="text-sm text-foreground">
+            <strong>Best fit:</strong> you already know what you need to memorize and want help turning it into a repeatable practice routine.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 pt-2">
+          <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
+            Show core features
+            <ArrowRight className="size-4" />
+          </Button>
+          <p className="text-center text-sm text-muted-foreground">
+            This tour stays short, and you can skip it anytime.
+          </p>
+        </div>
+      </ScreenShell>
+    )
+  }
+
+  if (step === 1) {
+    return (
+      <ScreenShell maxWidth="max-w-4xl">
+        <div className="flex flex-col gap-3 text-center">
+          <p className="text-sm font-medium text-primary">Core features</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            The app gives you three tools that matter most
+          </h2>
+          <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground">
+            You do not need to learn every screen up front. These are the features subscribers use first to start memorizing quickly.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-5">
+            <div className="flex size-12 items-center justify-center rounded-full bg-blue-500/10">
+              <Upload className="size-6 text-blue-600" />
+            </div>
+            <h3 className="text-lg font-semibold">Bring material in fast</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Paste text or build a set from PDFs, images, and audio so you can start practicing without manual cleanup.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-5">
+            <div className="flex size-12 items-center justify-center rounded-full bg-purple-500/10">
+              <Zap className="size-6 text-purple-600" />
+            </div>
+            <h3 className="text-lg font-semibold">Practice with progressive cues</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              First-letter encoding and chunked practice help you reduce support gradually instead of jumping straight to full recall.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-5">
+            <div className="flex size-12 items-center justify-center rounded-full bg-green-500/10">
+              <Mic className="size-6 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold">Test and track recall</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Use flashcards, audio recall, and progress tracking to see what is solid and what still needs work.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-background/80 p-4">
+          <div className="flex items-start gap-3">
+            <Star className="mt-0.5 size-5 shrink-0 text-amber-500" />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Start with one set, one chunking style, and one test mode. You can add more once your routine feels natural.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
+            Show me how it works
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      </ScreenShell>
+    )
+  }
+
+
+  if (step === 2) {
+    return (
+      <ScreenShell maxWidth="max-w-3xl">
+        <div className="flex flex-col gap-3 text-center">
+          <p className="text-sm font-medium text-primary">How to use the app</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            One loop, three moves. Repeat until it sticks.
+          </h2>
+          <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Every practice session follows the same cycle: familiarize, encode progressively, then recall from memory.
+          </p>
+        </div>
+
+        {/* Workflow steps */}
+        <div className="flex flex-col gap-4 rounded-2xl border bg-muted/20 p-5 sm:p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-sm font-semibold text-blue-600">1</div>
+            <div className="flex-1 space-y-1">
+              <h3 className="font-semibold">Create a set and split it into chunks</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">Paste your script, speech, or passage. Split it by paragraph, sentence, or line — one chunk at a time is all you practice.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-sm font-semibold text-purple-600">2</div>
+            <div className="flex-1 space-y-1">
+              <h3 className="font-semibold">Encode using the first letter of every word</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Each word is replaced by its first letter as a cue. You say the{" "}
+                <strong className="text-foreground">full word out loud</strong> — the letter just prompts your memory.
+                The display gets progressively harder:{" "}
+                <span className="text-foreground">full text → first letters → blank</span>.
+                Each level trains deeper recall.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-sm font-semibold text-green-600">3</div>
+            <div className="flex-1 space-y-1">
+              <h3 className="font-semibold">Test recall with no cues</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">Say or record the full chunk from memory. Mark what was hard and revisit it next session.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* First letter example */}
+        <div className="rounded-2xl border bg-muted/20 p-5 sm:p-6">
+          <p className="mb-4 text-sm font-medium text-foreground">How encoding works — live example</p>
+          <div className="flex flex-col gap-3">
+            <div className="rounded-xl border bg-background p-4">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Level 1 — Full text</p>
+              <p className="text-sm text-foreground">&quot;To be or not to be, that is the question.&quot;</p>
+            </div>
+            <div className="rounded-xl border bg-background p-4">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Level 2 — First letters only (you still say every word)</p>
+              <p className="font-mono text-lg tracking-wider text-primary">T b o n t b, t i t q</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                You see <span className="font-mono text-primary">T</span> and say <em>&quot;To&quot;</em>, see{" "}
+                <span className="font-mono text-primary">b</span> and say <em>&quot;be&quot;</em> — the letter cues your memory, it does not replace the word.
+              </p>
+            </div>
+            <div className="rounded-xl border bg-background p-4">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Level 3 — Blank (pure recall from memory)</p>
+              <p className="font-mono text-lg tracking-wider text-muted-foreground/40">_ _ _ _ _ _, _ _ _ _</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-primary/5 p-4">
+          <p className="text-sm text-foreground">
+            <strong>Key point:</strong> you are always memorizing the full text. The first letters are training wheels that you gradually remove until you can recall everything without them.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
+            I&apos;m ready to start
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      </ScreenShell>
+    )
+  }
+
+  return (
+    <ScreenShell maxWidth="max-w-md">
+      <div className="flex justify-center">
+        <div className="relative flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-green-500/20 blur-2xl" />
+          <div className="relative flex size-28 items-center justify-center rounded-full border-2 border-primary/20 bg-gradient-to-br from-blue-500/10 to-green-500/10">
+            <BookOpen className="size-14 text-primary" strokeWidth={1.5} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 text-center">
+        <p className="text-sm font-medium text-primary">Start here</p>
+        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          You’re ready to use the app
+        </h2>
+        <p className="text-base leading-relaxed text-muted-foreground">
+          Create one set and run one practice cycle. That is enough to feel how Verbatim works.
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-muted/20 p-4 text-left">
+        <p className="text-sm text-muted-foreground">
+          You can always replay this tour later from the app if you want a refresher.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Button
+          size="lg"
+          className="w-full gap-2 brand-gradient-bg transition-opacity hover:opacity-90"
+          onClick={handleCreateFirst}
+        >
+          <CheckCircle2 className="size-5" />
+          Create your first set
+        </Button>
+        <Button variant="ghost" size="lg" className="w-full text-muted-foreground" onClick={handleComplete}>
+          Browse library
+        </Button>
+      </div>
+    </ScreenShell>
   )
 }
