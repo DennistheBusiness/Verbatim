@@ -4,6 +4,8 @@ import { use, useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
+import { trackEvent } from "@/lib/analytics"
+import { ENCODE_STARTED, TEST_STARTED } from "@/lib/analytics-events"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -105,6 +107,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setPracticeChunkIndex(index)
     setPageMode("practice")
     updateSessionState(id, { currentStep: "encode", currentChunkIndex: index })
+    trackEvent(ENCODE_STARTED, { set_id: id, chunk_index: index })
   }, [id, updateSessionState])
 
   const exitPractice = useCallback(() => {
@@ -199,6 +202,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const startFirstLetterTest = useCallback(() => {
     setPageMode("first-letter-test")
     updateSessionState(id, { currentStep: "test" })
+    trackEvent(TEST_STARTED, { set_id: id, test_type: 'first_letter' })
   }, [id, updateSessionState])
 
   const exitFirstLetterTest = useCallback(() => setPageMode("test-select"), [])
@@ -211,6 +215,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const startTypingTest = useCallback(() => {
     setPageMode("typing-test")
     updateSessionState(id, { currentStep: "test" })
+    trackEvent(TEST_STARTED, { set_id: id, test_type: 'full_text' })
   }, [id, updateSessionState])
 
   const exitTypingTest = useCallback(() => setPageMode("test-select"), [])
@@ -218,6 +223,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const startAudioTest = useCallback(() => {
     setPageMode("audio-test")
     updateSessionState(id, { currentStep: "test" })
+    trackEvent(TEST_STARTED, { set_id: id, test_type: 'audio' })
   }, [id, updateSessionState])
 
   const exitAudioTest = useCallback(() => setPageMode("test-select"), [])

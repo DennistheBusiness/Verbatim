@@ -14,7 +14,10 @@ import { ContentInputTabs, type InputMethod } from "@/components/content-input-t
 import { VoiceRecorder } from "@/components/voice-recorder"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
+import { trackEvent } from "@/lib/analytics"
+import { MEMORIZATION_UPDATED, MEMORIZATION_DELETED } from "@/lib/analytics-events"
 import { FileText, Type, Trash2, AlertCircle, Layers, X, AlertTriangle, Wand2, Plus } from "lucide-react"
+import { ChunkPreview } from "@/components/chunk-preview"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -148,6 +151,17 @@ export default function EditPage({ params }: EditPageProps) {
     }
   }
 
+  const currentChunks = useMemo(() => {
+    const trimmed = content.trim()
+    if (!trimmed) return []
+    switch (chunkMode) {
+      case "line":      return parseIntoLines(trimmed)
+      case "sentence":  return parseIntoSentences(trimmed)
+      case "custom":    return parseCustomChunks(trimmed)
+      default:          return parseIntoParagraphs(trimmed)
+    }
+  }, [content, chunkMode])
+
   const stats = useMemo(() => {
     const trimmed = content.trim()
     if (!trimmed) return { words: 0, chunks: 0 }
@@ -170,11 +184,13 @@ export default function EditPage({ params }: EditPageProps) {
       transcriptWords.length > 0 ? content.trim() : undefined,
       transcriptWords.length > 0 ? transcriptWords : undefined,
     )
+    trackEvent(MEMORIZATION_UPDATED, { set_id: id, chunk_mode: chunkMode })
     router.push(`/memorization/${id}`)
   }
 
   const handleDelete = () => {
     setIsDeleting(true)
+    trackEvent(MEMORIZATION_DELETED, { set_id: id })
     deleteSet(id)
     router.push("/")
   }
@@ -343,6 +359,12 @@ export default function EditPage({ params }: EditPageProps) {
                     Use / anywhere in your text to set chunk boundaries
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {currentChunks.length > 0 && (
+                <div className="mt-3">
+                  <ChunkPreview chunks={currentChunks} mode={chunkMode} />
+                </div>
               )}
             </Field>
 
