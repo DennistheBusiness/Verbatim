@@ -27,6 +27,9 @@ export const transcribeLimiter = createLimiter(20, "1 h")
 // 30 OCR extractions per user per hour — limits Groq vision spend per user
 export const ocrLimiter = createLimiter(30, "1 h")
 
+// 20 TTS generations per user per hour — limits Groq TTS spend per user
+export const ttsLimiter = createLimiter(20, "1 h")
+
 // 200 requests per user per minute for admin panel actions
 export const adminLimiter = createLimiter(200, "1 m")
 
@@ -41,7 +44,7 @@ export async function applyRateLimit(
 ): Promise<NextResponse | null> {
   if (!limiter) return null // Not configured — allow through
 
-  const { success, remaining, reset } = await limiter.limit(identifier)
+  const { success, reset } = await limiter.limit(identifier)
 
   if (!success) {
     const retryAfter = Math.max(0, Math.ceil((reset - Date.now()) / 1000))
