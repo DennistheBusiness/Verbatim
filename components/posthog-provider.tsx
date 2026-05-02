@@ -9,18 +9,9 @@ import { usePathname, useSearchParams } from 'next/navigation'
 // avoiding hydration/useEffect timing issues in Next.js App Router.
 if (typeof window !== 'undefined') {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
-    api_host: '/ingest',
-    ui_host: 'https://us.posthog.com',
+    api_host: 'https://us.i.posthog.com', // direct — bypassing proxy for diagnostic
     defaults: '2026-01-30',
-    person_profiles: 'always',
     capture_pageview: false,
-    capture_pageleave: true,
-    autocapture: false,
-    disable_session_recording: true,
-    disable_persistence: false,
-    advanced_disable_feature_flags: true,
-    advanced_disable_feature_flags_on_first_load: true,
-    disable_surveys: true,
     flush_interval_ms: 2000,
     loaded: (ph) => {
       console.log('[PostHog] ✅ Initialized — distinct_id:', ph.get_distinct_id())
