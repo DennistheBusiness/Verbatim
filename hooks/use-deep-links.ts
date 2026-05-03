@@ -14,7 +14,7 @@ export function useDeepLinks() {
         const handle = App.addListener('appUrlOpen', (event) => {
           const normalized = event.url.replace(
             'com.squaredthought.verbatim://',
-            'https://app.verbatim.so/'
+            'https://verbatim.squaredthought.com/'
           )
           const url = new URL(normalized)
           router.push(url.pathname + url.search + url.hash)

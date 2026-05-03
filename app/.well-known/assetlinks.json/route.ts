@@ -9,6 +9,7 @@ export async function GET() {
         target: {
           namespace: 'android_app',
           package_name: 'com.squaredthought.verbatim',
+          // SHA256 from: keytool -list -v -keystore release-key.jks -alias verbatim
           sha256_cert_fingerprints: ['YOUR_KEYSTORE_SHA256'],
         },
       },

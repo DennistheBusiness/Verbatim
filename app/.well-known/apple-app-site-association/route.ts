@@ -8,7 +8,7 @@ export async function GET() {
         details: [
           {
             appID: 'TEAMID.com.squaredthought.verbatim',
-            paths: ['/auth/callback*', '/auth/reset-password*'],
+            paths: ['/verbatim/auth/callback*', '/verbatim/auth/reset-password*'],
           },
         ],
       },
