@@ -17,6 +17,7 @@ interface SharePreviewClientProps {
   previewChunks: string[]
   hiddenCount: number
   creatorName: string | null
+  groupName: string | null
   isLoggedIn: boolean
   userId: string | null
 }
@@ -35,7 +36,7 @@ const FEATURES = [
   {
     icon: Mic,
     label: 'Audio Playback',
-    desc: 'Listen along as you memorize — great for speeches',
+    desc: 'Listen along as you memorize, great for speeches',
   },
   {
     icon: Type,
@@ -45,7 +46,7 @@ const FEATURES = [
   {
     icon: Share2,
     label: 'Share Any Set',
-    desc: 'Send a link — anyone can import it in one tap',
+    desc: 'Send a link, anyone can import it in one tap',
   },
   {
     icon: Layers,
@@ -62,9 +63,11 @@ export function SharePreviewClient({
   previewChunks,
   hiddenCount,
   creatorName,
+  groupName,
   isLoggedIn,
 }: SharePreviewClientProps) {
   const [importing, setImporting] = useState(false)
+  const normalizedCreatorName = creatorName?.replace(/^shared by\s+/i, '').trim() || 'Verbatim user'
 
   const handleImport = async () => {
     setImporting(true)
@@ -97,13 +100,6 @@ export function SharePreviewClient({
       </header>
 
       <main className="flex-1 flex flex-col items-center px-4 py-10 gap-6 max-w-lg mx-auto w-full">
-        {/* Creator attribution */}
-        {creatorName && (
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium">{creatorName}</span> shared a memorization set with you
-          </p>
-        )}
-
         {/* Set card */}
         <div className="w-full rounded-2xl border bg-card p-6 flex flex-col gap-5 shadow-sm">
           <div className="flex flex-col gap-2">
@@ -122,6 +118,12 @@ export function SharePreviewClient({
 
           {/* Preview chunks */}
           <div className="flex flex-col gap-3">
+            <div className="text-xs text-muted-foreground text-right">
+              <>
+                <span>Shared by {normalizedCreatorName}</span>
+                {groupName ? <span> • Part of {groupName} Group</span> : null}
+              </>
+            </div>
             {previewChunks.map((chunk, i) => (
               <div key={i} className="rounded-lg bg-muted/50 p-4 text-sm leading-relaxed text-foreground/80">
                 {chunk}
@@ -130,7 +132,7 @@ export function SharePreviewClient({
             {hiddenCount > 0 && (
               <div className="rounded-lg border border-dashed p-4 flex items-center justify-center gap-2 text-muted-foreground text-sm select-none">
                 <BookOpen className="size-4 opacity-50" />
-                <span className="blur-[3px] pointer-events-none">+ {hiddenCount} more {hiddenCount === 1 ? 'chunk' : 'chunks'} — import to read</span>
+                <span className="blur-[3px] pointer-events-none">+ {hiddenCount} more {hiddenCount === 1 ? 'chunk' : 'chunks'}, import to read</span>
               </div>
             )}
           </div>
@@ -170,7 +172,7 @@ export function SharePreviewClient({
           </div>
         )}
 
-        {/* Feature highlights — conversion section for non-logged-in visitors */}
+        {/* Feature highlights for non-logged-in visitors */}
         {!isLoggedIn && (
           <div className="w-full flex flex-col gap-5 pt-2 pb-4">
             <div className="relative flex items-center gap-3">

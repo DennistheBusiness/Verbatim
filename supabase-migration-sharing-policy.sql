@@ -19,3 +19,6 @@ CREATE POLICY "Public can read chunks of shared sets"
       AND memorization_sets.share_token IS NOT NULL
     )
   );
+
+-- Creator names for share links are resolved via RPC:
+-- public.get_shared_creator_meta(p_share_token text)

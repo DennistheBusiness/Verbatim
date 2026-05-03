@@ -7,15 +7,50 @@ interface PageProps {
   params: Promise<{ token: string }>
 }
 
+interface CreatorMeta {
+  name: string | null
+  groupName: string | null
+}
+
+let hasLoggedShareRpcHealth = false
+
+async function logShareRpcHealthOnce() {
+  if (hasLoggedShareRpcHealth || process.env.NODE_ENV !== 'development') return
+  hasLoggedShareRpcHealth = true
+
+  try {
+    const supabase = await createClient()
+    // Generated Supabase function types may lag local SQL migrations.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc('get_shared_creator_meta', {
+      p_share_token: '__healthcheck__',
+    })
+
+    if (error?.code === 'PGRST202') {
+      console.warn('[share] RPC missing: get_shared_creator_meta')
+      return
+    }
+
+    console.log('[share] RPC is available: get_shared_creator_meta')
+  } catch {
+    console.warn('[share] RPC missing: get_shared_creator_meta')
+  }
+}
+
 async function getSharedSet(token: string) {
   // Uses server client (anon/session) — works because of the public RLS policy
   // that allows SELECT on memorization_sets WHERE share_token IS NOT NULL.
   // Run supabase-migration-sharing-policy.sql to enable this.
   const supabase = await createClient()
 
-  const { data: set, error: setError } = await supabase
+  // share_token exists in DB, but generated TS types may lag behind local migrations.
+  // Keep runtime query while avoiding compile-time key narrowing errors.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setsQuery: any = supabase
     .from('memorization_sets')
     .select('id, user_id, title, content, chunk_mode')
+
+  const { data: set, error: setError } = await setsQuery
     .eq('share_token', token)
     .single()
 
@@ -25,31 +60,61 @@ async function getSharedSet(token: string) {
   }
   if (!set) return null
 
-  const { data: chunks, error: chunksError } = await supabase
-    .from('chunks')
-    .select('id, order_index, text')
-    .eq('set_id', set.id)
-    .order('order_index', { ascending: true })
-
-  if (chunksError) console.error('[share] chunks query error:', chunksError.message)
-
-  return { ...set, chunks: chunks ?? [] }
+  return set
 }
 
-async function getCreatorName(userId: string): Promise<string | null> {
+async function getCreatorMeta(shareToken: string, userId: string): Promise<CreatorMeta> {
   try {
-    // Service client needed here since profiles RLS restricts cross-user reads.
-    // Fails gracefully — creator name is optional UI.
-    const { createServiceClient } = await import('@/lib/supabase/service')
-    const serviceClient = createServiceClient()
-    const { data } = await serviceClient
-      .from('profiles')
-      .select('full_name')
-      .eq('id', userId)
-      .single()
-    return data?.full_name?.split(' ')[0] ?? null
-  } catch {
-    return null
+    // Uses a narrow SECURITY DEFINER RPC that only returns creator full_name
+    // for a valid share token.
+    const supabase = await createClient()
+    // Generated Supabase function types may lag local SQL migrations.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('get_shared_creator_meta', {
+      p_share_token: shareToken,
+    })
+
+    if (error) {
+      if (error.code === 'PGRST202') {
+        console.warn('[share] creator RPC unavailable in schema cache; falling back to direct profile query')
+
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', userId)
+          .single()
+
+        if (!fallbackError) {
+          return {
+            name: fallbackData?.full_name?.trim() || null,
+            groupName: null,
+          }
+        }
+
+        console.error('[share] creator fallback profile query error:', fallbackError.code, fallbackError.message)
+      } else {
+        console.error('[share] creator RPC query error:', error.code, error.message)
+      }
+
+      return {
+        name: null,
+        groupName: null,
+      }
+    }
+
+    const rpcRows = Array.isArray(data) ? data as Array<{ full_name?: string | null }> : []
+    const fullName = rpcRows[0]?.full_name?.trim() || null
+
+    return {
+      name: fullName,
+      groupName: null,
+    }
+  } catch (error) {
+    console.error('[share] creator profile fetch exception:', error)
+    return {
+      name: null,
+      groupName: null,
+    }
   }
 }
 
@@ -69,6 +134,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function SharePreviewPage({ params }: PageProps) {
+  await logShareRpcHealthOnce()
+
   const { token } = await params
   const set = await getSharedSet(token)
 
@@ -87,21 +154,22 @@ export default async function SharePreviewPage({ params }: PageProps) {
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const creatorName = await getCreatorName(set.user_id)
+  const creatorMeta = await getCreatorMeta(token, set.user_id)
 
-  const sortedChunks = [...set.chunks].sort((a: any, b: any) => a.order_index - b.order_index)
   const wordCount = set.content.trim().split(/\s+/).filter((w: string) => w.length > 0).length
+  const sharedContentChunk = set.content.trim()
 
   return (
     <SharePreviewClient
       token={token}
       title={set.title}
       content={set.content}
-      chunkCount={sortedChunks.length}
+      chunkCount={1}
       wordCount={wordCount}
-      previewChunks={sortedChunks.slice(0, 2).map((c: any) => c.text)}
-      hiddenCount={Math.max(0, sortedChunks.length - 2)}
-      creatorName={creatorName}
+      previewChunks={[sharedContentChunk]}
+      hiddenCount={0}
+      creatorName={creatorMeta.name}
+      groupName={creatorMeta.groupName}
       isLoggedIn={!!user}
       userId={user?.id ?? null}
     />
