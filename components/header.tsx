@@ -40,10 +40,7 @@ export function Header({ title, showBack = false, onBack, action, showBranding =
   }, [supabase])
 
   return (
-    <header
-      className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
-    >
+    <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center gap-4 px-4">
         {showBack && !isHome && (
           onBack ? (
