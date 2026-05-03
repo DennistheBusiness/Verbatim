@@ -5,6 +5,8 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { identifyUser, resetUser } from '@/lib/analytics'
+import { useDeepLinks } from '@/hooks/use-deep-links'
+import { initCapacitorPlugins } from '@/lib/capacitor'
 
 /**
  * SessionHandler component
@@ -18,6 +20,12 @@ export function SessionHandler() {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+
+  useDeepLinks()
+
+  useEffect(() => {
+    initCapacitorPlugins()
+  }, [])
 
   useEffect(() => {
     // Marketing site — no auth redirects, ever

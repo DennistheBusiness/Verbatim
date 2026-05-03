@@ -3,6 +3,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Safe area insets for Capacitor native shell (Dynamic Island, home indicator) */
+:root {
+  --sat: env(safe-area-inset-top);
+  --sab: env(safe-area-inset-bottom);
+}
+
+/* Prevent iOS pull-to-refresh from reloading the page in the native WebView */
+body {
+  overscroll-behavior-y: none;
+}
+
 :root {
   /* Verbatim Brand Colors - Blue to Green Gradient */
   --brand-blue: oklch(0.55 0.22 240); /* Primary blue from logo */
