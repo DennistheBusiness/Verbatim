@@ -19,8 +19,6 @@ function OnboardingContent() {
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
   const [step, setStep] = useState(0)
-  const [touchStart, setTouchStart] = useState(0)
-  const [touchEnd, setTouchEnd] = useState(0)
 
   const totalSteps = 3 // 0-3 = 4 screens
 
@@ -56,47 +54,47 @@ function OnboardingContent() {
     router.push("/create")
   }
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX)
-  }
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return
-
-    const distance = touchStart - touchEnd
-    const isLeftSwipe = distance > 50
-    const isRightSwipe = distance < -50
-
-    if (isLeftSwipe && step < totalSteps) {
-      handleContinue()
-    }
-
-    if (isRightSwipe && step > 0) {
-      handleBack()
-    }
-
-    setTouchStart(0)
-    setTouchEnd(0)
-  }
-
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" && step < totalSteps) {
-        handleContinue()
-      }
+    let startX = 0
+    let startY = 0
 
-      if (e.key === "ArrowLeft" && step > 0) {
-        handleBack()
-      }
+    const onTouchStart = (e: TouchEvent) => {
+      // Don't track swipes that begin on buttons, links, or inputs —
+      // React's synthetic onClick fires after touch events, and parent
+      // touch handlers on iOS WKWebView can prevent children from receiving clicks.
+      const target = e.target as HTMLElement
+      if (target.closest('button, a, input, textarea, [role="button"]')) return
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
     }
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [step])
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!startX) return
+      const dx = startX - e.changedTouches[0].clientX
+      const dy = Math.abs(startY - e.changedTouches[0].clientY)
+      if (Math.abs(dx) > 50 && Math.abs(dx) > dy * 1.5) {
+        if (dx > 0 && step < totalSteps) setStep(s => s + 1)
+        if (dx < 0 && step > 0) setStep(s => s - 1)
+      }
+      startX = 0
+      startY = 0
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight" && step < totalSteps) setStep(s => s + 1)
+      if (e.key === "ArrowLeft" && step > 0) setStep(s => s - 1)
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [step, totalSteps])
 
   const ProgressDots = () => (
     <div className="flex justify-center gap-2">
@@ -118,12 +116,7 @@ function OnboardingContent() {
     children: React.ReactNode
     maxWidth?: string
   }) => (
-    <div
-      className="flex min-h-svh flex-col bg-background"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="flex min-h-svh flex-col bg-background">
       <main className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-4 pb-8">
         <div className={`flex w-full flex-col gap-6 py-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ${maxWidth}`}>
           <div className="flex items-center justify-between gap-3">
@@ -228,9 +221,9 @@ function OnboardingContent() {
             Show core features
             <ArrowRight className="size-4" />
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            This tour stays short, and you can skip it anytime.
-          </p>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
+          </Button>
         </div>
       </ScreenShell>
     )
@@ -295,11 +288,13 @@ function OnboardingContent() {
             Show me how it works
             <ArrowRight className="size-4" />
           </Button>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
+          </Button>
         </div>
       </ScreenShell>
     )
   }
-
 
   if (step === 2) {
     return (
@@ -378,6 +373,9 @@ function OnboardingContent() {
           <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
             I&apos;m ready to start
             <ArrowRight className="size-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
           </Button>
         </div>
       </ScreenShell>

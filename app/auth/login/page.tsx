@@ -54,11 +54,29 @@ function LoginContent() {
       if (importShare) {
         document.cookie = `pendingShare=${importShare}; path=/; max-age=600; SameSite=Lax`
       }
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      })
-      if (error) { toast.error(error.message); setLoading(false) }
+
+      const isNative = typeof window !== 'undefined' && !!(window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+
+      if (isNative) {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: 'com.squaredthought.verbatim://auth/callback',
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) { toast.error(error.message); setLoading(false); return }
+        if (data.url) {
+          const { Browser } = await import('@capacitor/browser')
+          await Browser.open({ url: data.url, windowName: '_self' })
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: `${window.location.origin}/auth/callback` },
+        })
+        if (error) { toast.error(error.message); setLoading(false) }
+      }
     } catch {
       toast.error('An unexpected error occurred')
       setLoading(false)
