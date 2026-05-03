@@ -11,12 +11,13 @@ if (typeof window !== 'undefined') {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
     api_host: 'https://us.i.posthog.com', // direct — bypassing proxy for diagnostic
     defaults: '2026-01-30',
+    debug: false,
     capture_pageview: false,
     flush_interval_ms: 2000,
     loaded: (ph) => {
-      console.log('[PostHog] ✅ Initialized — distinct_id:', ph.get_distinct_id())
-      console.log('[PostHog] Config — api_host:', ph.config.api_host, '| key:', ph.config.token?.slice(0, 8) + '...')
-      ph.debug() // temp: enabled in all envs to diagnose missing events
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PostHog] ✅ Initialized — distinct_id:', ph.get_distinct_id())
+      }
     },
   })
 }
