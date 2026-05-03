@@ -61,7 +61,7 @@ function LoginContent() {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: 'com.squaredthought.verbatim://auth/callback',
+            redirectTo: 'https://verbatim.squaredthought.com/auth/callback',
             skipBrowserRedirect: true,
           },
         })
