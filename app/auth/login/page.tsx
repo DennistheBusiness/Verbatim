@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -13,9 +14,19 @@ import { trackEvent, identifyUser } from '@/lib/analytics'
 import { USER_LOGGED_IN } from '@/lib/analytics-events'
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  )
+}
+
+function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const searchParams = useSearchParams()
+  const importShare = searchParams.get('importShare')
   const supabase = createClient()
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -28,7 +39,7 @@ export default function LoginPage() {
         if (data.user) identifyUser(data.user.id, { email: data.user.email })
         trackEvent(USER_LOGGED_IN, { method: 'email' })
         sessionStorage.removeItem("verbatim-splash-seen")
-        window.location.href = '/'
+        window.location.href = importShare ? `/share/${importShare}` : '/'
       }
     } catch {
       toast.error('An unexpected error occurred')
@@ -40,6 +51,9 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true)
     try {
+      if (importShare) {
+        document.cookie = `pendingShare=${importShare}; path=/; max-age=600; SameSite=Lax`
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/auth/callback` },

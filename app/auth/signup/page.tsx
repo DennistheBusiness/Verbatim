@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -14,12 +14,22 @@ import { trackEvent, identifyUser } from '@/lib/analytics'
 import { USER_SIGNED_UP } from '@/lib/analytics-events'
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupContent />
+    </Suspense>
+  )
+}
+
+function SignupContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const importShare = searchParams.get('importShare')
   const supabase = createClient()
 
   const handleEmailSignup = async (e: React.FormEvent) => {
@@ -41,7 +51,7 @@ export default function SignupPage() {
           trackEvent(USER_SIGNED_UP, { method: 'email' })
         }
         toast.success('Account created!')
-        router.push('/onboarding')
+        router.push(importShare ? `/onboarding?importShare=${importShare}` : '/onboarding')
       } else {
         if (data.user) {
           trackEvent(USER_SIGNED_UP, { method: 'email' })
@@ -59,6 +69,9 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setLoading(true)
     try {
+      if (importShare) {
+        document.cookie = `pendingShare=${importShare}; path=/; max-age=600; SameSite=Lax`
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/auth/callback` },

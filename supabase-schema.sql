@@ -142,6 +142,7 @@ CREATE TABLE memorization_sets (
   }'::jsonb,
   recommended_step  TEXT NOT NULL DEFAULT 'familiarize'
                       CHECK (recommended_step IN ('familiarize', 'encode', 'test')),
+  share_token       TEXT UNIQUE,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

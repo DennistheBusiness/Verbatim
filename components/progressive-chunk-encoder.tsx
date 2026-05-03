@@ -76,6 +76,8 @@ export function ProgressiveChunkEncoder({
   const isMobileRef = useRef(false)
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [topCtaVisible, setTopCtaVisible] = useState(true)
+  const topCtaRef = useRef<HTMLButtonElement>(null)
   const [levelResults, setLevelResults] = useState<Record<Level, LevelResults | null>>({
     1: null,
     2: null,
@@ -280,6 +282,18 @@ export function ProgressiveChunkEncoder({
       setShowSuccessDialog(true)
     }
   }, [isLevelComplete, correctCount, incorrectCount, currentLevel])
+
+  // Track whether the top Start Typing button is scrolled off screen
+  useEffect(() => {
+    const el = topCtaRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setTopCtaVisible(entry.isIntersecting),
+      { threshold: 0.1 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasStarted, isLevelComplete])
 
   const handleContinueToNextLevel = () => {
     // Save progress for the completed level
@@ -495,9 +509,10 @@ export function ProgressiveChunkEncoder({
             </div>
           </div>
 
-          {/* Start CTA at top — visible before scrolling */}
+          {/* Start CTA at top — sentinel for IntersectionObserver */}
           {!isLevelComplete && !hasStarted && (
             <Button
+              ref={topCtaRef}
               onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
               className="w-full gap-2"
               size="lg"
@@ -529,7 +544,8 @@ export function ProgressiveChunkEncoder({
             aria-hidden="true"
           />
 
-          {!isLevelComplete && !hasStarted && (
+          {/* Bottom CTA — only appears when top CTA has scrolled off screen */}
+          {!isLevelComplete && !hasStarted && !topCtaVisible && (
             <Button
               onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
               className="w-full gap-2"
