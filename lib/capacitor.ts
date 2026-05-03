@@ -20,15 +20,18 @@ export async function initCapacitorPlugins() {
   await SplashScreen.hide()
   await Keyboard.setAccessoryBarVisible({ isVisible: false })
 
-  // When the keyboard opens, scroll the focused input into the visible area.
-  // iOS WKWebView does not do this automatically — the keyboard slides up
-  // over the content and the page does not reflow to compensate.
+  // When the keyboard opens, scroll the focused input into view.
+  // resize:'body' (capacitor.config.ts) shrinks window.innerHeight to the visible area,
+  // but WKWebView doesn't auto-scroll — we do it manually with the minimum offset needed.
   Keyboard.addListener('keyboardDidShow', () => {
     const el = document.activeElement as HTMLElement | null
-    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-      setTimeout(() => {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 50)
-    }
+    if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return
+    setTimeout(() => {
+      const rect = el.getBoundingClientRect()
+      const visibleBottom = window.innerHeight - 24 // 24px breathing room above keyboard
+      if (rect.bottom > visibleBottom) {
+        window.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' })
+      }
+    }, 100)
   })
 }
