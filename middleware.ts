@@ -66,6 +66,11 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Public share preview pages — no auth required
+  if (pathname.startsWith('/share/')) {
+    return supabaseResponse
+  }
+
   // Admin routes - server-side role check (no client trust)
   if (pathname.startsWith('/admin')) {
     if (!user) {

@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, Copy, Check, MessageSquare, Mail, LinkIcon } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
 
@@ -86,6 +86,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [showListenOptions, setShowListenOptions] = useState(false)
   const [showMarkedOnly, setShowMarkedOnly] = useState(false)
   const [showSystemInfo, setShowSystemInfo] = useState(false)
+  const [showSharePanel, setShowSharePanel] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   // Fetch audio URL via cached context helper (24-hour signed URL)
   useEffect(() => {
@@ -98,6 +102,58 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const handleOpenTTSPlayer = useCallback(() => setShowTTSPlayer(true), [])
   const handleCloseTTSPlayer = useCallback(() => setShowTTSPlayer(false), [])
+
+  const handleShare = useCallback(async () => {
+    if (!set) return
+    if (set.shareToken) {
+      setShareUrl(`${window.location.origin}/share/${set.shareToken}`)
+      setShowSharePanel(true)
+      return
+    }
+    setShareLoading(true)
+    try {
+      const res = await fetch('/api/share/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setId: set.id }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setShareUrl(data.url)
+        setShowSharePanel(true)
+      } else {
+        toast.error(data.error || 'Failed to generate share link')
+      }
+    } catch {
+      toast.error('Failed to generate share link')
+    } finally {
+      setShareLoading(false)
+    }
+  }, [set])
+
+  const handleCopyShareUrl = useCallback(() => {
+    if (!shareUrl) return
+    navigator.clipboard.writeText(shareUrl)
+    setShareCopied(true)
+    setTimeout(() => setShareCopied(false), 2000)
+    toast.success('Link copied!')
+  }, [shareUrl])
+
+  const handleRevokeShare = useCallback(async () => {
+    if (!set) return
+    try {
+      await fetch('/api/share/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setId: set.id }),
+      })
+      setShareUrl(null)
+      setShowSharePanel(false)
+      toast.success('Share link disabled')
+    } catch {
+      toast.error('Failed to disable share link')
+    }
+  }, [set])
   const handleChunkModeChange = useCallback((mode: ChunkMode) => {
     updateChunkMode(id, mode)
   }, [id, updateChunkMode])
@@ -699,7 +755,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                             </div>
                             <div>
                               <p className="text-sm font-medium">AI Read Aloud</p>
-                              <p className="text-xs text-muted-foreground">Have the computer read it to you</p>
+                              <p className="text-xs text-muted-foreground">Natural AI voice reads the content aloud</p>
                             </div>
                           </button>
                         </div>
@@ -721,9 +777,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   </div>
                   <div className="flex flex-1 flex-col gap-2">
                     <div className="flex flex-col gap-1">
-                      <h3 className="font-medium text-foreground">Listen Instead</h3>
+                      <h3 className="font-medium text-foreground">AI Read Aloud</h3>
                       <p className="text-sm text-muted-foreground">
-                        Have the computer read the content aloud to you. Great for auditory learners.
+                        Natural AI voice reads the content aloud. Great for auditory learners.
                       </p>
                     </div>
                     <Button
@@ -1215,6 +1271,19 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             <Button
               variant="outline"
               size="sm"
+              className="gap-1.5"
+              onClick={handleShare}
+              disabled={shareLoading}
+            >
+              {shareLoading ? (
+                <><div className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /><span className="text-sm hidden md:inline">Share</span></>
+              ) : (
+                <><Share2 className="size-3.5" /><span className="text-sm hidden md:inline">Share</span></>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               className="gap-1.5 hidden md:flex"
               asChild
             >
@@ -1270,6 +1339,71 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
         {/* Progress Over Time */}
         <ScoreChart setId={id} onStartTest={handleTest} />
+
+        {/* Share Panel */}
+        <Dialog open={showSharePanel} onOpenChange={setShowSharePanel}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Share2 className="size-4" />
+                Share &ldquo;{set.title}&rdquo;
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4">
+              {shareUrl ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Anyone with this link can preview and import this set.
+                  </p>
+                  {/* Copy URL */}
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2.5">
+                    <LinkIcon className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="flex-1 text-xs text-muted-foreground truncate">{shareUrl}</span>
+                    <Button variant="ghost" size="icon-sm" onClick={handleCopyShareUrl} className="shrink-0">
+                      {shareCopied ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
+                    </Button>
+                  </div>
+                  {/* Quick share buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={() => {
+                        const msg = `Hey! I'm memorizing "${set.title}" on Verbatim — here's the link to practice it too:\n${shareUrl}`
+                        window.open(`sms:?body=${encodeURIComponent(msg)}`)
+                      }}
+                    >
+                      <MessageSquare className="size-3.5" />
+                      Text
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={() => {
+                        const subject = `Practice "${set.title}" with me on Verbatim`
+                        const body = `I'm memorizing "${set.title}" on Verbatim and thought you'd want to practice it too.\n\nClick here to import it:\n${shareUrl}`
+                        window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
+                      }}
+                    >
+                      <Mail className="size-3.5" />
+                      Email
+                    </Button>
+                  </div>
+                  <button
+                    className="text-xs text-destructive hover:underline text-left"
+                    onClick={handleRevokeShare}
+                  >
+                    Stop sharing this set
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Generating share link…</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={showSystemInfo} onOpenChange={setShowSystemInfo}>
           <DialogContent className="max-w-sm">

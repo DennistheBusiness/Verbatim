@@ -93,6 +93,7 @@ export interface MemorizationSet {
   createdFrom: InputMethod
   transcript?: string | null
   transcriptWords?: import("@/app/api/transcribe/route").TranscriptWord[] | null
+  shareToken?: string | null
 }
 
 // ─── Context types ────────────────────────────────────────────────────────────
@@ -287,6 +288,7 @@ function transformSetRow(set: any): MemorizationSet {
     createdFrom: (set.created_from || "text") as InputMethod,
     transcript: set.transcript || null,
     transcriptWords: set.transcript_words || null,
+    shareToken: set.share_token || null,
   }
 }
 

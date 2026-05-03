@@ -1,18 +1,34 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, Mic, Star, Upload, Zap } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
 export default function OnboardingPage() {
+  return (
+    <Suspense>
+      <OnboardingContent />
+    </Suspense>
+  )
+}
+
+function OnboardingContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const importShare = searchParams.get('importShare')
   const [step, setStep] = useState(0)
   const [touchStart, setTouchStart] = useState(0)
   const [touchEnd, setTouchEnd] = useState(0)
 
   const totalSteps = 3 // 0-3 = 4 screens
+
+  useEffect(() => {
+    if (!importShare) return
+    fetch(`/api/share/${importShare}/import`, { method: 'POST' })
+      .catch(() => {})
+  }, [importShare]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleComplete = () => {
     localStorage.setItem("hasSeenOnboarding", "true")
