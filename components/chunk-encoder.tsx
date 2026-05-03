@@ -44,17 +44,29 @@ export function ChunkEncoder({
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const wordsRef = useRef<WordStatus[]>([])
+  const currentIndexRef = useRef(0)
+  const isCompleteRef = useRef(false)
+  const lockedRef = useRef(false)
+  const hasStartedRef = useRef(false)
+  const isMobileRef = useRef(false)
+  const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
 
   const initializeWords = useCallback(() => {
     const parsed = parseWords(chunk)
-    setWords(
-      parsed.map((word, i) => ({
+    const initialWords = parsed.map((word, i) => ({
         word,
         state: i === 0 ? "active" : "hidden",
         showError: false,
         wasIncorrect: false,
       }))
-    )
+    setWords(initialWords)
+    wordsRef.current = initialWords
+    currentIndexRef.current = 0
+    isCompleteRef.current = false
+    lockedRef.current = false
+    hasStartedRef.current = false
+    lastInputRef.current = null
     setCurrentIndex(0)
     setCorrectCount(0)
     setIncorrectCount(0)
@@ -66,76 +78,114 @@ export function ChunkEncoder({
     initializeWords()
   }, [initializeWords])
 
-  const handleKeyPress = useCallback(
-    (e: KeyboardEvent) => {
-      if (isComplete || words.length === 0) return
-      
-      const key = e.key.toLowerCase()
-      
-      // Only handle single letter keys
+  useEffect(() => {
+    wordsRef.current = words
+  }, [words])
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex
+  }, [currentIndex])
+
+  useEffect(() => {
+    isCompleteRef.current = isComplete
+  }, [isComplete])
+
+  useEffect(() => {
+    hasStartedRef.current = hasStarted
+  }, [hasStarted])
+
+  useEffect(() => {
+    isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  }, [])
+
+  const processLetterInput = useCallback((rawKey: string) => {
+      if (isCompleteRef.current || wordsRef.current.length === 0) return
+      if (lockedRef.current) return
+      if (isMobileRef.current && !hasStartedRef.current) return
+
+      const key = rawKey.toLowerCase()
       if (!/^[a-z]$/.test(key)) return
 
-      const currentWord = words[currentIndex]
+      const idx = currentIndexRef.current
+      const now = Date.now()
+      const last = lastInputRef.current
+      if (last && last.key === key && last.index === idx && now - last.ts < 90) {
+        return
+      }
+      lastInputRef.current = { key, index: idx, ts: now }
+
+      const currentWord = wordsRef.current[idx]
       if (!currentWord) return
 
       if (key === currentWord.word.firstLetter) {
-        // Correct letter
         setCorrectCount((c) => c + 1)
+        const nextIndex = idx + 1
+        if (nextIndex >= wordsRef.current.length) {
+          setIsComplete(true)
+          isCompleteRef.current = true
+        } else {
+          currentIndexRef.current = nextIndex
+          setCurrentIndex(nextIndex)
+        }
         setWords((prev) =>
           prev.map((w, i) => {
-            if (i === currentIndex) {
+            if (i === idx) {
               return { ...w, state: "revealed" }
             }
-            if (i === currentIndex + 1) {
+            if (i === nextIndex) {
               return { ...w, state: "active" }
             }
             return w
           })
         )
-
-        if (currentIndex + 1 >= words.length) {
-          setIsComplete(true)
-        } else {
-          setCurrentIndex((i) => i + 1)
-        }
       } else {
-        // Incorrect letter
+        lockedRef.current = true
         setIncorrectCount((c) => c + 1)
         setWords((prev) =>
           prev.map((w, i) =>
-            i === currentIndex ? { ...w, state: "error", showError: true, wasIncorrect: true } : w
+            i === idx ? { ...w, state: "error", showError: true, wasIncorrect: true } : w
           )
         )
 
-        // Show error briefly, then move to next word
         setTimeout(() => {
+          const nextIndex = idx + 1
           setWords((prev) =>
             prev.map((w, i) => {
-              if (i === currentIndex) {
+              if (i === idx) {
                 return { ...w, state: "revealed", showError: false, wasIncorrect: true }
               }
-              if (i === currentIndex + 1) {
+              if (i === nextIndex) {
                 return { ...w, state: "active" }
               }
               return w
             })
           )
 
-          if (currentIndex + 1 >= words.length) {
+          if (nextIndex >= wordsRef.current.length) {
             setIsComplete(true)
+            isCompleteRef.current = true
           } else {
-            setCurrentIndex((i) => i + 1)
+            currentIndexRef.current = nextIndex
+            setCurrentIndex(nextIndex)
           }
+          lockedRef.current = false
         }, 800)
       }
+    }, [])
+
+  const handleWindowKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (isMobileRef.current) return
+      if (e.isComposing || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      processLetterInput(e.key)
     },
-    [currentIndex, isComplete, words]
+    [processLetterInput]
   )
 
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyPress)
-    return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [handleKeyPress])
+    window.addEventListener("keydown", handleWindowKeyDown)
+    return () => window.removeEventListener("keydown", handleWindowKeyDown)
+  }, [handleWindowKeyDown])
 
   // Auto-focus the hidden input on desktop so keydown listeners work immediately.
   // Does NOT set hasStarted — that requires an explicit tap on the Start button.
@@ -154,9 +204,10 @@ export function ChunkEncoder({
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     if (val.length > 0) {
-      const key = val.slice(-1).toLowerCase()
-      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+      const firstLetter = val.toLowerCase().match(/[a-z]/)?.[0]
+      if (firstLetter) processLetterInput(firstLetter)
     }
+    e.target.value = ""
     setMobileValue("")
   }
 
@@ -184,6 +235,7 @@ export function ChunkEncoder({
             ref={inputRef}
             value={mobileValue}
             onChange={handleMobileChange}
+            maxLength={1}
             inputMode="text"
             autoCapitalize="none"
             autoCorrect="off"
