@@ -7,7 +7,7 @@ export async function GET() {
       applinks: {
         details: [
           {
-            appID: 'TEAMID.com.squaredthought.verbatim',
+            appID: '4HJGF8HQK2.com.squaredthought.verbatim',
             paths: ['/auth/callback*', '/auth/reset-password*'],
           },
         ],
