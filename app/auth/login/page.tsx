@@ -104,7 +104,7 @@ function LoginContent() {
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto min-h-screen lg:min-h-0 px-6 py-12 sm:px-10">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-screen lg:min-h-0 px-6 py-12 sm:px-10">
 
         {/* Mobile branding */}
         <div className="flex lg:hidden flex-col items-center gap-1.5 mb-10">
