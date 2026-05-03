@@ -11,10 +11,12 @@ export function useDeepLinks() {
 
     import('@capacitor/app')
       .then(({ App }) => {
-        const handle = App.addListener('appUrlOpen', (event) => {
+        const handle = App.addListener('appUrlOpen', async (event) => {
+          // Close in-app browser (SFSafariViewController) if OAuth flow opened one
+          import('@capacitor/browser').then(({ Browser }) => Browser.close()).catch(() => {})
           const normalized = event.url.replace(
             'com.squaredthought.verbatim://',
-            'https://app.verbatim.so/'
+            'https://verbatim.squaredthought.com/'
           )
           const url = new URL(normalized)
           router.push(url.pathname + url.search + url.hash)
