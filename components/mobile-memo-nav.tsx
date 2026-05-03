@@ -26,9 +26,9 @@ export function MobileMemoNav({
   }
 
   return (
-    <div 
+    <div
       className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden z-50"
-      style={{ WebkitTapHighlightColor: 'transparent' } as React.CSSProperties}
+      style={{ WebkitTapHighlightColor: 'transparent', paddingBottom: 'env(safe-area-inset-bottom)' } as React.CSSProperties}
     >
       <div className="grid grid-cols-4 gap-1 p-2">
         <button

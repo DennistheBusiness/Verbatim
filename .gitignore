@@ -35,3 +35,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# Capacitor
+/www/*
+!/www/.gitkeep
+ios/App/build/
+android/.gradle/
+android/app/build/
+android/build/
+*.jks
+*.keystore
