@@ -75,11 +75,16 @@ export function VoiceRecorder({ onRecordingComplete }: VoiceRecorderProps) {
       }
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech recognition error:", event.error)
-        if (event.error === "no-speech") {
-          // Ignore no-speech errors
+        // WKWebView (iOS native) blocks Web Speech API and fires "service-not-allowed".
+        // Groq handles all transcription anyway — suppress these silently.
+        if (
+          event.error === "no-speech" ||
+          event.error === "service-not-allowed" ||
+          event.error === "not-allowed"
+        ) {
           return
         }
+        console.error("Speech recognition error:", event.error)
         toast.error(`Transcription error: ${event.error}`)
       }
     }
