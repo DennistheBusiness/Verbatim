@@ -72,6 +72,9 @@ export function ProgressiveChunkEncoder({
   const lockedRef = useRef(false) // true during error display delay — blocks double-advance
   const wordsRef = useRef<WordStatus[]>([])
   const isLevelCompleteRef = useRef(false)
+  const hasStartedRef = useRef(false)
+  const isMobileRef = useRef(false)
+  const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [topCtaVisible, setTopCtaVisible] = useState(true)
   const topCtaRef = useRef<HTMLButtonElement>(null)
@@ -136,6 +139,7 @@ export function ProgressiveChunkEncoder({
       }
 
       lockedRef.current = false
+      lastInputRef.current = null
       setCorrectCount(0)
       setIncorrectCount(0)
       setIsLevelComplete(false)
@@ -152,19 +156,32 @@ export function ProgressiveChunkEncoder({
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { wordsRef.current = words }, [words])
   useEffect(() => { isLevelCompleteRef.current = isLevelComplete }, [isLevelComplete])
+  useEffect(() => { hasStartedRef.current = hasStarted }, [hasStarted])
+
+  useEffect(() => {
+    isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  }, [])
 
   // All levels advance sequentially through every word — stable ref, no deps
   const findNextWordToType = useCallback((fromIndex: number): number => fromIndex, [])
 
-  const handleKeyPress = useCallback(
-    (e: KeyboardEvent) => {
+  const processLetterInput = useCallback(
+    (rawKey: string) => {
       if (isLevelCompleteRef.current || wordsRef.current.length === 0) return
       if (lockedRef.current) return // blocked during error delay
+      if (isMobileRef.current && !hasStartedRef.current) return
 
-      const key = e.key.toLowerCase()
+      const key = rawKey.toLowerCase()
       if (!/^[a-z]$/.test(key)) return
 
       const idx = currentIndexRef.current
+      const now = Date.now()
+      const last = lastInputRef.current
+      if (last && last.key === key && last.index === idx && now - last.ts < 90) {
+        return
+      }
+      lastInputRef.current = { key, index: idx, ts: now }
+
       const currentWord = wordsRef.current[idx]
       if (!currentWord) return
 
@@ -217,10 +234,19 @@ export function ProgressiveChunkEncoder({
     [findNextWordToType]
   )
 
+  const handleWindowKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (isMobileRef.current) return
+      if (e.isComposing || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      processLetterInput(e.key)
+    },
+    [processLetterInput]
+  )
+
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyPress)
-    return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [handleKeyPress])
+    window.addEventListener("keydown", handleWindowKeyDown)
+    return () => window.removeEventListener("keydown", handleWindowKeyDown)
+  }, [handleWindowKeyDown])
 
   // Auto-focus the hidden input on desktop so keydown listeners work immediately.
   // Does NOT set hasStarted — that requires an explicit tap on the Start button.
@@ -232,9 +258,10 @@ export function ProgressiveChunkEncoder({
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     if (val.length > 0) {
-      const key = val.slice(-1).toLowerCase()
-      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+      const firstLetter = val.toLowerCase().match(/[a-z]/)?.[0]
+      if (firstLetter) processLetterInput(firstLetter)
     }
+    e.target.value = ""
     setMobileValue("")
   }
 
@@ -507,6 +534,7 @@ export function ProgressiveChunkEncoder({
             ref={inputRef}
             value={mobileValue}
             onChange={handleMobileChange}
+            maxLength={1}
             inputMode="text"
             autoCapitalize="none"
             autoCorrect="off"

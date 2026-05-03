@@ -5,48 +5,24 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { Volume2, VolumeX, Pause, Play, RotateCcw, RotateCw, X } from "lucide-react"
+import { Volume2, VolumeX, Pause, Play, RotateCcw, RotateCw, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 const SPEED_OPTIONS = ["0.5", "0.75", "1", "1.25", "1.5", "2"]
-const VOICE_STORAGE_KEY = "verbatim-tts-voice"
-const WORDS_PER_SECOND = 2.5 // average spoken words/sec at 1× speed
+const VOICE_STORAGE_KEY = "verbatim-tts-voice-groq"
+const WORDS_PER_SECOND = 2.5 // estimate for duration display before audio loads
 
-// Curated priority list — best voices across macOS, Windows, and Chrome
-const PREFERRED_VOICE_NAMES = [
-  "Samantha",               // macOS — natural American English
-  "Google US English",      // Chrome — American English
-  "Microsoft Zira",         // Windows — female American English
-  "Microsoft David",        // Windows — male American English
-  "Alex",                   // macOS — classic American English
-  "Daniel",                 // macOS — British English
-  "Google UK English Female",
-  "Google UK English Male",
-  "Microsoft Mark",
-  "Karen",                  // macOS — Australian English
-]
+const VOICES = [
+  { id: "autumn", label: "Autumn", description: "Female" },
+  { id: "diana",  label: "Diana",  description: "Female" },
+  { id: "hannah", label: "Hannah", description: "Female" },
+  { id: "austin", label: "Austin", description: "Male"   },
+  { id: "daniel", label: "Daniel", description: "Male"   },
+  { id: "troy",   label: "Troy",   description: "Male"   },
+] as const
 
-function pickBestVoices(all: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
-  const english = all.filter(v => v.lang.startsWith("en"))
-  const preferred: SpeechSynthesisVoice[] = []
-  for (const name of PREFERRED_VOICE_NAMES) {
-    const match = english.find(v => v.name === name)
-    if (match) preferred.push(match)
-    if (preferred.length === 5) break
-  }
-  if (preferred.length < 5) {
-    const usVoices = english
-      .filter(v => v.lang === "en-US" && !preferred.includes(v))
-      .sort((a, b) => a.name.localeCompare(b.name))
-    preferred.push(...usVoices.slice(0, 5 - preferred.length))
-  }
-  return preferred.slice(0, 5)
-}
-
-interface TextToSpeechPlayerProps {
-  content: string
-  onClose: () => void
-}
+type VoiceId = typeof VOICES[number]["id"]
+type TtsState = "idle" | "generating" | "playing" | "paused"
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00"
@@ -55,157 +31,194 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`
 }
 
+interface TextToSpeechPlayerProps {
+  content: string
+  onClose: () => void
+}
+
 export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
-  const [currentWordIndex, setCurrentWordIndex] = useState(-1)
+  const [ttsState, setTtsState] = useState<TtsState>("idle")
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [speed, setSpeed] = useState("1")
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>("")
   const [isMuted, setIsMuted] = useState(false)
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
-  const wordsRef = useRef<string[]>([])
-  const isMutedRef = useRef(false)
-  const currentWordIndexRef = useRef(-1)
-
-  useEffect(() => { currentWordIndexRef.current = currentWordIndex }, [currentWordIndex])
-
-  useEffect(() => {
-    wordsRef.current = content.split(/(\s+)/)
-  }, [content])
-
-  // Load voices — Chrome fires onvoiceschanged, others return synchronously
-  useEffect(() => {
-    const loadVoices = () => {
-      const all = window.speechSynthesis.getVoices()
-      const best = pickBestVoices(all)
-      setVoices(best)
+  const [selectedVoice, setSelectedVoice] = useState<VoiceId>(() => {
+    if (typeof window !== "undefined") {
       const saved = localStorage.getItem(VOICE_STORAGE_KEY)
-      const match = best.find((v) => v.voiceURI === saved)
-      setSelectedVoiceURI(match?.voiceURI ?? best[0]?.voiceURI ?? "")
+      if (saved && VOICES.some(v => v.id === saved)) return saved as VoiceId
     }
-    loadVoices()
-    window.speechSynthesis.onvoiceschanged = loadVoices
-    return () => { window.speechSynthesis.onvoiceschanged = null }
-  }, [])
+    return "autumn"
+  })
 
-  // Estimated timing based on word count + speed
-  const { estimatedDuration, estimatedCurrentTime } = useMemo(() => {
-    const words = wordsRef.current
-    const realWordCount = words.filter(w => !/^\s+$/.test(w)).length
-    const rate = parseFloat(speed)
-    const duration = realWordCount / (WORDS_PER_SECOND * rate)
-    if (currentWordIndex < 0) return { estimatedDuration: duration, estimatedCurrentTime: 0 }
-    const elapsed = (currentWordIndex / Math.max(words.length - 1, 1)) * duration
-    return { estimatedDuration: duration, estimatedCurrentTime: elapsed }
-  }, [currentWordIndex, speed])
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const blobCacheRef = useRef<{ key: string; url: string } | null>(null)
+  const isGeneratingRef = useRef(false)
 
-  const handleVoiceChange = (uri: string) => {
-    setSelectedVoiceURI(uri)
-    localStorage.setItem(VOICE_STORAGE_KEY, uri)
-    if (isPlaying || isPaused) restart()
-  }
+  const words = useMemo(() => content.split(/(\s+)/), [content])
 
-  const startFromWord = (fromWordIndex: number) => {
-    window.speechSynthesis.cancel()
-    const slicedWords = wordsRef.current.slice(fromWordIndex)
-    const text = slicedWords.join("")
+  // Word index derived from real audio currentTime once loaded, estimated before
+  const currentWordIndex = useMemo(() => {
+    if (ttsState === "idle" || ttsState === "generating") return -1
+    const d = duration > 0 ? duration : words.filter(w => !/^\s+$/.test(w)).length / WORDS_PER_SECOND
+    if (d <= 0) return -1
+    return Math.floor((currentTime / d) * words.length)
+  }, [currentTime, duration, words, ttsState])
 
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = parseFloat(speed)
-    utterance.pitch = 1
-    utterance.volume = isMutedRef.current ? 0 : 1
+  const displayDuration = duration > 0
+    ? duration
+    : words.filter(w => !/^\s+$/.test(w)).length / WORDS_PER_SECOND
 
-    const voice = voices.find((v) => v.voiceURI === selectedVoiceURI)
-    if (voice) utterance.voice = voice
+  const cacheKey = `${selectedVoice}::${content}`
 
-    utterance.onboundary = (event) => {
-      if (event.name === "word") {
-        const charIndex = event.charIndex
-        let localIndex = 0
-        let charCount = 0
-        for (let i = 0; i < slicedWords.length; i++) {
-          charCount += slicedWords[i].length
-          if (charCount > charIndex) { localIndex = i; break }
-        }
-        setCurrentWordIndex(fromWordIndex + localIndex)
+  const generateAudio = async (seekTo?: number) => {
+    if (isGeneratingRef.current) return
+    isGeneratingRef.current = true
+    setTtsState("generating")
+    setCurrentTime(0)
+    setDuration(0)
+
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content, voice: selectedVoice }),
+      })
+
+      if (!response.ok) {
+        const data: { error?: string } = await response.json().catch(() => ({}))
+        toast.error(data.error ?? "TTS generation failed. Please try again.")
+        setTtsState("idle")
+        return
       }
-    }
 
-    utterance.onstart = () => { setIsPlaying(true); setIsPaused(false) }
-    utterance.onend = () => { setIsPlaying(false); setIsPaused(false); setCurrentWordIndex(-1) }
-    utterance.onerror = (e) => {
-      if (e.error === "interrupted") return
-      setIsPlaying(false); setIsPaused(false); setCurrentWordIndex(-1)
-      toast.error("Text-to-speech failed")
-    }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
 
-    utteranceRef.current = utterance
-    window.speechSynthesis.speak(utterance)
+      if (blobCacheRef.current) URL.revokeObjectURL(blobCacheRef.current.url)
+      blobCacheRef.current = { key: cacheKey, url }
+
+      const audio = audioRef.current!
+      audio.src = url
+      audio.playbackRate = parseFloat(speed)
+      audio.muted = isMuted
+      if (seekTo !== undefined) audio.currentTime = seekTo
+      await audio.play()
+      setTtsState("playing")
+    } catch (err) {
+      console.error("[TTS]", err)
+      toast.error("TTS generation failed. Please try again.")
+      setTtsState("idle")
+    } finally {
+      isGeneratingRef.current = false
+    }
   }
 
-  const speak = () => {
-    if (isPaused && utteranceRef.current) {
-      window.speechSynthesis.resume()
-      setIsPaused(false)
-      setIsPlaying(true)
+  const handlePlay = async () => {
+    if (isGeneratingRef.current) return
+
+    if (ttsState === "paused" && audioRef.current) {
+      audioRef.current.play()
+      setTtsState("playing")
       return
     }
-    startFromWord(0)
+
+    // Re-play cached audio (e.g. after it ended)
+    if (blobCacheRef.current?.key === cacheKey && audioRef.current?.src) {
+      audioRef.current.currentTime = 0
+      audioRef.current.playbackRate = parseFloat(speed)
+      audioRef.current.muted = isMuted
+      audioRef.current.play()
+      setTtsState("playing")
+      return
+    }
+
+    await generateAudio()
   }
 
-  const handleWordClick = (index: number) => {
-    if (/^\s+$/.test(wordsRef.current[index])) return
-    startFromWord(index)
-  }
-
-  const pause = () => { window.speechSynthesis.pause(); setIsPaused(true); setIsPlaying(false) }
-  const stop = () => { window.speechSynthesis.cancel(); setIsPlaying(false); setIsPaused(false); setCurrentWordIndex(-1) }
-  const restart = () => { stop(); setTimeout(() => speak(), 100) }
-
-  const skipSeconds = (seconds: number) => {
-    const words = wordsRef.current
-    const rate = parseFloat(speed)
-    const realWordCount = words.filter(w => !/^\s+$/.test(w)).length
-    const duration = realWordCount / (WORDS_PER_SECOND * rate)
-    const tokensPerSecond = words.length / Math.max(duration, 0.1)
-    const tokensToSkip = Math.round(Math.abs(seconds) * tokensPerSecond)
-    const current = currentWordIndexRef.current < 0 ? 0 : currentWordIndexRef.current
-    const newIndex = seconds > 0
-      ? Math.min(current + tokensToSkip, words.length - 1)
-      : Math.max(current - tokensToSkip, 0)
-    startFromWord(newIndex)
+  const handlePause = () => {
+    audioRef.current?.pause()
+    setTtsState("paused")
   }
 
   const handleSeek = (value: number[]) => {
     const t = value[0]
-    const words = wordsRef.current
-    const targetIndex = Math.round((t / Math.max(estimatedDuration, 0.1)) * (words.length - 1))
-    startFromWord(Math.max(0, Math.min(targetIndex, words.length - 1)))
+    if (audioRef.current) audioRef.current.currentTime = t
+    setCurrentTime(t)
+  }
+
+  const skipSeconds = (seconds: number) => {
+    if (!audioRef.current) return
+    const newTime = Math.max(0, Math.min(duration || displayDuration, currentTime + seconds))
+    audioRef.current.currentTime = newTime
+    setCurrentTime(newTime)
+  }
+
+  const handleWordClick = async (index: number) => {
+    if (/^\s+$/.test(words[index])) return
+    const seekTo = displayDuration > 0 ? (index / words.length) * displayDuration : undefined
+
+    if (blobCacheRef.current?.key === cacheKey && audioRef.current?.src) {
+      if (seekTo !== undefined) audioRef.current.currentTime = seekTo
+      if (ttsState !== "playing") {
+        audioRef.current.play()
+        setTtsState("playing")
+      }
+    } else {
+      await generateAudio(seekTo)
+    }
+  }
+
+  const handleSpeedChange = (val: string) => {
+    setSpeed(val)
+    if (audioRef.current) audioRef.current.playbackRate = parseFloat(val)
+  }
+
+  const handleVoiceChange = (voiceId: VoiceId) => {
+    setSelectedVoice(voiceId)
+    localStorage.setItem(VOICE_STORAGE_KEY, voiceId)
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ""
+    }
+    setTtsState("idle")
+    setCurrentTime(0)
+    setDuration(0)
   }
 
   const toggleMute = () => {
     const newMuted = !isMuted
     setIsMuted(newMuted)
-    isMutedRef.current = newMuted
-    if (isPlaying) startFromWord(currentWordIndexRef.current < 0 ? 0 : currentWordIndexRef.current)
+    if (audioRef.current) audioRef.current.muted = newMuted
   }
 
-  const handleSpeedChange = (val: string) => {
-    setSpeed(val)
-    if (isPlaying || isPaused) { stop(); setTimeout(() => speak(), 100) }
-  }
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause()
+      if (blobCacheRef.current) URL.revokeObjectURL(blobCacheRef.current.url)
+    }
+  }, [])
 
-  useEffect(() => () => { window.speechSynthesis.cancel() }, [])
+  const isGenerating = ttsState === "generating"
+  const isPlaying = ttsState === "playing"
+  const isPaused = ttsState === "paused"
+  const isActive = isPlaying || isPaused
 
   return (
     <Card className="border-purple-500/20 bg-purple-500/5">
+      {/* Hidden audio element driven by the Groq TTS blob */}
+      <audio
+        ref={audioRef}
+        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
+        onEnded={() => { setTtsState("idle"); setCurrentTime(0) }}
+      />
       <CardContent className="flex flex-col gap-4 py-4">
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Volume2 className="size-4 text-purple-600 dark:text-purple-400" />
-            <h3 className="text-sm font-medium">Text-to-Speech</h3>
+            <h3 className="text-sm font-medium">AI Read Aloud</h3>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose}>
             <X className="size-4" />
@@ -214,20 +227,19 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
 
         {/* Voice + Speed row */}
         <div className="flex gap-2">
-          {voices.length > 0 && (
-            <Select value={selectedVoiceURI} onValueChange={handleVoiceChange}>
-              <SelectTrigger className="flex-1 h-8 text-xs">
-                <SelectValue placeholder="Voice" />
-              </SelectTrigger>
-              <SelectContent>
-                {voices.map((v) => (
-                  <SelectItem key={v.voiceURI} value={v.voiceURI} className="text-xs">
-                    {v.name} <span className="text-muted-foreground ml-1">({v.lang})</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={selectedVoice} onValueChange={(v) => handleVoiceChange(v as VoiceId)}>
+            <SelectTrigger className="flex-1 h-8 text-xs">
+              <SelectValue placeholder="Voice" />
+            </SelectTrigger>
+            <SelectContent>
+              {VOICES.map((v) => (
+                <SelectItem key={v.id} value={v.id} className="text-xs">
+                  {v.label}
+                  <span className="text-muted-foreground ml-1">({v.description})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={speed} onValueChange={handleSpeedChange}>
             <SelectTrigger className="h-8 w-[68px] text-xs px-2 shrink-0">
               <SelectValue />
@@ -243,7 +255,7 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
         {/* Content with word highlighting */}
         <div className="max-h-[280px] overflow-y-auto rounded-md border bg-background/50 p-4">
           <p className="whitespace-pre-wrap text-sm leading-7">
-            {wordsRef.current.map((word, index) => {
+            {words.map((word, index) => {
               const isWord = !/^\s+$/.test(word)
               const active = index === currentWordIndex && isWord
               return (
@@ -265,14 +277,12 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
           </p>
         </div>
 
-        {/* Full audio player controls */}
+        {/* Playback controls */}
         <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2.5">
-          {/* Skip back 15s */}
           <Button
-            variant="ghost"
-            size="icon"
+            variant="ghost" size="icon"
             onClick={() => skipSeconds(-15)}
-            disabled={!isPlaying && !isPaused}
+            disabled={!isActive}
             className="size-8 shrink-0"
           >
             <div className="flex flex-col items-center gap-0">
@@ -281,23 +291,24 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
             </div>
           </Button>
 
-          {/* Play / Pause — large */}
-          {isPlaying ? (
-            <Button variant="default" size="icon" onClick={pause} className="size-10 shrink-0 rounded-full">
+          {isGenerating ? (
+            <Button variant="default" size="icon" disabled className="size-10 shrink-0 rounded-full">
+              <Loader2 className="size-4 animate-spin" />
+            </Button>
+          ) : isPlaying ? (
+            <Button variant="default" size="icon" onClick={handlePause} className="size-10 shrink-0 rounded-full">
               <Pause className="size-4" />
             </Button>
           ) : (
-            <Button variant="default" size="icon" onClick={speak} className="size-10 shrink-0 rounded-full">
+            <Button variant="default" size="icon" onClick={handlePlay} className="size-10 shrink-0 rounded-full">
               <Play className="size-4" />
             </Button>
           )}
 
-          {/* Skip forward 15s */}
           <Button
-            variant="ghost"
-            size="icon"
+            variant="ghost" size="icon"
             onClick={() => skipSeconds(15)}
-            disabled={!isPlaying && !isPaused}
+            disabled={!isActive}
             className="size-8 shrink-0"
           >
             <div className="flex flex-col items-center gap-0">
@@ -306,34 +317,31 @@ export function TextToSpeechPlayer({ content, onClose }: TextToSpeechPlayerProps
             </div>
           </Button>
 
-          {/* Current time */}
           <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-            {formatTime(estimatedCurrentTime)}
+            {formatTime(currentTime)}
           </span>
 
-          {/* Scrub slider */}
           <Slider
             min={0}
-            max={estimatedDuration || 1}
+            max={displayDuration || 1}
             step={0.5}
-            value={[estimatedCurrentTime]}
+            value={[currentTime]}
             onValueChange={handleSeek}
+            disabled={isGenerating || ttsState === "idle"}
             className="flex-1"
           />
 
-          {/* Duration */}
           <span className="w-9 shrink-0 text-xs tabular-nums text-muted-foreground">
-            {formatTime(estimatedDuration)}
+            {formatTime(displayDuration)}
           </span>
 
-          {/* Mute */}
           <Button variant="ghost" size="icon" onClick={toggleMute} className="size-8 shrink-0">
             {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
           </Button>
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
-          {isPaused ? "Paused" : isPlaying ? "Reading…" : "Ready to read"}
+          {isGenerating ? "Generating audio…" : isPaused ? "Paused" : isPlaying ? "Reading…" : "Ready · tap play for AI voice"}
         </p>
       </CardContent>
     </Card>

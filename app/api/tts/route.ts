@@ -4,16 +4,16 @@ import { ttsLimiter, applyRateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
 
 const ALLOWED_VOICES = [
-  'Arista-PlayAI',
-  'Fritz-PlayAI',
-  'George-PlayAI',
-  'Adelaide-PlayAI',
-  'Atlas-PlayAI',
-  'Clio-PlayAI',
+  'autumn',
+  'diana',
+  'hannah',
+  'austin',
+  'daniel',
+  'troy',
 ] as const
 
 const ttsSchema = z.object({
-  text: z.string().min(1).max(4500),
+  text: z.string().min(1).max(10000),
   voice: z.enum(ALLOWED_VOICES),
 })
 
@@ -55,10 +55,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'playai-tts',
+      model: 'canopylabs/orpheus-v1-english',
       input: text,
       voice,
-      response_format: 'mp3',
+      response_format: 'wav',
     }),
   })
 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   return new NextResponse(groqResponse.body, {
     headers: {
-      'Content-Type': 'audio/mpeg',
+      'Content-Type': 'audio/wav',
       'Cache-Control': 'no-store',
     },
   })

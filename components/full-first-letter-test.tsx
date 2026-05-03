@@ -61,6 +61,9 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const wordsLengthRef = useRef(0)
   const hasSavedRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const hasStartedRef = useRef(false)
+  const isMobileRef = useRef(false)
+  const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
 
@@ -77,6 +80,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     currentIndexRef.current = 0
     lockedRef.current = false
     hasSavedRef.current = false
+    lastInputRef.current = null
     wordsLengthRef.current = parsed.length
     setCurrentIndex(0)
     setCorrectCount(0)
@@ -98,15 +102,30 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     wordsLengthRef.current = words.length
   }, [words.length])
 
-  const handleKeyPress = useCallback(
-    (e: KeyboardEvent) => {
+  useEffect(() => {
+    hasStartedRef.current = hasStarted
+  }, [hasStarted])
+
+  useEffect(() => {
+    isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  }, [])
+
+  const processLetterInput = useCallback(
+    (rawKey: string) => {
       if (isComplete || wordsLengthRef.current === 0) return
       if (lockedRef.current) return // blocked during error delay
+      if (isMobileRef.current && !hasStartedRef.current) return
 
-      const key = e.key.toLowerCase()
+      const key = rawKey.toLowerCase()
       if (!/^[a-z]$/.test(key)) return
 
       const idx = currentIndexRef.current
+      const now = Date.now()
+      const last = lastInputRef.current
+      if (last && last.key === key && last.index === idx && now - last.ts < 90) {
+        return
+      }
+      lastInputRef.current = { key, index: idx, ts: now }
 
       setWords((prev) => {
         const currentWord = prev[idx]
@@ -159,10 +178,19 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     [isComplete]
   )
 
+  const handleWindowKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (isMobileRef.current) return
+      if (e.isComposing || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      processLetterInput(e.key)
+    },
+    [processLetterInput]
+  )
+
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyPress)
-    return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [handleKeyPress])
+    window.addEventListener("keydown", handleWindowKeyDown)
+    return () => window.removeEventListener("keydown", handleWindowKeyDown)
+  }, [handleWindowKeyDown])
 
   // Auto-focus the hidden input on desktop so keydown listeners work immediately.
   // Does NOT set hasStarted — that requires an explicit tap on the Start button.
@@ -174,9 +202,10 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     if (val.length > 0) {
-      const key = val.slice(-1).toLowerCase()
-      if (/^[a-z]$/.test(key)) handleKeyPress({ key } as KeyboardEvent)
+      const firstLetter = val.toLowerCase().match(/[a-z]/)?.[0]
+      if (firstLetter) processLetterInput(firstLetter)
     }
+    e.target.value = ""
     setMobileValue("")
   }
 
@@ -341,6 +370,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         ref={inputRef}
         value={mobileValue}
         onChange={handleMobileChange}
+        maxLength={1}
         inputMode="text"
         autoCapitalize="none"
         autoCorrect="off"
