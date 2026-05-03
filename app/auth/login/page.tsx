@@ -54,11 +54,32 @@ function LoginContent() {
       if (importShare) {
         document.cookie = `pendingShare=${importShare}; path=/; max-age=600; SameSite=Lax`
       }
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
-      })
-      if (error) { toast.error(error.message); setLoading(false) }
+
+      const isNative = typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.()
+
+      if (isNative) {
+        // On native: open OAuth in an in-app browser so the app can intercept the callback
+        // redirectTo must use the custom URL scheme so the OS routes it back to the app
+        // Requires com.squaredthought.verbatim://auth/callback in Supabase allowed redirect URLs
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: 'com.squaredthought.verbatim://auth/callback',
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) { toast.error(error.message); setLoading(false); return }
+        if (data.url) {
+          const { Browser } = await import('@capacitor/browser')
+          await Browser.open({ url: data.url, windowName: '_self' })
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: `${window.location.origin}/auth/callback` },
+        })
+        if (error) { toast.error(error.message); setLoading(false) }
+      }
     } catch {
       toast.error('An unexpected error occurred')
       setLoading(false)
@@ -104,7 +125,7 @@ function LoginContent() {
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex flex-col items-center justify-center min-h-screen lg:min-h-0 px-6 py-12 sm:px-10">
+      <div className="flex-1 flex flex-col items-center justify-start lg:justify-center px-6 py-12 sm:px-10">
 
         {/* Mobile branding */}
         <div className="flex lg:hidden flex-col items-center gap-1.5 mb-10">

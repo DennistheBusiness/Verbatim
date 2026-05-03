@@ -43,6 +43,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: 'cover', // required for env(safe-area-inset-*) to return non-zero values on iPhone
 }
 
 export default function RootLayout({

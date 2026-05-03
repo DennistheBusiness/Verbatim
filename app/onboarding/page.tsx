@@ -228,9 +228,9 @@ function OnboardingContent() {
             Show core features
             <ArrowRight className="size-4" />
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            This tour stays short, and you can skip it anytime.
-          </p>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
+          </Button>
         </div>
       </ScreenShell>
     )
@@ -295,11 +295,13 @@ function OnboardingContent() {
             Show me how it works
             <ArrowRight className="size-4" />
           </Button>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
+          </Button>
         </div>
       </ScreenShell>
     )
   }
-
 
   if (step === 2) {
     return (
@@ -378,6 +380,9 @@ function OnboardingContent() {
           <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
             I&apos;m ready to start
             <ArrowRight className="size-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleSkip}>
+            Skip tour
           </Button>
         </div>
       </ScreenShell>
