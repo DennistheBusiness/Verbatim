@@ -1,8 +1,8 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, Mic, Star, Upload, Zap } from "lucide-react"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, Loader2, Mic, Share2, Star, Upload, XCircle, Zap } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
@@ -14,54 +14,71 @@ export default function OnboardingPage() {
   )
 }
 
+type ImportStatus = 'idle' | 'loading' | 'done' | 'error'
+
 function OnboardingContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
   const [step, setStep] = useState(0)
 
-  const totalSteps = 3 // 0-3 = 4 screens
+  // Import state — tracked so the final step can show status + we can await before navigating
+  const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
+  const [importedSetId, setImportedSetId] = useState<string | null>(null)
+  const [importedTitle, setImportedTitle] = useState<string | null>(null)
+  // Ref keeps the promise so we can await it from any exit path (skip, back, etc.)
+  const importPromise = useRef<Promise<void> | null>(null)
+
+  const totalSteps = 3 // 0–3 = 4 screens; last screen differs for share users
 
   useEffect(() => {
     if (!importShare) return
-    fetch(`/api/share/${importShare}/import`, { method: 'POST' })
-      .catch(() => {})
+    setImportStatus('loading')
+    const p = fetch(`/api/share/${importShare}/import`, { method: 'POST' })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(({ importedSetId: id, title }: { importedSetId: string; title: string }) => {
+        setImportedSetId(id)
+        setImportedTitle(title)
+        setImportStatus('done')
+      })
+      .catch(() => setImportStatus('error'))
+    importPromise.current = p
   }, [importShare]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleComplete = () => {
+  // All navigation out of onboarding goes through here.
+  // For share users we must do a full-page reload so the MemorizationProvider
+  // (mounted in root layout, not unmounted by router.push) re-fetches and picks
+  // up the newly imported set.
+  const navigateTo = async (path: string) => {
     localStorage.setItem("hasSeenOnboarding", "true")
-    router.push("/")
+    if (importShare && importPromise.current) {
+      // Wait for import to finish (usually already done; < 1 s server round-trip)
+      await importPromise.current
+    }
+    window.location.href = path
   }
 
-  const handleSkip = () => {
-    handleComplete()
+  const handleComplete = () => navigateTo("/")
+  const handleSkip = () => navigateTo("/")
+  const handleCreateFirst = () => navigateTo("/create")
+  const handleStartPracticing = () => {
+    if (importedSetId) navigateTo(`/memorization/${importedSetId}`)
+    else navigateTo("/")
   }
 
   const handleContinue = () => {
-    if (step < totalSteps) {
-      setStep(step + 1)
-    }
+    if (step < totalSteps) setStep(step + 1)
   }
 
   const handleBack = () => {
-    if (step > 0) {
-      setStep(step - 1)
-    }
+    if (step > 0) setStep(step - 1)
   }
 
-  const handleCreateFirst = () => {
-    localStorage.setItem("hasSeenOnboarding", "true")
-    router.push("/create")
-  }
-
+  // Swipe + keyboard navigation
   useEffect(() => {
     let startX = 0
     let startY = 0
 
     const onTouchStart = (e: TouchEvent) => {
-      // Don't track swipes that begin on buttons, links, or inputs —
-      // React's synthetic onClick fires after touch events, and parent
-      // touch handlers on iOS WKWebView can prevent children from receiving clicks.
       const target = e.target as HTMLElement
       if (target.closest('button, a, input, textarea, [role="button"]')) return
       startX = e.touches[0].clientX
@@ -88,7 +105,6 @@ function OnboardingContent() {
     document.addEventListener('touchstart', onTouchStart, { passive: true })
     document.addEventListener('touchend', onTouchEnd, { passive: true })
     window.addEventListener('keydown', onKeyDown)
-
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
       document.removeEventListener('touchend', onTouchEnd)
@@ -146,6 +162,7 @@ function OnboardingContent() {
     </div>
   )
 
+  // ── Step 0 ─────────────────────────────────────────────────────────────────
   if (step === 0) {
     return (
       <ScreenShell>
@@ -229,6 +246,7 @@ function OnboardingContent() {
     )
   }
 
+  // ── Step 1 ─────────────────────────────────────────────────────────────────
   if (step === 1) {
     return (
       <ScreenShell maxWidth="max-w-4xl">
@@ -296,6 +314,7 @@ function OnboardingContent() {
     )
   }
 
+  // ── Step 2 ─────────────────────────────────────────────────────────────────
   if (step === 2) {
     return (
       <ScreenShell maxWidth="max-w-3xl">
@@ -309,7 +328,6 @@ function OnboardingContent() {
           </p>
         </div>
 
-        {/* Workflow steps */}
         <div className="flex flex-col gap-4 rounded-2xl border bg-muted/20 p-5 sm:p-6">
           <div className="flex items-start gap-4">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-sm font-semibold text-blue-600">1</div>
@@ -340,7 +358,6 @@ function OnboardingContent() {
           </div>
         </div>
 
-        {/* First letter example */}
         <div className="rounded-2xl border bg-muted/20 p-5 sm:p-6">
           <p className="mb-4 text-sm font-medium text-foreground">How encoding works — live example</p>
           <div className="flex flex-col gap-3">
@@ -382,6 +399,120 @@ function OnboardingContent() {
     )
   }
 
+  // ── Step 3 — share-link users: show their imported set ─────────────────────
+  if (importShare) {
+    return (
+      <ScreenShell maxWidth="max-w-md">
+        <div className="flex justify-center">
+          <div className="relative flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 to-green-500/20 blur-2xl" />
+            <div className="relative flex size-28 items-center justify-center rounded-full border-2 border-primary/20 bg-gradient-to-br from-blue-500/10 to-green-500/10">
+              <Share2 className="size-14 text-primary" strokeWidth={1.5} />
+            </div>
+          </div>
+        </div>
+
+        {importStatus === 'loading' && (
+          <>
+            <div className="flex flex-col gap-3 text-center">
+              <p className="text-sm font-medium text-primary">Almost there</p>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Adding your shared set&hellip;
+              </h2>
+              <p className="text-base leading-relaxed text-muted-foreground">
+                We&apos;re importing the memorization set that was shared with you. This only takes a moment.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 rounded-xl border bg-muted/30 p-5">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Importing set&hellip;</span>
+            </div>
+            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={handleComplete} disabled>
+              Please wait&hellip;
+            </Button>
+          </>
+        )}
+
+        {importStatus === 'done' && (
+          <>
+            <div className="flex flex-col gap-3 text-center">
+              <p className="text-sm font-medium text-primary">Ready to practice</p>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Your shared set is in your library
+              </h2>
+              <p className="text-base leading-relaxed text-muted-foreground">
+                It&apos;s been added to your account and is ready to practice right now.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-4 rounded-xl border bg-muted/30 p-5">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <CheckCircle2 className="size-5 text-primary" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Imported set</p>
+                <p className="font-semibold leading-snug">{importedTitle ?? 'Untitled'}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-primary/5 p-4">
+              <p className="text-sm text-muted-foreground">
+                Start with <strong className="text-foreground">Familiarize</strong> — read through the material before you practice recall. The app will guide you from there.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                size="lg"
+                className="w-full gap-2 brand-gradient-bg transition-opacity hover:opacity-90"
+                onClick={handleStartPracticing}
+              >
+                <BookOpen className="size-5" />
+                Start Practicing
+              </Button>
+              <Button variant="ghost" size="lg" className="w-full text-muted-foreground" onClick={handleComplete}>
+                Browse library
+              </Button>
+            </div>
+          </>
+        )}
+
+        {importStatus === 'error' && (
+          <>
+            <div className="flex flex-col gap-3 text-center">
+              <p className="text-sm font-medium text-destructive">Import failed</p>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Couldn&apos;t add the shared set
+              </h2>
+              <p className="text-base leading-relaxed text-muted-foreground">
+                The share link may have expired or the set was removed. You can still use Verbatim normally.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-5">
+              <XCircle className="size-5 shrink-0 text-destructive" />
+              <p className="text-sm text-muted-foreground">The shared memorization set could not be imported.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Button size="lg" className="w-full gap-2" onClick={handleComplete}>
+                Go to my library
+                <ArrowRight className="size-4" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full gap-2"
+                onClick={handleCreateFirst}
+              >
+                Create a set instead
+              </Button>
+            </div>
+          </>
+        )}
+      </ScreenShell>
+    )
+  }
+
+  // ── Step 3 — standard users: create first set ──────────────────────────────
   return (
     <ScreenShell maxWidth="max-w-md">
       <div className="flex justify-center">
@@ -396,7 +527,7 @@ function OnboardingContent() {
       <div className="flex flex-col gap-3 text-center">
         <p className="text-sm font-medium text-primary">Start here</p>
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          You’re ready to use the app
+          You&apos;re ready to use the app
         </h2>
         <p className="text-base leading-relaxed text-muted-foreground">
           Create one set and run one practice cycle. That is enough to feel how Verbatim works.

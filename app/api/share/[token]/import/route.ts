@@ -46,7 +46,7 @@ export async function POST(_request: NextRequest, { params }: RouteContext): Pro
 
   // If the user already owns this set, return their set ID directly
   if (sourceSet.user_id === user.id) {
-    return NextResponse.json({ importedSetId: sourceSet.id, alreadyOwned: true })
+    return NextResponse.json({ importedSetId: sourceSet.id, alreadyOwned: true, title: sourceSet.title })
   }
 
   const initialProgress = {
@@ -99,5 +99,5 @@ export async function POST(_request: NextRequest, { params }: RouteContext): Pro
     return NextResponse.json({ error: 'Failed to create chunks' }, { status: 500 })
   }
 
-  return NextResponse.json({ importedSetId: newSet.id })
+  return NextResponse.json({ importedSetId: newSet.id, title: sourceSet.title })
 }

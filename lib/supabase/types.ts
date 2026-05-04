@@ -178,6 +178,7 @@ export type Database = {
           repetition_mode: string
           reviewed_chunks: Json | null
           session_state: Json
+          share_token: string | null
           title: string
           updated_at: string
           user_id: string
@@ -198,6 +199,7 @@ export type Database = {
           repetition_mode?: string
           reviewed_chunks?: Json | null
           session_state?: Json
+          share_token?: string | null
           title: string
           updated_at?: string
           user_id: string
@@ -218,6 +220,7 @@ export type Database = {
           repetition_mode?: string
           reviewed_chunks?: Json | null
           session_state?: Json
+          share_token?: string | null
           title?: string
           updated_at?: string
           user_id?: string
