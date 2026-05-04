@@ -21,6 +21,10 @@ export default function LoginPage() {
   )
 }
 
+// Tracks any in-flight native OAuth poll so a retry can cancel it first
+let activePollId: ReturnType<typeof setInterval> | null = null
+let activePollStopped = false
+
 function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -99,13 +103,22 @@ function LoginContent() {
         if (data.url) {
           const { Browser } = await import('@capacitor/browser')
 
+          // Cancel any previous in-flight poll before starting a new one.
+          // If the user tapped "Continue with Google" twice, the first poll
+          // must not fire Browser.close() into the second flow.
+          if (activePollId !== null) {
+            activePollStopped = true
+            clearInterval(activePollId)
+            activePollId = null
+          }
+
           // Poll from WKWebView for when the OAuth code is stored by the callback.
           // When ready, close SFSafariViewController and complete the sign-in.
           // SFSafariViewController blocks custom scheme redirects, so programmatic
           // Browser.close() is the only reliable cross-device close mechanism.
-          let pollStopped = false
-          const pollId = setInterval(async () => {
-            if (pollStopped) { clearInterval(pollId); return }
+          activePollStopped = false
+          activePollId = setInterval(async () => {
+            if (activePollStopped) { clearInterval(activePollId!); activePollId = null; return }
             try {
               const res = await fetch('/api/auth/native-poll', {
                 method: 'POST',
@@ -114,9 +127,10 @@ function LoginContent() {
               })
               if (res.ok) {
                 const { ready } = await res.json()
-                if (ready && !pollStopped) {
-                  pollStopped = true
-                  clearInterval(pollId)
+                if (ready && !activePollStopped) {
+                  activePollStopped = true
+                  clearInterval(activePollId!)
+                  activePollId = null
                   await Browser.close()
                   window.location.href = '/auth/native-complete'
                 }
@@ -125,8 +139,8 @@ function LoginContent() {
           }, 2000)
 
           const listener = await Browser.addListener('browserFinished', () => {
-            pollStopped = true
-            clearInterval(pollId)
+            activePollStopped = true
+            if (activePollId !== null) { clearInterval(activePollId); activePollId = null }
             listener.remove()
             setLoading(false)
           })
