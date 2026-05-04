@@ -124,6 +124,49 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     })
   }
 
+  const startTouchDrag = (jobId: string) => {
+    if (isProcessing) return
+    setDraggingJobId(jobId)
+    setDragOverJobId(jobId)
+  }
+
+  useEffect(() => {
+    if (!draggingJobId || isProcessing) return
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0]
+      if (!touch) return
+
+      event.preventDefault()
+
+      const element = document.elementFromPoint(touch.clientX, touch.clientY)
+      const row = element?.closest('[data-image-job-id]') as HTMLElement | null
+      const targetId = row?.dataset.imageJobId ?? null
+
+      if (!targetId) return
+      setDragOverJobId(targetId)
+
+      if (targetId !== draggingJobId) {
+        reorderById(draggingJobId, targetId)
+      }
+    }
+
+    const handleTouchEnd = () => {
+      setDraggingJobId(null)
+      setDragOverJobId(null)
+    }
+
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', handleTouchEnd)
+    window.addEventListener('touchcancel', handleTouchEnd)
+
+    return () => {
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [draggingJobId, isProcessing])
+
   const handleExtractAll = useCallback(async () => {
     if (imageJobs.length === 0 || isProcessing) return
 
@@ -225,7 +268,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
         <span>{imageJobs.length}/{MAX_IMAGES} images selected</span>
-        <span>Drag to reorder or use arrows</span>
+        <span>Drag handle (mobile) or use arrows</span>
       </div>
 
       <div
@@ -276,6 +319,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
           {imageJobs.map((job, index) => (
             <div
               key={job.id}
+              data-image-job-id={job.id}
               className={`flex items-center gap-3 border-b border-border px-3 py-3 last:border-b-0 transition-colors ${
                 dragOverJobId === job.id ? "bg-primary/5" : ""
               }`}
@@ -308,9 +352,16 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
                 setDragOverJobId(null)
               }}
             >
-              <div className="text-muted-foreground/70" aria-hidden>
+              <button
+                type="button"
+                className="text-muted-foreground/70 touch-none"
+                aria-label={`Reorder ${job.file.name}`}
+                title="Drag to reorder"
+                onTouchStart={() => startTouchDrag(job.id)}
+                disabled={isProcessing}
+              >
                 <GripVertical className="size-4" />
-              </div>
+              </button>
 
               <button
                 type="button"
