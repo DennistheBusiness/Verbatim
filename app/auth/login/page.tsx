@@ -164,16 +164,17 @@ function LoginContent() {
       {/* Right panel — form */}
       <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto min-h-screen lg:min-h-0 px-6 py-8 sm:px-10">
 
-        {/* Mobile branding — compact horizontal layout so form sits high on screen */}
-        <div className="flex lg:hidden items-center gap-2.5 mb-6">
+        {/* Mobile branding */}
+        <div className="flex lg:hidden flex-col items-center gap-1 mb-6">
           <Image
             src="/verbatim-logo-icon.png"
             alt="Verbatim"
-            width={44}
-            height={44}
-            style={{ width: 44, height: 44 }}
+            width={100}
+            height={100}
+            className="-mb-3"
+            style={{ width: 100, height: 100 }}
           />
-          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
+          <span className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
             Verbatim
           </span>
         </div>
