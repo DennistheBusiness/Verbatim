@@ -102,9 +102,8 @@ function LoginContent() {
           const listener = await Browser.addListener('browserFinished', async () => {
             listener.remove()
             setLoading(false)
-            // Only skip if Universal Links already navigated us to the callback
-            if (window.location.pathname === '/auth/callback') return
-            window.location.href = '/auth/native-complete'
+            // Navigation to /auth/native-complete is handled by appUrlOpen via
+            // the custom scheme redirect from /auth/callback — no explicit nav needed.
           })
 
           await Browser.open({ url: data.url, windowName: '_self' })

@@ -42,7 +42,7 @@ export function SessionHandler() {
       const { data: { session } } = await supabase.auth.getSession()
       
       // If no session and not on public pages, redirect to login
-      const publicPaths = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password', '/auth/callback', '/landing', '/share/']
+      const publicPaths = ['/auth/', '/landing', '/share/']
       const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
       
       if (!session && !isPublicPath) {

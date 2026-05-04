@@ -32,7 +32,13 @@ export async function GET(request: NextRequest) {
       if (updateError) {
         console.error('[callback] code store error:', updateError.code, updateError.message)
       } else {
-        return NextResponse.redirect(`${origin}/auth/native-complete`)
+        // Redirect to the custom URL scheme so iOS intercepts it, auto-closes
+        // SFSafariViewController, and appUrlOpen in useDeepLinks navigates
+        // WKWebView to /auth/native-complete to exchange the code.
+        return new Response(null, {
+          status: 302,
+          headers: { Location: 'com.squaredthought.verbatim://auth/native-complete' },
+        })
       }
     }
   }
