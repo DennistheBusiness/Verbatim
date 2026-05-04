@@ -25,10 +25,15 @@ export async function initCapacitorPlugins() {
   // but WKWebView doesn't auto-scroll — we do it manually with the minimum offset needed.
   Keyboard.addListener('keyboardDidShow', () => {
     const el = document.activeElement as HTMLElement | null
-    if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return
+    const isInput = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.getAttribute('contenteditable') === 'true')
+    const fallbackTarget = document.querySelector('[data-keyboard-anchor="true"]') as HTMLElement | null
+    const targetEl = (isInput ? el : null) ?? fallbackTarget
+    if (!targetEl) return
+
     setTimeout(() => {
-      const rect = el.getBoundingClientRect()
-      const visibleBottom = window.innerHeight - 24 // 24px breathing room above keyboard
+      const rect = targetEl.getBoundingClientRect()
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+      const visibleBottom = Math.min(window.innerHeight, viewportHeight) - 24 // 24px breathing room above keyboard
       if (rect.bottom > visibleBottom) {
         window.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' })
       }

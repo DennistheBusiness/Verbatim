@@ -128,7 +128,7 @@ interface SetActionsContextType {
   updateSessionState: (id: string, sessionState: Partial<SessionState>) => Promise<void>
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
   markFamiliarizeComplete: (id: string) => Promise<void>
-  updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number) => Promise<void>
+  updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number, meta?: { chunkId?: string | null; totalWords?: number; correctWords?: number; durationSeconds?: number }) => Promise<void>
   updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => Promise<void>
   updateReviewedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
@@ -893,7 +893,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [updateProgress])
 
-  const updateEncodeProgress = useCallback(async (id: string, stage: 1 | 2 | 3, score?: number) => {
+  const updateEncodeProgress = useCallback(async (id: string, stage: 1 | 2 | 3, score?: number, meta?: { chunkId?: string | null; totalWords?: number; correctWords?: number; durationSeconds?: number }) => {
     try {
       const set = setsRef.current.find((s) => s.id === id)
       if (!set) throw new Error("Set not found")
@@ -928,6 +928,36 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         sessionState: updatedSessionState,
         recommendedStep: computeRecommendedStep(updatedProgress),
       }))
+
+      const stageMap: Record<1 | 2 | 3, "word" | "sentence" | "full"> = {
+        1: "word",
+        2: "sentence",
+        3: "full",
+      }
+      const chunkText = meta?.chunkId
+        ? set.chunks.find((chunk) => chunk.id === meta.chunkId)?.text ?? null
+        : null
+      const totalWords = meta?.totalWords ?? countWords(chunkText ?? set.content)
+      const computedScore = score ?? 0
+      const correctWords = meta?.correctWords ?? Math.round((computedScore / 100) * totalWords)
+
+      // Record historical encode attempt (fire-and-forget — never block the progress save)
+      supabase
+        .from("encoding_attempts")
+        .insert({
+          set_id: id,
+          chunk_id: meta?.chunkId ?? null,
+          stage: stageMap[stage],
+          score: computedScore,
+          total_words: totalWords,
+          correct_words: correctWords,
+          duration_seconds: meta?.durationSeconds ?? 0,
+        })
+        .then(({ error: insertError }) => {
+          if (insertError) {
+            console.error("Error recording encoding attempt:", insertError)
+          }
+        })
 
       const timeSpent = set.sessionState.lastVisitedAt
         ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)

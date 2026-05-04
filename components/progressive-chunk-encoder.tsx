@@ -18,6 +18,7 @@ import {
 
 interface ProgressiveChunkEncoderProps {
   setId: string
+  chunkId?: string | null
   chunk: string
   chunkIndex: number
   totalChunks: number
@@ -47,6 +48,7 @@ interface LevelResults {
 
 export function ProgressiveChunkEncoder({
   setId,
+  chunkId,
   chunk,
   chunkIndex,
   totalChunks,
@@ -78,6 +80,9 @@ export function ProgressiveChunkEncoder({
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [topCtaVisible, setTopCtaVisible] = useState(true)
   const topCtaRef = useRef<HTMLButtonElement>(null)
+  const activeWordRef = useRef<HTMLSpanElement>(null)
+  const levelStartAtRef = useRef<number>(Date.now())
+  const persistedLevelsRef = useRef<Set<Level>>(new Set())
   const [levelResults, setLevelResults] = useState<Record<Level, LevelResults | null>>({
     1: null,
     2: null,
@@ -140,6 +145,7 @@ export function ProgressiveChunkEncoder({
 
       lockedRef.current = false
       lastInputRef.current = null
+      levelStartAtRef.current = Date.now()
       setCorrectCount(0)
       setIncorrectCount(0)
       setIsLevelComplete(false)
@@ -151,6 +157,10 @@ export function ProgressiveChunkEncoder({
   useEffect(() => {
     initializeLevel(currentLevel)
   }, [currentLevel, initializeLevel])
+
+  useEffect(() => {
+    persistedLevelsRef.current.clear()
+  }, [setId, chunkId, chunk])
 
   // Keep refs in sync with state
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
@@ -295,11 +305,37 @@ export function ProgressiveChunkEncoder({
     return () => observer.disconnect()
   }, [hasStarted, isLevelComplete])
 
+  // Keep the active word visible above the keyboard on mobile as the user progresses.
+  useEffect(() => {
+    if (!hasStarted || isLevelComplete || !isMobileRef.current) return
+    const activeWordEl = activeWordRef.current
+    if (!activeWordEl) return
+
+    requestAnimationFrame(() => {
+      activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
+    })
+  }, [currentIndex, hasStarted, isLevelComplete, currentLevel])
+
+  const persistLevelProgress = useCallback((level: Level, result: LevelResults) => {
+    if (persistedLevelsRef.current.has(level)) return
+    persistedLevelsRef.current.add(level)
+
+    const totalWords = wordsRef.current.length > 0 ? wordsRef.current.length : parseWords(chunk).length
+    const durationSeconds = Math.max(1, Math.round((Date.now() - levelStartAtRef.current) / 1000))
+
+    updateEncodeProgress(setId, level, result.accuracy, {
+      chunkId: chunkId ?? null,
+      totalWords,
+      correctWords: result.correctCount,
+      durationSeconds,
+    })
+  }, [chunk, chunkId, setId, updateEncodeProgress])
+
   const handleContinueToNextLevel = () => {
     // Save progress for the completed level
     const completedLevelResult = levelResults[currentLevel]
     if (completedLevelResult) {
-      updateEncodeProgress(setId, currentLevel, completedLevelResult.accuracy)
+      persistLevelProgress(currentLevel, completedLevelResult)
       toast.success("Progress saved")
     }
 
@@ -312,6 +348,17 @@ export function ProgressiveChunkEncoder({
       setCurrentLevel(((currentLevel + 1) as Level))
     }
   }
+
+  useEffect(() => {
+    if (!isLevelComplete || currentLevel !== 3) return
+
+    const completedLevelResult = {
+      accuracy,
+      correctCount,
+      incorrectCount,
+    }
+    persistLevelProgress(3, completedLevelResult)
+  }, [accuracy, correctCount, currentLevel, incorrectCount, isLevelComplete, persistLevelProgress])
 
   const handleRetryLevel = () => {
     setShowSuccessDialog(false)
@@ -525,7 +572,14 @@ export function ProgressiveChunkEncoder({
           {/* Words display */}
           <div className="flex flex-wrap gap-2">
             {words.map((wordStatus, i) => (
-              <WordBlock key={i} status={wordStatus} level={currentLevel} />
+              <span
+                key={i}
+                ref={wordStatus.state === "active" ? activeWordRef : null}
+                data-keyboard-anchor={wordStatus.state === "active" ? "true" : undefined}
+                className="inline-flex"
+              >
+                <WordBlock status={wordStatus} level={currentLevel} />
+              </span>
             ))}
           </div>
 

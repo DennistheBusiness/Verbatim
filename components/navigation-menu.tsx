@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Menu, HelpCircle, Info, FileText, Shield as ShieldIcon, Settings, LogOut, BookOpen, ShieldAlert } from "lucide-react"
+import { Menu, HelpCircle, Info, FileText, Shield as ShieldIcon, Settings, LogOut, BookOpen, ShieldAlert, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -104,6 +104,10 @@ export function NavigationMenu({ user }: NavigationMenuProps) {
         {user && (
           <>
             <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => handleNavigate('/analytics')}>
+                <BarChart3 className="mr-2 size-4" />
+                <span>Analytics</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNavigate('/account')}>
                 <Settings className="mr-2 size-4" />
                 <span>Account Settings</span>
