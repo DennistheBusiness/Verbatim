@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import convert from 'heic-convert'
 import { createClient } from '@/lib/supabase/server'
 import { ocrLimiter, applyRateLimit } from '@/lib/rate-limit'
 
@@ -7,8 +8,21 @@ export interface ExtractTextResponse {
   error?: string
 }
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'image/heic-sequence',
+  'image/heif-sequence',
+]
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10 MB
+
+function isHeicOrHeif(type: string, extension: string) {
+  return type.includes('heic') || type.includes('heif') || extension === 'heic' || extension === 'heif'
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse<ExtractTextResponse>> {
   const supabase = await createClient()
@@ -38,14 +52,42 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExtractTe
       return NextResponse.json({ text: '', error: 'Image too large (max 10 MB)' }, { status: 400 })
     }
 
-    const mimeType = image.type || 'image/jpeg'
+    const imageFile = image as File
+    const extension = (imageFile.name?.split('.').pop() || '').toLowerCase()
+    const mimeTypeRaw = (image.type || '').toLowerCase()
+
+    const mimeType = ALLOWED_IMAGE_TYPES.includes(mimeTypeRaw)
+      ? mimeTypeRaw
+      : (extension === 'heic' || extension === 'heif')
+        ? 'image/heic'
+        : mimeTypeRaw || 'image/jpeg'
+
     if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
       return NextResponse.json({ text: '', error: 'Unsupported image type' }, { status: 400 })
     }
 
-    const buffer = await image.arrayBuffer()
-    const base64 = Buffer.from(buffer).toString('base64')
-    const dataUrl = `data:${mimeType};base64,${base64}`
+    const sourceBuffer = Buffer.from(await image.arrayBuffer())
+
+    let payloadBuffer = sourceBuffer
+    let payloadMime = mimeType
+
+    if (isHeicOrHeif(mimeTypeRaw, extension)) {
+      try {
+        const output = await convert({
+          buffer: sourceBuffer,
+          format: 'JPEG',
+          quality: 0.92,
+        })
+        payloadBuffer = Buffer.isBuffer(output) ? output : Buffer.from(output)
+        payloadMime = 'image/jpeg'
+      } catch (conversionError) {
+        console.error('HEIC conversion failed:', conversionError)
+        return NextResponse.json({ text: '', error: 'Unsupported image type' }, { status: 400 })
+      }
+    }
+
+    const base64 = payloadBuffer.toString('base64')
+    const dataUrl = `data:${payloadMime};base64,${base64}`
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Header } from "@/components/header"
 import { ContentInputTabs, type InputMethod } from "@/components/content-input-tabs"
 import { VoiceRecorder } from "@/components/voice-recorder"
+import { ImageTextExtractor } from "@/components/image-text-extractor"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useMemorization, type ChunkMode, type TranscriptWord } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
@@ -82,6 +83,13 @@ export default function EditPage({ params }: EditPageProps) {
     setTranscriptWords(words)
     setOriginalFilename("voice-recording.webm")
     setContentSource("voice")
+    setInputMethod("text")
+    setTouched((prev) => ({ ...prev, content: true }))
+  }
+
+  const handleImageExtraction = (text: string) => {
+    setContent(text)
+    setContentSource("text")
     setInputMethod("text")
     setTouched((prev) => ({ ...prev, content: true }))
   }
@@ -309,6 +317,9 @@ export default function EditPage({ params }: EditPageProps) {
                 }
                 voiceContent={
                   <VoiceRecorder onRecordingComplete={handleVoiceRecording} />
+                }
+                imageContent={
+                  <ImageTextExtractor onComplete={handleImageExtraction} />
                 }
               />
               {touched.content && !isContentValid && (
