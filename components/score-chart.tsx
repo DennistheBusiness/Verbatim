@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -30,23 +30,42 @@ import { ScoreChartSkeleton } from "@/components/loading-skeletons"
 
 interface Attempt {
   id: string
-  mode: string
+  bucket: string
+  source: "test" | "encode"
   score: number
   created_at: string
 }
 
-type FilterMode = "all" | "first_letter" | "full_text" | "audio"
+type ChartMode = "test" | "encode" | "all"
+type TestFilterMode = "all" | "first_letter" | "full_text" | "audio"
+type EncodeFilterMode = "all" | "word" | "sentence" | "full"
 
 interface ScoreChartProps {
   setId: string
   onStartTest: () => void
+  mode?: ChartMode
+  emptyStateCtaLabel?: string
+  emptyStateDescription?: string
 }
 
-const FILTER_LABELS: Record<FilterMode, string> = {
+const MODE_LABELS: Record<ChartMode, string> = {
+  all: "All",
+  test: "Test",
+  encode: "Encode",
+}
+
+const TEST_FILTER_LABELS: Record<TestFilterMode, string> = {
   all: "All",
   first_letter: "First Letter",
   full_text: "Full Recall",
   audio: "Audio",
+}
+
+const ENCODE_FILTER_LABELS: Record<EncodeFilterMode, string> = {
+  all: "All",
+  word: "Word",
+  sentence: "Sentence",
+  full: "Full",
 }
 
 const chartConfig: ChartConfig = {
@@ -56,30 +75,95 @@ const chartConfig: ChartConfig = {
   },
 }
 
-export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
-  const [attempts, setAttempts] = useState<Attempt[]>([])
+export function ScoreChart({
+  setId,
+  onStartTest,
+  mode = "all",
+  emptyStateCtaLabel = "Take a Test",
+  emptyStateDescription = "Complete your first test to see your progress over time",
+}: ScoreChartProps) {
+  const [testAttempts, setTestAttempts] = useState<Attempt[]>([])
+  const [encodeAttempts, setEncodeAttempts] = useState<Attempt[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeFilter, setActiveFilter] = useState<FilterMode>("all")
+  const [activeMode, setActiveMode] = useState<ChartMode>(mode)
+  const [activeTestFilter, setActiveTestFilter] = useState<TestFilterMode>("all")
+  const [activeEncodeFilter, setActiveEncodeFilter] = useState<EncodeFilterMode>("all")
+
+  useEffect(() => {
+    setActiveMode(mode)
+  }, [mode])
 
   useEffect(() => {
     const supabase = createClient()
-    supabase
-      .from("test_attempts")
-      .select("id, mode, score, created_at")
-      .eq("set_id", setId)
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) setAttempts(data)
+    setIsLoading(true)
+
+    Promise.all([
+      supabase
+        .from("test_attempts")
+        .select("id, mode, score, created_at")
+        .eq("set_id", setId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("encoding_attempts")
+        .select("id, stage, score, created_at")
+        .eq("set_id", setId)
+        .order("created_at", { ascending: true }),
+    ]).then(([testResult, encodeResult]) => {
+      if (!testResult.error && testResult.data) {
+        setTestAttempts(
+          testResult.data.map((item) => ({
+            id: item.id,
+            bucket: item.mode,
+            source: "test" as const,
+            score: item.score,
+            created_at: item.created_at,
+          }))
+        )
+      }
+
+      if (!encodeResult.error && encodeResult.data) {
+        setEncodeAttempts(
+          encodeResult.data.map((item) => ({
+            id: item.id,
+            bucket: item.stage,
+            source: "encode" as const,
+            score: item.score,
+            created_at: item.created_at,
+          }))
+        )
+      }
+
         setIsLoading(false)
       })
   }, [setId])
 
-  if (isLoading) return <ScoreChartSkeleton />
+  const allAttempts = useMemo(
+    () => [...testAttempts, ...encodeAttempts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [encodeAttempts, testAttempts]
+  )
 
-  const filteredAttempts =
-    activeFilter === "all"
-      ? attempts
-      : attempts.filter((a) => a.mode === activeFilter)
+  const filteredAttempts = useMemo(() => {
+    if (activeMode === "test") {
+      return activeTestFilter === "all"
+        ? testAttempts
+        : testAttempts.filter((attempt) => attempt.bucket === activeTestFilter)
+    }
+
+    if (activeMode === "encode") {
+      return activeEncodeFilter === "all"
+        ? encodeAttempts
+        : encodeAttempts.filter((attempt) => attempt.bucket === activeEncodeFilter)
+    }
+
+    return allAttempts
+  }, [activeEncodeFilter, activeMode, activeTestFilter, allAttempts, encodeAttempts, testAttempts])
+
+  const formatBucketLabel = (attempt: Attempt): string => {
+    if (attempt.source === "test") {
+      return TEST_FILTER_LABELS[attempt.bucket as TestFilterMode] ?? "Test"
+    }
+    return ENCODE_FILTER_LABELS[attempt.bucket as EncodeFilterMode] ?? "Encode"
+  }
 
   const chartData = filteredAttempts.map((a, i) => ({
     index: i + 1,
@@ -88,7 +172,8 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
       month: "short",
       day: "numeric",
     }),
-    mode: a.mode,
+    mode: formatBucketLabel(a),
+    source: a.source,
   }))
 
   const scores = filteredAttempts.map((a) => a.score)
@@ -103,9 +188,12 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
     scores.length >= 2 ? scores[scores.length - 1] - scores[0] : null
 
   const hasAttempts = filteredAttempts.length > 0
+  const hasAnyAttempts = allAttempts.length > 0
+
+  if (isLoading) return <ScoreChartSkeleton />
 
   // Show empty state if no attempts exist at all (across all modes)
-  if (attempts.length === 0) {
+  if (!hasAnyAttempts) {
     return (
       <Card>
         <CardContent className="p-0">
@@ -119,12 +207,12 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
               </EmptyMedia>
               <EmptyTitle>No test history yet</EmptyTitle>
               <EmptyDescription>
-                Complete your first test to see your progress over time
+                {emptyStateDescription}
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button onClick={onStartTest} className="w-full">
-                Take a Test
+                {emptyStateCtaLabel}
               </Button>
             </EmptyContent>
           </Empty>
@@ -136,6 +224,31 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-4">
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.keys(MODE_LABELS) as ChartMode[]).map((chartMode) => {
+            const count = chartMode === "test"
+              ? testAttempts.length
+              : chartMode === "encode"
+              ? encodeAttempts.length
+              : allAttempts.length
+
+            return (
+              <button
+                key={chartMode}
+                onClick={() => setActiveMode(chartMode)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeMode === chartMode
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                {MODE_LABELS[chartMode]}
+                <span className="ml-1 opacity-70">({count})</span>
+              </button>
+            )
+          })}
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Progress Over Time</h3>
@@ -164,32 +277,57 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
           )}
         </div>
 
-        {/* Filter pills */}
-        <div className="flex flex-wrap gap-1.5">
-          {(Object.keys(FILTER_LABELS) as FilterMode[]).map((mode) => {
-            const count =
-              mode === "all"
-                ? attempts.length
-                : attempts.filter((a) => a.mode === mode).length
-            if (mode !== "all" && count === 0) return null
-            return (
-              <button
-                key={mode}
-                onClick={() => setActiveFilter(mode)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  activeFilter === mode
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                {FILTER_LABELS[mode]}
-                {count > 0 && (
-                  <span className="ml-1 opacity-70">({count})</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        {activeMode === "test" && (
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(TEST_FILTER_LABELS) as TestFilterMode[]).map((filterMode) => {
+              const count = filterMode === "all"
+                ? testAttempts.length
+                : testAttempts.filter((a) => a.bucket === filterMode).length
+              if (filterMode !== "all" && count === 0) return null
+
+              return (
+                <button
+                  key={filterMode}
+                  onClick={() => setActiveTestFilter(filterMode)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activeTestFilter === filterMode
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {TEST_FILTER_LABELS[filterMode]}
+                  {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {activeMode === "encode" && (
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(ENCODE_FILTER_LABELS) as EncodeFilterMode[]).map((filterMode) => {
+              const count = filterMode === "all"
+                ? encodeAttempts.length
+                : encodeAttempts.filter((a) => a.bucket === filterMode).length
+              if (filterMode !== "all" && count === 0) return null
+
+              return (
+                <button
+                  key={filterMode}
+                  onClick={() => setActiveEncodeFilter(filterMode)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activeEncodeFilter === filterMode
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {ENCODE_FILTER_LABELS[filterMode]}
+                  {count > 0 && <span className="ml-1 opacity-70">({count})</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Stat cards */}
         <div className="grid grid-cols-4 gap-2">
@@ -197,7 +335,7 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
             { label: "Best", value: bestScore !== null ? `${bestScore}%` : "—" },
             { label: "Latest", value: latestScore !== null ? `${latestScore}%` : "—" },
             { label: "Average", value: avgScore !== null ? `${avgScore}%` : "—" },
-            { label: "Tests", value: totalAttempts.toString() },
+            { label: "Attempts", value: totalAttempts.toString() },
           ].map(({ label, value }) => (
             <div
               key={label}
@@ -271,7 +409,11 @@ export function ScoreChart({ setId, onStartTest }: ScoreChartProps) {
         ) : (
           <div className="flex h-[100px] items-center justify-center rounded-lg bg-muted/30">
             <p className="text-xs text-muted-foreground">
-              No {FILTER_LABELS[activeFilter].toLowerCase()} attempts yet
+              {activeMode === "test"
+                ? `No ${TEST_FILTER_LABELS[activeTestFilter].toLowerCase()} test attempts yet`
+                : activeMode === "encode"
+                ? `No ${ENCODE_FILTER_LABELS[activeEncodeFilter].toLowerCase()} encode attempts yet`
+                : "No attempts yet"}
             </p>
           </div>
         )}

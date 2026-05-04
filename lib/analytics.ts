@@ -1,6 +1,7 @@
 "use client"
 
 import posthog from 'posthog-js'
+import { DAILY_ACTIVE, ERROR_ENCOUNTERED, SESSION_STARTED, WEEKLY_ACTIVE } from '@/lib/analytics-events'
 
 // PostHog is initialized in components/posthog-provider.tsx at module level.
 // These helpers wrap posthog calls with SSR guards and dev logging.
@@ -173,7 +174,7 @@ export function trackDailyActive(): void {
   const lastTracked = localStorage.getItem('analytics_daily_active')
   
   if (lastTracked !== today) {
-    trackEvent('daily_active', { date: today })
+    trackEvent(DAILY_ACTIVE, { date: today })
     localStorage.setItem('analytics_daily_active', today)
   }
 }
@@ -191,7 +192,7 @@ export function trackWeeklyActive(): void {
   const lastTracked = localStorage.getItem('analytics_weekly_active')
   
   if (lastTracked !== weekKey) {
-    trackEvent('weekly_active', { week: weekKey })
+    trackEvent(WEEKLY_ACTIVE, { week: weekKey })
     localStorage.setItem('analytics_weekly_active', weekKey)
   }
 }
@@ -201,7 +202,7 @@ export function trackWeeklyActive(): void {
  * Call this when app loads with authenticated user
  */
 export function trackSessionStart(): void {
-  trackEvent('session_started', {
+  trackEvent(SESSION_STARTED, {
     referrer: document.referrer || 'direct',
     user_agent: navigator.userAgent,
   })
@@ -229,7 +230,7 @@ export function trackError(error: Error | string, context?: Record<string, any>)
     const errorMessage = typeof error === 'string' ? error : error.message
     const errorStack = typeof error === 'string' ? undefined : error.stack
     
-    trackEvent('error_encountered', {
+    trackEvent(ERROR_ENCOUNTERED, {
       error_message: errorMessage,
       error_type: typeof error === 'string' ? 'string' : error.name,
       stack_trace: errorStack,

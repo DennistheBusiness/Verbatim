@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, Copy, Check, MessageSquare, Mail, LinkIcon } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, Copy, Check, MessageSquare, Mail, LinkIcon, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
 
@@ -429,6 +429,16 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     return set.sessionState.lastVisitedAt
   }
 
+  const getHighestTestScore = (): number => {
+    const scores = [
+      set.progress.tests.firstLetter.bestScore,
+      set.progress.tests.fullText.bestScore,
+      set.progress.tests.audioTest.bestScore,
+    ].filter((score): score is number => score !== null)
+
+    return scores.length > 0 ? Math.max(...scores) : 0
+  }
+
   const getStatusBadge = (status: StepStatus) => {
     switch (status) {
       case "complete":
@@ -500,6 +510,56 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         break
     }
   }
+
+  const getProgressModuleCTA = (): { label: string; description: string; onClick: () => void } => {
+    if (hasResumePoint()) {
+      switch (set.sessionState.currentStep) {
+        case "encode":
+          return {
+            label: "Resume Training",
+            description: "Continue where you left off and keep building recall.",
+            onClick: handleResume,
+          }
+        case "familiarize":
+          return {
+            label: "Continue Familiarizing",
+            description: "Pick up reading practice where you left off.",
+            onClick: handleResume,
+          }
+        case "test":
+          return {
+            label: "Resume Testing",
+            description: "Jump back into your last test flow.",
+            onClick: handleResume,
+          }
+      }
+    }
+
+    switch (set.recommendedStep) {
+      case "familiarize":
+        return {
+          label: "Start Familiarizing",
+          description: "Build a strong first pass before training recall.",
+          onClick: handleFamiliarize,
+        }
+      case "encode":
+        return {
+          label: "Start Training",
+          description: "Begin encoding to strengthen recall accuracy.",
+          onClick: handleEncode,
+        }
+      case "test":
+      default:
+        return {
+          label: "Take a Test",
+          description: "Complete your first test to see your progress over time.",
+          onClick: handleTest,
+        }
+    }
+  }
+
+  const progressModuleCTA = getProgressModuleCTA()
+  const highestTestScore = getHighestTestScore()
 
   // Familiarize mode
   if (pageMode === "familiarize") {
@@ -1239,6 +1299,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         >
           <ProgressiveChunkEncoder
             setId={id}
+            chunkId={null}
             chunk={set.content}
             chunkIndex={0}
             totalChunks={1}
@@ -1301,6 +1362,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       >
         <ProgressiveChunkEncoder 
           setId={id}
+          chunkId={currentChunk.id}
           chunk={currentChunk.text} 
           chunkIndex={queuePosition}
           totalChunks={queuedTotal}
@@ -1330,12 +1392,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             >
               <HelpCircle className="size-5" />
             </Button>
-            {hasResumePoint() && (
-              <Button size="sm" className="gap-1.5" onClick={handleResume}>
-                <ArrowRight className="size-3.5" />
-                <span className="text-sm">Resume</span>
-              </Button>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -1374,6 +1430,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <div className="flex flex-col gap-1">
                   <p className="text-sm font-medium text-muted-foreground">Overall Progress</p>
                   <p className="text-3xl font-bold text-primary">{getOverallCompletion()}%</p>
+                  <p className="text-xs text-muted-foreground">
+                    Memorized (best test): <span className="font-semibold text-foreground">{highestTestScore}%</span>
+                  </p>
                 </div>
                 <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
                   <Trophy className="size-8 text-primary" />
@@ -1405,8 +1464,23 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </div>
         </div>
 
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Score Charts</h2>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/analytics?set=${id}`}>
+              <BarChart3 className="size-3.5" />
+              <span>View Full Charts</span>
+            </Link>
+          </Button>
+        </div>
+
         {/* Progress Over Time */}
-        <ScoreChart setId={id} onStartTest={handleTest} />
+        <ScoreChart
+          setId={id}
+          onStartTest={progressModuleCTA.onClick}
+          emptyStateCtaLabel={progressModuleCTA.label}
+          emptyStateDescription={progressModuleCTA.description}
+        />
 
         {/* Share Panel */}
         <Dialog open={showSharePanel} onOpenChange={setShowSharePanel}>

@@ -78,6 +78,57 @@ export type Database = {
           },
         ]
       }
+      encoding_attempts: {
+        Row: {
+          chunk_id: string | null
+          correct_words: number
+          created_at: string
+          duration_seconds: number
+          id: string
+          score: number
+          set_id: string
+          stage: string
+          total_words: number
+        }
+        Insert: {
+          chunk_id?: string | null
+          correct_words?: number
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          score: number
+          set_id: string
+          stage: string
+          total_words?: number
+        }
+        Update: {
+          chunk_id?: string | null
+          correct_words?: number
+          created_at?: string
+          duration_seconds?: number
+          id?: string
+          score?: number
+          set_id?: string
+          stage?: string
+          total_words?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "encoding_attempts_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "memorization_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "encoding_attempts_chunk_id_fkey"
+            columns: ["chunk_id"]
+            isOneToOne: false
+            referencedRelation: "chunks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chunks: {
         Row: {
           created_at: string
