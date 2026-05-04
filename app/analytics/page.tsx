@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { BarChart3 } from "lucide-react"
 import { Header } from "@/components/header"
 import { ScoreChart } from "@/components/score-chart"
@@ -13,10 +13,15 @@ import { Spinner } from "@/components/ui/spinner"
 
 export default function AnalyticsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { sets, isLoaded } = useSetList()
   const [selectedSetId, setSelectedSetId] = useState<string>("")
-  const setFromQuery = searchParams.get("set")
+  const [setFromQuery, setSetFromQuery] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const querySetId = new URLSearchParams(window.location.search).get("set")
+    setSetFromQuery(querySetId)
+  }, [])
 
   useEffect(() => {
     if (sets.length === 0) {
