@@ -32,7 +32,7 @@ const CHUNK_MODES: {
 
 export default function CreatePage() {
   const router = useRouter()
-  const { addSet } = useMemorization()
+  const { addSet, getAllTags } = useMemorization()
 
   const [step, setStep] = useState<Step>("form")
   const [title, setTitle] = useState("")
@@ -89,6 +89,16 @@ export default function CreatePage() {
     return t ? t.split(/\s+/).filter(Boolean).length : 0
   }, [content])
 
+  const existingTags = useMemo(() => getAllTags(), [getAllTags])
+
+  const suggestedTags = useMemo(() => {
+    const q = tagInput.trim().toLowerCase()
+    return existingTags
+      .filter((tag) => !tags.some((selected) => selected.toLowerCase() === tag.toLowerCase()))
+      .filter((tag) => (q ? tag.toLowerCase().includes(q) : true))
+      .slice(0, 12)
+  }, [existingTags, tagInput, tags])
+
   const countLabel = (mode: ChunkMode) => {
     const n = getChunks(content, mode).length
     const unit = mode === "paragraph" ? "paragraph" : mode === "sentence" ? "sentence" : mode === "line" ? "line" : "chunk"
@@ -122,7 +132,17 @@ export default function CreatePage() {
 
   const addTag = () => {
     const t = tagInput.trim()
-    if (t && !tags.includes(t)) { setTags([...tags, t]); setTagInput("") }
+    if (t && !tags.some((existing) => existing.toLowerCase() === t.toLowerCase())) {
+      setTags([...tags, t])
+      setTagInput("")
+    }
+  }
+
+  const selectSuggestedTag = (tag: string) => {
+    if (!tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+      setTags((prev) => [...prev, tag])
+    }
+    setTagInput("")
   }
 
   const handleTagKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -349,6 +369,20 @@ export default function CreatePage() {
                   </button>
                 )}
               </div>
+              {suggestedTags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {suggestedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => selectSuggestedTag(tag)}
+                      className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {tags.map((tag) => (
