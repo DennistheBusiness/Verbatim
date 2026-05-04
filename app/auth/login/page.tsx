@@ -181,7 +181,7 @@ function LoginContent() {
 
         <div className="w-full max-w-[360px] flex flex-col gap-5">
 
-          <h2 className="text-[22px] font-bold tracking-tight leading-tight">Welcome back</h2>
+          <h2 className="text-[22px] font-bold tracking-tight leading-tight">Speak. Teach. Perform. Inspire.</h2>
 
           <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
