@@ -6,7 +6,14 @@ import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import { ENCODE_STARTED, TEST_STARTED, ENCODE_METHOD_SELECTED } from "@/lib/analytics-events"
-import { SortingGame } from "@/components/sorting-game"
+import dynamic from "next/dynamic"
+
+// Lazy-load SortingGame so framer-motion Reorder is bundled in its own chunk
+// and doesn't cause a TDZ initialization error in ProgressiveChunkEncoder.
+const SortingGame = dynamic(
+  () => import("@/components/sorting-game").then((m) => ({ default: m.SortingGame })),
+  { ssr: false }
+)
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
