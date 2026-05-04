@@ -27,6 +27,7 @@ const MAX_IMAGES = 5
 export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
   const [imageJobs, setImageJobs] = useState<ImageJob[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isPreparing, setIsPreparing] = useState(false)
   const [extractedText, setExtractedText] = useState("")
   const [previewJobId, setPreviewJobId] = useState<string | null>(null)
   const [draggingJobId, setDraggingJobId] = useState<string | null>(null)
@@ -63,7 +64,39 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     }
   }, [])
 
-  const addFiles = useCallback((files: File[]) => {
+  const isHeicOrHeif = (file: File) => {
+    const type = (file.type || "").toLowerCase()
+    const name = file.name.toLowerCase()
+    return (
+      type.includes("heic") ||
+      type.includes("heif") ||
+      name.endsWith(".heic") ||
+      name.endsWith(".heif")
+    )
+  }
+
+  const convertHeicToJpeg = useCallback(async (file: File): Promise<File> => {
+    const formData = new FormData()
+    formData.append("image", file)
+
+    const response = await fetch("/api/normalize-image", {
+      method: "POST",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw new Error("Failed to normalize HEIC image")
+    }
+
+    const convertedBlob = await response.blob()
+    const nextName = file.name.replace(/\.(heic|heif)$/i, ".jpg")
+    return new File([convertedBlob], nextName, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    })
+  }, [])
+
+  const addFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
 
     if (imageJobs.length >= MAX_IMAGES) {
@@ -75,7 +108,26 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     const acceptedFiles = files.slice(0, availableSlots)
     const skippedCount = files.length - acceptedFiles.length
 
-    const newJobs: ImageJob[] = acceptedFiles.map((file) => ({
+    setIsPreparing(true)
+
+    const processedFiles: File[] = []
+    let conversionFailures = 0
+
+    for (const file of acceptedFiles) {
+      if (!isHeicOrHeif(file)) {
+        processedFiles.push(file)
+        continue
+      }
+
+      try {
+        const convertedFile = await convertHeicToJpeg(file)
+        processedFiles.push(convertedFile)
+      } catch {
+        conversionFailures += 1
+      }
+    }
+
+    const newJobs: ImageJob[] = processedFiles.map((file) => ({
       id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
       file,
       previewUrl: URL.createObjectURL(file),
@@ -85,11 +137,15 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     }))
 
     setImageJobs((prev) => [...prev, ...newJobs])
+    setIsPreparing(false)
 
     if (skippedCount > 0) {
       toast.error(`Only ${MAX_IMAGES} images are allowed`)
     }
-  }, [imageJobs.length])
+    if (conversionFailures > 0) {
+      toast.error(`Could not process ${conversionFailures} HEIC image${conversionFailures !== 1 ? "s" : ""}`)
+    }
+  }, [convertHeicToJpeg, imageJobs.length])
 
   const removeImage = (id: string) => {
     setImageJobs((prev) => {
@@ -235,7 +291,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     maxSize: 10 * 1024 * 1024,
     multiple: true,
     noClick: true,
-    onDropAccepted: (files) => addFiles(files),
+    onDropAccepted: (files) => { void addFiles(files) },
     onDropRejected: (rejections) => {
       const firstErrorCode = rejections[0]?.errors[0]?.code
       const msg = firstErrorCode === "file-too-large"
@@ -249,7 +305,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
 
   const handleCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
-    addFiles(files)
+    void addFiles(files)
     e.target.value = ""
   }
 
@@ -297,9 +353,9 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
           variant="outline"
           className="flex-1"
           onClick={open}
-          disabled={isProcessing || imageJobs.length >= MAX_IMAGES}
+          disabled={isProcessing || isPreparing || imageJobs.length >= MAX_IMAGES}
         >
-          Browse Images
+          {isPreparing ? "Preparing..." : "Browse Images"}
         </Button>
 
         <Button
@@ -307,7 +363,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
           variant="outline"
           className="flex-1 gap-2"
           onClick={() => cameraInputRef.current?.click()}
-          disabled={isProcessing || imageJobs.length >= MAX_IMAGES}
+          disabled={isProcessing || isPreparing || imageJobs.length >= MAX_IMAGES}
         >
           <Camera className="size-4" />
           Take Photo
@@ -423,7 +479,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
           type="button"
           className="flex-1"
           onClick={handleExtractAll}
-          disabled={isProcessing || imageJobs.length === 0}
+          disabled={isProcessing || isPreparing || imageJobs.length === 0}
         >
           {isProcessing ? (
             <span className="inline-flex items-center gap-2">
