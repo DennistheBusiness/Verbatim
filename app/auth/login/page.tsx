@@ -102,7 +102,8 @@ function LoginContent() {
           const listener = await Browser.addListener('browserFinished', async () => {
             listener.remove()
             setLoading(false)
-            if (window.location.pathname.startsWith('/auth/')) return
+            // Only skip if Universal Links already navigated us to the callback
+            if (window.location.pathname === '/auth/callback') return
             window.location.href = '/auth/native-complete'
           })
 
