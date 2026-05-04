@@ -162,30 +162,25 @@ function LoginContent() {
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto min-h-screen lg:min-h-0 px-6 py-12 sm:px-10">
+      <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto min-h-screen lg:min-h-0 px-6 py-8 sm:px-10">
 
-        {/* Mobile branding */}
-        <div className="flex lg:hidden flex-col items-center gap-1.5 mb-10">
+        {/* Mobile branding — compact horizontal layout so form sits high on screen */}
+        <div className="flex lg:hidden items-center gap-2.5 mb-6">
           <Image
             src="/verbatim-logo-icon.png"
             alt="Verbatim"
-            width={160}
-            height={160}
-            className="-mb-5"
-            style={{ width: 160, height: 160 }}
+            width={44}
+            height={44}
+            style={{ width: 44, height: 44 }}
           />
-          <span className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
+          <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
             Verbatim
           </span>
-          <span className="text-xs text-muted-foreground -mt-0.5">by Squared Thought</span>
         </div>
 
-        <div className="w-full max-w-[360px] flex flex-col gap-7">
+        <div className="w-full max-w-[360px] flex flex-col gap-5">
 
-          <div className="flex flex-col gap-1.5">
-            <h2 className="text-[28px] font-bold tracking-tight leading-tight">Welcome back</h2>
-            <p className="text-[15px] text-muted-foreground">Sign in to continue your practice</p>
-          </div>
+          <h2 className="text-[22px] font-bold tracking-tight leading-tight">Welcome back</h2>
 
           <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">

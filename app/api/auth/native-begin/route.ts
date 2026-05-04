@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
     .from('native_auth_transfers')
     .insert({ nonce })
 
-  if (error) return new Response('Server Error', { status: 500 })
+  if (error) {
+    console.error('[native-begin] insert error:', error.code, error.message, error.details)
+    return new Response(`Server Error: ${error.message}`, { status: 500 })
+  }
 
   return new Response('OK', { status: 200 })
 }
