@@ -9,12 +9,9 @@ export async function POST(request: NextRequest) {
     return new Response('Bad Request', { status: 400 })
   }
 
-  const { state, nonce } = body as { state?: unknown; nonce?: unknown }
+  const { nonce } = body as { nonce?: unknown }
 
-  if (
-    typeof state !== 'string' || state.length > 512 ||
-    typeof nonce !== 'string' || nonce.length !== 36
-  ) {
+  if (typeof nonce !== 'string' || nonce.length !== 36) {
     return new Response('Bad Request', { status: 400 })
   }
 
@@ -28,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   const { error } = await supabase
     .from('native_auth_transfers')
-    .insert({ state, nonce })
+    .insert({ nonce })
 
   if (error) return new Response('Server Error', { status: 500 })
 

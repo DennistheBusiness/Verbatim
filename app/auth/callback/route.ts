@@ -5,25 +5,25 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const state = requestUrl.searchParams.get('state')
+  const nonce = requestUrl.searchParams.get('n')   // set by native login flow
   const origin = requestUrl.origin
 
-  if (code && state) {
-    // Check if this is a native app OAuth flow (pre-registered via /api/auth/native-begin)
+  if (code && nonce) {
+    // Native flow: store the raw code for WKWebView to exchange with its own PKCE verifier.
+    // The nonce was pre-registered by /api/auth/native-begin before the browser opened.
     const serviceClient = createServiceClient()
     const { data: transfer } = await serviceClient
       .from('native_auth_transfers')
       .select('nonce')
-      .eq('state', state)
+      .eq('nonce', nonce)
       .gt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .single()
 
     if (transfer) {
-      // Native flow: store the code so WKWebView can exchange it with its own PKCE verifier
       await serviceClient
         .from('native_auth_transfers')
         .update({ code })
-        .eq('state', state)
+        .eq('nonce', nonce)
 
       return NextResponse.redirect(`${origin}/auth/native-complete`)
     }

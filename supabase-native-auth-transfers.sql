@@ -1,11 +1,10 @@
--- Temporary store linking a native OAuth flow (identified by state + nonce)
--- to the raw auth code returned by the callback.
--- The code is fetched by WKWebView and exchanged client-side with its own PKCE verifier,
--- bypassing the SFSafariViewController ↔ WKWebView cookie isolation on iOS.
+-- Drop and recreate with nonce as the primary key (state column removed).
+-- The nonce is embedded in the redirectTo URL so the callback can read it directly.
 
-CREATE TABLE IF NOT EXISTS native_auth_transfers (
-  state      TEXT        PRIMARY KEY,
-  nonce      TEXT        NOT NULL UNIQUE,
+DROP TABLE IF EXISTS native_auth_transfers;
+
+CREATE TABLE native_auth_transfers (
+  nonce      TEXT        PRIMARY KEY,
   code       TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

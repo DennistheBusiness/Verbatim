@@ -58,59 +58,51 @@ function LoginContent() {
       const isNative = typeof window !== 'undefined' && !!(window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
 
       if (isNative) {
+        // Generate a nonce and embed it in the redirectTo URL so the callback
+        // can read it directly. The callback stores the raw code keyed by nonce;
+        // /auth/native-complete then retrieves it and exchanges it inside WKWebView
+        // where the PKCE verifier lives — bypassing SFSafariViewController cookie isolation.
+        const nonce = crypto.randomUUID()
+        localStorage.setItem('native_auth_nonce', nonce)
+
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: 'https://verbatim.squaredthought.com/auth/callback',
+            redirectTo: `https://verbatim.squaredthought.com/auth/callback?n=${nonce}`,
             skipBrowserRedirect: true,
             queryParams: { prompt: 'select_account' },
           },
         })
         if (error) { toast.error(error.message); setLoading(false); return }
-        if (data.url) {
-          // Extract the OAuth state param and pre-register a nonce with the server.
-          // The callback route stores the raw code (keyed by state), then
-          // /auth/native-complete retrieves it and exchanges it in WKWebView where
-          // the PKCE verifier lives — bypassing the SFSafariViewController cookie isolation.
-          const oauthState = new URL(data.url).searchParams.get('state')
-          if (oauthState) {
-            const nonce = crypto.randomUUID()
-            localStorage.setItem('native_auth_nonce', nonce)
-            try {
-              const res = await fetch('/api/auth/native-begin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ state: oauthState, nonce }),
-              })
-              if (!res.ok) {
-                const text = await res.text()
-                console.error('[native-begin] HTTP', res.status, text)
-                toast.error(`Native auth setup failed (${res.status})`)
-                setLoading(false)
-                return
-              }
-            } catch (err) {
-              console.error('[native-begin] fetch error', err)
-              toast.error('Native auth setup failed — network error')
-              setLoading(false)
-              return
-            }
-          } else {
-            console.error('[native-begin] no state param in OAuth URL', data.url)
-            toast.error('Native auth setup failed — no state param')
+
+        // Pre-register the nonce so the callback can look it up
+        try {
+          const res = await fetch('/api/auth/native-begin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nonce }),
+          })
+          if (!res.ok) {
+            const text = await res.text()
+            console.error('[native-begin] HTTP', res.status, text)
+            toast.error(`Sign-in setup failed (${res.status}) — try again`)
             setLoading(false)
             return
           }
+        } catch (err) {
+          console.error('[native-begin] fetch error', err)
+          toast.error('Sign-in setup failed — check connection')
+          setLoading(false)
+          return
+        }
 
+        if (data.url) {
           const { Browser } = await import('@capacitor/browser')
 
           const listener = await Browser.addListener('browserFinished', async () => {
             listener.remove()
             setLoading(false)
-            // If Universal Links already handled the callback, skip
             if (window.location.pathname.startsWith('/auth/')) return
-            // Navigate to the native-complete page, which exchanges the code
-            // using WKWebView's own PKCE verifier
             window.location.href = '/auth/native-complete'
           })
 
