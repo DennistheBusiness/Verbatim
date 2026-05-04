@@ -29,10 +29,10 @@ const steps: Array<{
   },
   {
     id: "encode",
-    title: "Encode",
-    description: "Practice with first-letter recall",
+    title: "Train",
+    description: "First-letter or sorting recall",
     icon: Brain,
-    buttonText: "Practice",
+    buttonText: "Train",
   },
   {
     id: "test",

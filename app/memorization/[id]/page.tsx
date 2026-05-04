@@ -5,7 +5,8 @@ import Link from "next/link"
 import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
-import { ENCODE_STARTED, TEST_STARTED } from "@/lib/analytics-events"
+import { ENCODE_STARTED, TEST_STARTED, ENCODE_METHOD_SELECTED } from "@/lib/analytics-events"
+import { SortingGame } from "@/components/sorting-game"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -30,7 +31,7 @@ import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test"
+type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -276,13 +277,33 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setPageMode("chunk-select")
   }, [id, markFamiliarizeComplete])
 
-  // Encode chunk-select navigation
+  // Encode method select navigation
   const handleEncode = useCallback(() => {
-    setPageMode("chunk-select")
+    setPageMode("encode-method-select")
     updateSessionState(id, { currentStep: "encode", currentChunkIndex: null, currentEncodeStage: null })
   }, [id, updateSessionState])
 
-  const exitChunkSelect = useCallback(() => setPageMode("view"), [])
+  const exitEncodeMethodSelect = useCallback(() => setPageMode("view"), [])
+
+  const startFirstLetterMethod = useCallback(() => {
+    setPageMode("chunk-select")
+    trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'first_letter', chunk_count: set?.chunks.length ?? 0 })
+  }, [id, set?.chunks.length])
+
+  const startSortingGame = useCallback(() => {
+    setPageMode("sorting-game")
+    trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'sorting', chunk_count: set?.chunks.length ?? 0 })
+  }, [id, set?.chunks.length])
+
+  const exitSortingGame = useCallback(() => setPageMode("encode-method-select"), [])
+
+  const finishSortingGame = useCallback(() => {
+    setPageMode("view")
+    updateSessionState(id, { currentStep: null })
+  }, [id, updateSessionState])
+
+  // Encode chunk-select navigation
+  const exitChunkSelect = useCallback(() => setPageMode("encode-method-select"), [])
 
   // Test navigation
   const handleTest = useCallback(() => {
@@ -483,8 +504,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           setPracticeChunkIndex(currentChunkIndex)
           setPageMode("practice")
         } else {
-          // Go to chunk selection
-          setPageMode("chunk-select")
+          // Go to method selection
+          setPageMode("encode-method-select")
         }
         break
       
@@ -1005,12 +1026,110 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     )
   }
 
-  // Chunk selection mode
+  // Encode method selection
+  if (pageMode === "encode-method-select") {
+    return (
+      <SessionLayout
+        step="Step 2"
+        title="Train"
+        setTitle={set.title}
+        onBack={exitEncodeMethodSelect}
+        showBottomActions={false}
+        contextAction={
+          <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="line">Line</SelectItem>
+              <SelectItem value="paragraph">Paragraph</SelectItem>
+              <SelectItem value="sentence">Sentence</SelectItem>
+              <SelectItem value="custom">Custom (/)</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+      >
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-sm text-muted-foreground">
+            Choose a training method. Both methods help reinforce recall from memory.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          {/* First Letter Method */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <LetterText className="size-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">First Letter</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Progressive first-letter encoding across 3 difficulty levels
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} · select which chunks to practice
+                </p>
+              </div>
+              <Button onClick={startFirstLetterMethod} className="w-full" disabled={!hasContent}>
+                Practice
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Sorting Game */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <Layers className="size-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Sorting Game</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Rearrange shuffled chunks back into the correct order
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} · drag-and-drop or arrows
+                </p>
+              </div>
+              <Button onClick={startSortingGame} className="w-full" disabled={!hasContent || chunks.length < 2}>
+                {chunks.length < 2 ? 'Need at least 2 chunks' : 'Start Game'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </SessionLayout>
+    )
+  }
+
+  // Sorting game
+  if (pageMode === "sorting-game") {
+    return (
+      <SortingGame
+        setId={id}
+        chunks={chunks}
+        chunkMode={set.chunkMode}
+        onChunkModeChange={(mode) => updateChunkMode(id, mode)}
+        onBack={exitSortingGame}
+        onFinish={finishSortingGame}
+      />
+    )
+  }
+
+  // Chunk selection mode (First Letter method)
   if (pageMode === "chunk-select") {
     return (
       <SessionLayout
         step="Step 2"
-        title="Encode"
+        title="First Letter"
         setTitle={set.title}
         onBack={exitChunkSelect}
         contextAction={

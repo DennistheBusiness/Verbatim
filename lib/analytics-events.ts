@@ -245,6 +245,24 @@ export const ERROR_ENCOUNTERED = 'error_encountered'
  */
 export const ERROR_RETRY = 'error_retry'
 
+/**
+ * User selects a training method in the encode step
+ * Properties: set_id, method ('first_letter' | 'sorting'), chunk_count
+ */
+export const ENCODE_METHOD_SELECTED = 'encode_method_selected'
+
+/**
+ * User starts a sorting game session
+ * Properties: set_id, chunk_count, chunk_mode
+ */
+export const SORTING_GAME_STARTED = 'sorting_game_started'
+
+/**
+ * User submits a sorting game attempt
+ * Properties: set_id, score, correct_positions, total_chunks, chunk_mode, duration_seconds
+ */
+export const SORTING_GAME_COMPLETED = 'sorting_game_completed'
+
 // ============================================================================
 // TYPE DEFINITIONS FOR PROPERTIES
 // ============================================================================
@@ -252,6 +270,7 @@ export const ERROR_RETRY = 'error_retry'
 export type ChunkMode = 'line' | 'paragraph' | 'sentence' | 'custom'
 export type TestType = 'first_letter' | 'full_text' | 'audio'
 export type EncodeStage = 1 | 2 | 3
+export type EncodeMethod = 'first_letter' | 'sorting'
 export type ActivityType = 'familiarize' | 'encode' | 'test'
 export type AuthMethod = 'email' | 'google' | 'oauth'
 
