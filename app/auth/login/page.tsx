@@ -76,11 +76,30 @@ function LoginContent() {
           if (oauthState) {
             const nonce = crypto.randomUUID()
             localStorage.setItem('native_auth_nonce', nonce)
-            await fetch('/api/auth/native-begin', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ state: oauthState, nonce }),
-            })
+            try {
+              const res = await fetch('/api/auth/native-begin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: oauthState, nonce }),
+              })
+              if (!res.ok) {
+                const text = await res.text()
+                console.error('[native-begin] HTTP', res.status, text)
+                toast.error(`Native auth setup failed (${res.status})`)
+                setLoading(false)
+                return
+              }
+            } catch (err) {
+              console.error('[native-begin] fetch error', err)
+              toast.error('Native auth setup failed — network error')
+              setLoading(false)
+              return
+            }
+          } else {
+            console.error('[native-begin] no state param in OAuth URL', data.url)
+            toast.error('Native auth setup failed — no state param')
+            setLoading(false)
+            return
           }
 
           const { Browser } = await import('@capacitor/browser')
