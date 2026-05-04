@@ -8,10 +8,15 @@ import { trackEvent } from "@/lib/analytics"
 import { ENCODE_STARTED, TEST_STARTED, ENCODE_METHOD_SELECTED } from "@/lib/analytics-events"
 import dynamic from "next/dynamic"
 
-// Lazy-load SortingGame so framer-motion Reorder is bundled in its own chunk
-// and doesn't cause a TDZ initialization error in ProgressiveChunkEncoder.
+// Lazy-load anything that pulls in framer-motion (Reorder / vaul / motion) so
+// those modules are isolated in their own chunks and can't cause a TDZ
+// "Cannot access before initialization" error in ProgressiveChunkEncoder.
 const SortingGame = dynamic(
   () => import("@/components/sorting-game").then((m) => ({ default: m.SortingGame })),
+  { ssr: false }
+)
+const ShareDrawer = dynamic(
+  () => import("@/components/share-drawer").then((m) => ({ default: m.ShareDrawer })),
   { ssr: false }
 )
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
@@ -21,7 +26,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, Copy, Check, MessageSquare, Mail, LinkIcon, BarChart3 } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
 
@@ -37,7 +42,6 @@ import { ScoreChart } from "@/components/score-chart"
 import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game"
 
@@ -1609,127 +1613,16 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           emptyStateDescription={progressModuleCTA.description}
         />
 
-        {/* Share Panel */}
-        <Drawer open={showSharePanel} onOpenChange={setShowSharePanel}>
-          <DrawerContent className="max-h-[92svh]">
-            <div className="mx-auto w-full max-w-md">
-              <DrawerHeader className="pb-2 pt-4 text-center">
-                <DrawerTitle className="text-lg font-semibold">Share</DrawerTitle>
-              </DrawerHeader>
-
-              <div className="flex flex-col gap-5 px-4 pb-8 pt-2">
-                {shareUrl ? (
-                  <>
-                    {/* Set identity */}
-                    <div className="flex flex-col items-center gap-1 text-center">
-                      <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.55_0.22_240)]/15 to-[oklch(0.65_0.20_150)]/15 border border-primary/10">
-                        <Share2 className="size-6 text-primary" />
-                      </div>
-                      <p className="mt-2 text-base font-semibold leading-snug">{set.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Anyone with this link can preview and import this set
-                      </p>
-                    </div>
-
-                    {/* Copy link — primary action */}
-                    <button
-                      onClick={handleCopyShareUrl}
-                      className="group relative flex items-center gap-3 rounded-2xl border bg-muted/40 px-4 py-3.5 text-left transition-colors hover:bg-muted/70 active:bg-muted"
-                    >
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background shadow-sm border">
-                        {shareCopied
-                          ? <Check className="size-4 text-green-500" />
-                          : <LinkIcon className="size-4 text-muted-foreground" />
-                        }
-                      </div>
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <span className="text-sm font-medium">{shareCopied ? 'Copied!' : 'Copy link'}</span>
-                        <span className="truncate text-xs text-muted-foreground">{shareUrl}</span>
-                      </div>
-                      <Copy className="size-4 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-                    </button>
-
-                    {/* Share via */}
-                    <div className="flex flex-col gap-2">
-                      <p className="px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Share via</p>
-                      <div className="grid grid-cols-2 gap-2.5">
-                        {/* Native share — shown only when available */}
-                        {typeof navigator !== 'undefined' && 'share' in navigator && (
-                          <button
-                            onClick={() => {
-                              navigator.share({
-                                title: `Practice "${set.title}" with me`,
-                                text: `I'm memorizing "${set.title}" on Verbatim — here's the link to practice it too:`,
-                                url: shareUrl,
-                              }).catch(() => {})
-                            }}
-                            className="col-span-2 flex items-center gap-3 rounded-2xl border bg-primary/5 px-4 py-3.5 text-left transition-colors hover:bg-primary/10 active:bg-primary/15"
-                          >
-                            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                              <Share2 className="size-4 text-primary" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium text-primary">Share…</span>
-                              <span className="text-xs text-muted-foreground">Open share sheet</span>
-                            </div>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            const msg = `Hey! I'm memorizing "${set.title}" on Verbatim — here's the link to practice it too:\n${shareUrl}`
-                            window.open(`sms:?body=${encodeURIComponent(msg)}`)
-                          }}
-                          className="flex items-center gap-3 rounded-2xl border bg-muted/40 px-4 py-3.5 text-left transition-colors hover:bg-muted/70 active:bg-muted"
-                        >
-                          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-green-500/10">
-                            <MessageSquare className="size-4 text-green-600" />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">Text</span>
-                            <span className="text-xs text-muted-foreground">iMessage / SMS</span>
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => {
-                            const subject = `Practice "${set.title}" with me on Verbatim`
-                            const body = `I'm memorizing "${set.title}" on Verbatim and thought you'd want to practice it too.\n\nClick here to import it:\n${shareUrl}`
-                            window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
-                          }}
-                          className="flex items-center gap-3 rounded-2xl border bg-muted/40 px-4 py-3.5 text-left transition-colors hover:bg-muted/70 active:bg-muted"
-                        >
-                          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                            <Mail className="size-4 text-blue-600" />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">Email</span>
-                            <span className="text-xs text-muted-foreground">Send via mail app</span>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Stop sharing — low-emphasis */}
-                    <div className="flex justify-center pt-1">
-                      <button
-                        className="text-xs text-muted-foreground/60 hover:text-destructive transition-colors py-1"
-                        onClick={handleRevokeShare}
-                      >
-                        Stop sharing this set
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 py-8">
-                    <div className="flex size-14 items-center justify-center rounded-2xl bg-muted/40">
-                      <Share2 className="size-6 text-muted-foreground animate-pulse" />
-                    </div>
-                    <p className="text-sm text-muted-foreground">Generating share link…</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </DrawerContent>
-        </Drawer>
+        {/* Share Panel — lazy-loaded to keep vaul/framer-motion out of the main chunk */}
+        <ShareDrawer
+          open={showSharePanel}
+          onOpenChange={setShowSharePanel}
+          title={set.title}
+          shareUrl={shareUrl}
+          shareCopied={shareCopied}
+          onCopy={handleCopyShareUrl}
+          onRevoke={handleRevokeShare}
+        />
 
         <Dialog open={showSystemInfo} onOpenChange={setShowSystemInfo}>
           <DialogContent className="max-w-sm">
