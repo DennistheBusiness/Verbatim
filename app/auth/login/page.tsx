@@ -99,11 +99,36 @@ function LoginContent() {
         if (data.url) {
           const { Browser } = await import('@capacitor/browser')
 
-          const listener = await Browser.addListener('browserFinished', async () => {
+          // Poll from WKWebView for when the OAuth code is stored by the callback.
+          // When ready, close SFSafariViewController and complete the sign-in.
+          // SFSafariViewController blocks custom scheme redirects, so programmatic
+          // Browser.close() is the only reliable cross-device close mechanism.
+          let pollStopped = false
+          const pollId = setInterval(async () => {
+            if (pollStopped) { clearInterval(pollId); return }
+            try {
+              const res = await fetch('/api/auth/native-poll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce }),
+              })
+              if (res.ok) {
+                const { ready } = await res.json()
+                if (ready && !pollStopped) {
+                  pollStopped = true
+                  clearInterval(pollId)
+                  await Browser.close()
+                  window.location.href = '/auth/native-complete'
+                }
+              }
+            } catch { /* network hiccup — retry next interval */ }
+          }, 2000)
+
+          const listener = await Browser.addListener('browserFinished', () => {
+            pollStopped = true
+            clearInterval(pollId)
             listener.remove()
             setLoading(false)
-            // Navigation to /auth/native-complete is handled by appUrlOpen via
-            // the custom scheme redirect from /auth/callback — no explicit nav needed.
           })
 
           await Browser.open({ url: data.url, windowName: '_self' })
