@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react"
 import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ImageIcon, Camera, Loader2, RotateCcw, CheckCircle2, ArrowUp, ArrowDown, Trash2 } from "lucide-react"
+import { ImageIcon, Camera, Loader2, RotateCcw, CheckCircle2, ArrowUp, ArrowDown, Trash2, GripVertical } from "lucide-react"
 import { toast } from "sonner"
 
 interface ImageTextExtractorProps {
@@ -29,6 +29,8 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [extractedText, setExtractedText] = useState("")
   const [previewJobId, setPreviewJobId] = useState<string | null>(null)
+  const [draggingJobId, setDraggingJobId] = useState<string | null>(null)
+  const [dragOverJobId, setDragOverJobId] = useState<string | null>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const previewJob = imageJobs.find((job) => job.id === previewJobId) ?? null
@@ -104,6 +106,20 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
       if (targetIndex < 0 || targetIndex >= next.length) return prev
       const [item] = next.splice(index, 1)
       next.splice(targetIndex, 0, item)
+      return next
+    })
+  }
+
+  const reorderById = (fromId: string, toId: string) => {
+    if (fromId === toId) return
+    setImageJobs((prev) => {
+      const fromIndex = prev.findIndex((job) => job.id === fromId)
+      const toIndex = prev.findIndex((job) => job.id === toId)
+      if (fromIndex < 0 || toIndex < 0) return prev
+
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
       return next
     })
   }
@@ -209,7 +225,7 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
         <span>{imageJobs.length}/{MAX_IMAGES} images selected</span>
-        <span>Transcription follows the list order</span>
+        <span>Drag to reorder or use arrows</span>
       </div>
 
       <div
@@ -258,7 +274,44 @@ export function ImageTextExtractor({ onComplete }: ImageTextExtractorProps) {
       {imageJobs.length > 0 && (
         <div className="rounded-xl border border-border">
           {imageJobs.map((job, index) => (
-            <div key={job.id} className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-b-0">
+            <div
+              key={job.id}
+              className={`flex items-center gap-3 border-b border-border px-3 py-3 last:border-b-0 transition-colors ${
+                dragOverJobId === job.id ? "bg-primary/5" : ""
+              }`}
+              draggable={!isProcessing}
+              onDragStart={(e) => {
+                setDraggingJobId(job.id)
+                e.dataTransfer.effectAllowed = "move"
+                e.dataTransfer.setData("text/plain", job.id)
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (!isProcessing) {
+                  e.dataTransfer.dropEffect = "move"
+                  setDragOverJobId(job.id)
+                }
+              }}
+              onDragLeave={() => {
+                setDragOverJobId((prev) => (prev === job.id ? null : prev))
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (isProcessing) return
+                const sourceId = e.dataTransfer.getData("text/plain") || draggingJobId
+                if (sourceId) reorderById(sourceId, job.id)
+                setDraggingJobId(null)
+                setDragOverJobId(null)
+              }}
+              onDragEnd={() => {
+                setDraggingJobId(null)
+                setDragOverJobId(null)
+              }}
+            >
+              <div className="text-muted-foreground/70" aria-hidden>
+                <GripVertical className="size-4" />
+              </div>
+
               <button
                 type="button"
                 className="size-12 overflow-hidden rounded-md bg-muted ring-offset-background transition hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
