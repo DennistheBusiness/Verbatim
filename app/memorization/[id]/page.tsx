@@ -78,6 +78,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const set = sets.find((s) => s.id === id)
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
+  const [selectedPracticeChunkIndexes, setSelectedPracticeChunkIndexes] = useState<number[]>([])
+  const [practiceQueuePosition, setPracticeQueuePosition] = useState(0)
   const [familiarizeSubView, setFamiliarizeSubView] = useState<"landing" | "reader">("landing")
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
   const [contentExpanded, setContentExpanded] = useState(false)
@@ -159,26 +161,39 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [id, updateChunkMode])
 
   // Encode navigation
-  const startPractice = useCallback((index: number) => {
-    setPracticeChunkIndex(index)
+  const startPracticeQueue = useCallback((indexes: number[]) => {
+    const normalizedIndexes = Array.from(new Set(indexes)).sort((a, b) => a - b)
+    if (normalizedIndexes.length === 0) return
+
+    const firstIndex = normalizedIndexes[0]
+    setSelectedPracticeChunkIndexes(normalizedIndexes)
+    setPracticeQueuePosition(0)
+    setPracticeChunkIndex(firstIndex)
     setPageMode("practice")
-    updateSessionState(id, { currentStep: "encode", currentChunkIndex: index })
-    trackEvent(ENCODE_STARTED, { set_id: id, chunk_index: index })
+    updateSessionState(id, { currentStep: "encode", currentChunkIndex: firstIndex })
+    trackEvent(ENCODE_STARTED, { set_id: id, chunk_indices: normalizedIndexes, chunk_count: normalizedIndexes.length })
   }, [id, updateSessionState])
+
+  const startPractice = useCallback((index: number) => {
+    startPracticeQueue([index])
+  }, [startPracticeQueue])
 
   const exitPractice = useCallback(() => {
     setPracticeChunkIndex(null)
+    setPracticeQueuePosition(0)
     setPageMode("chunk-select")
   }, [])
 
   const finishEncoding = useCallback(() => {
     setPracticeChunkIndex(null)
+    setPracticeQueuePosition(0)
     setPageMode("view")
     updateSessionState(id, { currentStep: null, currentChunkIndex: null, currentEncodeStage: null })
   }, [id, updateSessionState])
 
   const continueFromEncodeToTest = useCallback(() => {
     setPracticeChunkIndex(null)
+    setPracticeQueuePosition(0)
     setPageMode("test-select")
   }, [])
 
@@ -189,18 +204,40 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [])
 
   const handleNextChunk = useCallback(() => {
-    if (practiceChunkIndex !== null) {
-      const newIndex = practiceChunkIndex + 1
-      setPracticeChunkIndex(newIndex)
-      updateSessionState(id, { currentChunkIndex: newIndex })
-    }
-  }, [practiceChunkIndex, id, updateSessionState])
+    if (selectedPracticeChunkIndexes.length === 0) return
+
+    const nextPosition = practiceQueuePosition + 1
+    const nextChunkIndex = selectedPracticeChunkIndexes[nextPosition]
+    if (nextChunkIndex === undefined) return
+
+    setPracticeQueuePosition(nextPosition)
+    setPracticeChunkIndex(nextChunkIndex)
+    updateSessionState(id, { currentChunkIndex: nextChunkIndex })
+  }, [id, practiceQueuePosition, selectedPracticeChunkIndexes, updateSessionState])
 
   const handleRetryChunk = useCallback(() => {
     const idx = practiceChunkIndex
     setPracticeChunkIndex(null)
     setTimeout(() => setPracticeChunkIndex(idx), 0)
   }, [practiceChunkIndex])
+
+  const togglePracticeChunkSelection = useCallback((index: number) => {
+    setSelectedPracticeChunkIndexes((prev) => {
+      if (prev.includes(index)) {
+        return prev.filter((value) => value !== index)
+      }
+      return [...prev, index].sort((a, b) => a - b)
+    })
+  }, [])
+
+  const selectAllPracticeChunks = useCallback(() => {
+    if (!set) return
+    setSelectedPracticeChunkIndexes(set.chunks.map((chunk) => chunk.orderIndex))
+  }, [set])
+
+  const clearPracticeChunkSelection = useCallback(() => {
+    setSelectedPracticeChunkIndexes([])
+  }, [])
 
   // Familiarize navigation
   const handleFamiliarize = useCallback(() => {
@@ -325,6 +362,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const chunks = set.chunks
   const wordCount = countWords(set.content)
   const hasContent = chunks.length > 0 && wordCount > 0
+  const selectedPracticeCount = selectedPracticeChunkIndexes.length
+  const selectedPracticeWordCount = selectedPracticeChunkIndexes.reduce((total, index) => {
+    const chunk = chunks[index]
+    return total + (chunk ? countWords(chunk.text) : 0)
+  }, 0)
 
   // Helper functions for progress hub
   type StepStatus = "not-started" | "in-progress" | "complete"
@@ -925,8 +967,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Select>
         }
         primaryAction={hasContent ? {
-          label: "Start from Beginning",
-          onClick: () => startPractice(0),
+          label: selectedPracticeCount > 0
+            ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
+            : "Select chunks to practice",
+          onClick: () => startPracticeQueue(selectedPracticeChunkIndexes),
+          disabled: selectedPracticeCount === 0,
         } : undefined}
         secondaryAction={hasContent ? {
           label: "Skip to Test",
@@ -954,39 +999,56 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             {/* Instructions */}
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-sm text-muted-foreground">
-                Choose a chunk to practice. Type the first letter of each word to reveal the full text.
+                Select one or more chunks to practice. Verbatim will queue them in order and move you through the selected set.
               </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">{selectedPracticeCount} selected</span>
+                <span className="text-xs text-muted-foreground">
+                  {selectedPracticeCount > 0
+                    ? `${selectedPracticeWordCount} words queued`
+                    : "Tap chunks below to build a practice queue"}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={selectAllPracticeChunks} className="gap-2 shadow-sm">
+                  <CheckCircle2 className="size-4" />
+                  Select All Chunks
+                </Button>
+                {selectedPracticeCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearPracticeChunkSelection}>
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Chunk List */}
             <div className="flex flex-col gap-3">
-              {/* Practice Entire Selection */}
-              <button
-                onClick={() => startPractice(-1)}
-                className="flex gap-3 rounded-lg border-2 border-primary/20 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
-                  <Layers className="size-4" />
-                </span>
-                <div className="flex flex-1 flex-col gap-1">
-                  <p className="font-medium text-primary">Practice Entire Selection</p>
-                  <p className="text-sm text-muted-foreground">
-                    Train all {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} • {wordCount} word{wordCount !== 1 ? "s" : ""}
-                  </p>
-                </div>
-              </button>
-
               {chunks.map((chunk) => (
                 <button
                   key={chunk.id}
-                  onClick={() => startPractice(chunk.orderIndex)}
-                  className="flex gap-3 rounded-lg border bg-card p-4 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => togglePracticeChunkSelection(chunk.orderIndex)}
+                  className={`flex gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    selectedPracticeChunkIndexes.includes(chunk.orderIndex)
+                      ? "border-primary bg-primary/5"
+                      : "bg-card hover:bg-accent/50"
+                  }`}
                 >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
-                    {chunk.orderIndex + 1}
+                  <span className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
+                    selectedPracticeChunkIndexes.includes(chunk.orderIndex)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-primary/10 text-primary"
+                  }`}>
+                    {selectedPracticeChunkIndexes.includes(chunk.orderIndex) ? <CheckCircle2 className="size-4" /> : chunk.orderIndex + 1}
                   </span>
                   <div className="flex flex-1 flex-col gap-2">
                     <p className="text-sm leading-relaxed line-clamp-3">{chunk.text}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Chunk {chunk.orderIndex + 1} · {countWords(chunk.text)} word{countWords(chunk.text) !== 1 ? "s" : ""}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -1221,12 +1283,18 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       )
     }
 
-    const hasNextChunk = practiceChunkIndex < chunks.length - 1
+    const queuedTotal = selectedPracticeChunkIndexes.length > 0 ? selectedPracticeChunkIndexes.length : chunks.length
+    const queuePosition = selectedPracticeChunkIndexes.length > 0
+      ? practiceQueuePosition
+      : practiceChunkIndex
+    const hasNextChunk = selectedPracticeChunkIndexes.length > 0
+      ? practiceQueuePosition < selectedPracticeChunkIndexes.length - 1
+      : practiceChunkIndex < chunks.length - 1
     
     return (
       <SessionLayout
         step="Step 2"
-        title={`Encode · Chunk ${practiceChunkIndex + 1}/${chunks.length}`}
+        title={`Encode · Chunk ${queuePosition + 1}/${queuedTotal}`}
         setTitle={set.title}
         onBack={exitPractice}
         showBottomActions={false}
@@ -1234,8 +1302,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         <ProgressiveChunkEncoder 
           setId={id}
           chunk={currentChunk.text} 
-          chunkIndex={practiceChunkIndex}
-          totalChunks={chunks.length}
+          chunkIndex={queuePosition}
+          totalChunks={queuedTotal}
           onRetryChunk={handleRetryChunk}
           onNextChunk={handleNextChunk}
           onContinueToTest={continueFromEncodeToTest}

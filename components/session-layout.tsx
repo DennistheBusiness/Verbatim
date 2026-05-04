@@ -19,6 +19,7 @@ interface SessionLayoutProps {
     label: string
     onClick: () => void
     icon?: React.ReactNode
+    disabled?: boolean
   }
   secondaryAction?: {
     label: string
@@ -111,7 +112,7 @@ export function SessionLayout({
         <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 p-4 pb-safe backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="mx-auto flex max-w-2xl flex-col gap-2">
             {primaryAction && (
-              <Button size="lg" onClick={primaryAction.onClick} className="w-full gap-2">
+              <Button size="lg" onClick={primaryAction.onClick} className="w-full gap-2" disabled={primaryAction.disabled}>
                 {primaryAction.label}
                 {primaryAction.icon}
               </Button>
