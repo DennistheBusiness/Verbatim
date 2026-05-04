@@ -8,6 +8,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    // Prevent circular-reference TDZ errors from framer-motion and vaul
+    // when those packages share bundle chunks with other components.
+    optimizePackageImports: ['framer-motion', 'vaul'],
+  },
   // Required so PostHog trailing-slash rewrites work correctly
   skipTrailingSlashRedirect: true,
   async rewrites() {

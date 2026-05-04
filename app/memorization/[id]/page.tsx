@@ -1,12 +1,12 @@
 "use client"
 
 import { use, useState, useEffect, useCallback } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import { ENCODE_STARTED, TEST_STARTED, ENCODE_METHOD_SELECTED } from "@/lib/analytics-events"
-import { SortingGame } from "@/components/sorting-game"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -17,8 +17,6 @@ import { Progress } from "@/components/ui/progress"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, Copy, Check, MessageSquare, Mail, LinkIcon, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
-
-import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { SessionLayout } from "@/components/session-layout"
@@ -30,6 +28,16 @@ import { ScoreChart } from "@/components/score-chart"
 import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+const SortingGame = dynamic(
+  () => import("@/components/sorting-game").then((m) => ({ default: m.SortingGame })),
+  { ssr: false }
+)
+
+const ProgressiveChunkEncoder = dynamic(
+  () => import("@/components/progressive-chunk-encoder").then((m) => ({ default: m.ProgressiveChunkEncoder })),
+  { ssr: false }
+)
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game"
 
