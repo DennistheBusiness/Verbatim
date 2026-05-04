@@ -22,10 +22,9 @@ export function useDeepLinks() {
 
           const url = new URL(normalized)
 
-          // OAuth callback: use a hard navigation so the server Route Handler at
-          // app/auth/callback/route.ts runs. It reads the PKCE code verifier from
-          // the cookie set by @supabase/ssr and exchanges the code server-side.
-          // router.push() is a client-side nav that skips Route Handlers entirely.
+          // OAuth callback: route through the server callback handler (which detects
+          // native flows via the pre-registered state and stores the code), then on
+          // to /auth/native-complete where WKWebView exchanges it with its own verifier.
           if (url.pathname === '/auth/callback') {
             window.location.href = url.pathname + url.search + url.hash
             return

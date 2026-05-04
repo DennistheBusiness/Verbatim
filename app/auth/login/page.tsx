@@ -68,26 +68,35 @@ function LoginContent() {
         })
         if (error) { toast.error(error.message); setLoading(false); return }
         if (data.url) {
+          // Extract the OAuth state param and pre-register a nonce with the server.
+          // The callback route stores the raw code (keyed by state), then
+          // /auth/native-complete retrieves it and exchanges it in WKWebView where
+          // the PKCE verifier lives — bypassing the SFSafariViewController cookie isolation.
+          const oauthState = new URL(data.url).searchParams.get('state')
+          if (oauthState) {
+            const nonce = crypto.randomUUID()
+            localStorage.setItem('native_auth_nonce', nonce)
+            await fetch('/api/auth/native-begin', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ state: oauthState, nonce }),
+            })
+          }
+
           const { Browser } = await import('@capacitor/browser')
 
-          // When the in-app browser closes — either because a Universal Link
-          // intercepted the callback and appUrlOpen called Browser.close(), or
-          // because the user tapped Done — check for a session.
-          // SFSafariViewController and WKWebView share the same cookie store
-          // (iOS 11+), so if the /auth/callback server route ran inside the
-          // browser it will have set the session cookie already.
           const listener = await Browser.addListener('browserFinished', async () => {
             listener.remove()
             setLoading(false)
-            // If appUrlOpen already navigated to /auth/callback, don't double-navigate
-            if (window.location.pathname === '/auth/callback') return
-            // Hard navigate to / — server middleware checks the session cookie
-            // and either shows the home page or redirects back to login
-            window.location.href = '/'
+            // If Universal Links already handled the callback, skip
+            if (window.location.pathname.startsWith('/auth/')) return
+            // Navigate to the native-complete page, which exchanges the code
+            // using WKWebView's own PKCE verifier
+            window.location.href = '/auth/native-complete'
           })
 
           await Browser.open({ url: data.url, windowName: '_self' })
-          setLoading(false) // clear spinner once browser is open
+          setLoading(false)
         }
       } else {
         const { error } = await supabase.auth.signInWithOAuth({

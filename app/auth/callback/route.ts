@@ -1,11 +1,35 @@
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const state = requestUrl.searchParams.get('state')
   const origin = requestUrl.origin
 
+  if (code && state) {
+    // Check if this is a native app OAuth flow (pre-registered via /api/auth/native-begin)
+    const serviceClient = createServiceClient()
+    const { data: transfer } = await serviceClient
+      .from('native_auth_transfers')
+      .select('nonce')
+      .eq('state', state)
+      .gt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+      .single()
+
+    if (transfer) {
+      // Native flow: store the code so WKWebView can exchange it with its own PKCE verifier
+      await serviceClient
+        .from('native_auth_transfers')
+        .update({ code })
+        .eq('state', state)
+
+      return NextResponse.redirect(`${origin}/auth/native-complete`)
+    }
+  }
+
+  // Web flow: exchange the code server-side as normal
   if (code) {
     const supabase = await createClient()
     await supabase.auth.exchangeCodeForSession(code)
@@ -19,6 +43,5 @@ export async function GET(request: NextRequest) {
     return response
   }
 
-  // Redirect to home page — fresh=1 tells the client to show the splash
   return NextResponse.redirect(`${origin}/?fresh=1`)
 }
