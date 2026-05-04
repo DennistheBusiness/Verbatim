@@ -12,20 +12,28 @@ export async function GET(request: NextRequest) {
     // Native flow: store the raw code for WKWebView to exchange with its own PKCE verifier.
     // The nonce was pre-registered by /api/auth/native-begin before the browser opened.
     const serviceClient = createServiceClient()
-    const { data: transfer } = await serviceClient
+    const { data: transfer, error: lookupError } = await serviceClient
       .from('native_auth_transfers')
       .select('nonce')
       .eq('nonce', nonce)
       .gt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
       .single()
 
+    if (lookupError) {
+      console.error('[callback] nonce lookup error:', lookupError.code, lookupError.message)
+    }
+
     if (transfer) {
-      await serviceClient
+      const { error: updateError } = await serviceClient
         .from('native_auth_transfers')
         .update({ code })
         .eq('nonce', nonce)
 
-      return NextResponse.redirect(`${origin}/auth/native-complete`)
+      if (updateError) {
+        console.error('[callback] code store error:', updateError.code, updateError.message)
+      } else {
+        return NextResponse.redirect(`${origin}/auth/native-complete`)
+      }
     }
   }
 

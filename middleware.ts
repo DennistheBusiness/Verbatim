@@ -51,7 +51,9 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Auth routes - redirect to home if already authenticated
-  const authPaths = ['/auth/login', '/auth/signup', '/auth/callback']
+  // Note: /auth/callback is intentionally excluded — it must always run its route handler
+  // to process OAuth codes (middleware would intercept it and skip code storage)
+  const authPaths = ['/auth/login', '/auth/signup']
   const isAuthPath = authPaths.includes(pathname)
 
   if (isAuthPath && user) {
