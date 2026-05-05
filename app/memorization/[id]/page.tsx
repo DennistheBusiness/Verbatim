@@ -29,7 +29,6 @@ import { Progress } from "@/components/ui/progress"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
-
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
 import { TypingTest } from "@/components/typing-test"
 import { FullFirstLetterTest } from "@/components/full-first-letter-test"

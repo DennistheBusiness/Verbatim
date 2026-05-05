@@ -349,6 +349,9 @@ export function ProgressiveChunkEncoder({
     }
   }
 
+  const totalAttempts = correctCount + incorrectCount
+  const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
+
   useEffect(() => {
     if (!isLevelComplete || currentLevel !== 3) return
 
@@ -386,9 +389,6 @@ export function ProgressiveChunkEncoder({
         return <Trophy className="size-4" />
     }
   }
-
-  const totalAttempts = correctCount + incorrectCount
-  const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
 
   const getOverallStats = () => {
     const completedLevels = Object.values(levelResults).filter((r) => r !== null) as LevelResults[]

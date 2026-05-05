@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Reorder, useDragControls } from 'framer-motion'
 import { GripVertical, ChevronUp, ChevronDown, CheckCircle2, XCircle, Trophy, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -53,77 +52,19 @@ function fisherYates<T>(arr: T[]): T[] {
 function shuffle<T extends { orderIndex: number }>(arr: T[]): T[] {
   if (arr.length <= 1) return [...arr]
   let result = fisherYates(arr)
-  // Guarantee the result is not already in sorted order
   const isSorted = result.every((item, i) => item.orderIndex === arr[i].orderIndex)
   if (isSorted) {
-    // Rotate by 1 — always produces a different order
     result = [...result.slice(1), result[0]]
   }
   return result
-}
-
-interface DraggableItemProps {
-  item: Chunk
-  index: number
-  total: number
-  onMoveUp: (index: number) => void
-  onMoveDown: (index: number) => void
-}
-
-function DraggableItem({ item, index, total, onMoveUp, onMoveDown }: DraggableItemProps) {
-  const controls = useDragControls()
-
-  return (
-    <Reorder.Item
-      value={item}
-      dragListener={false}
-      dragControls={controls}
-      className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm select-none touch-none"
-    >
-      {/* Position badge */}
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary mt-0.5">
-        {index + 1}
-      </span>
-
-      {/* Text */}
-      <p className="flex-1 text-sm leading-relaxed line-clamp-3">{item.text}</p>
-
-      {/* Controls */}
-      <div className="flex flex-col items-center gap-0.5 shrink-0">
-        {/* Arrow buttons (always visible for mobile) */}
-        <button
-          onClick={() => onMoveUp(index)}
-          disabled={index === 0}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Move up"
-        >
-          <ChevronUp className="size-4" />
-        </button>
-        {/* Drag handle (desktop) */}
-        <button
-          className="flex size-7 cursor-grab items-center justify-center rounded-md text-muted-foreground active:cursor-grabbing hover:bg-accent hover:text-foreground"
-          onPointerDown={(e) => controls.start(e)}
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="size-4" />
-        </button>
-        <button
-          onClick={() => onMoveDown(index)}
-          disabled={index === total - 1}
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Move down"
-        >
-          <ChevronDown className="size-4" />
-        </button>
-      </div>
-    </Reorder.Item>
-  )
 }
 
 export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBack, onFinish }: SortingGameProps) {
   const [items, setItems] = useState<Chunk[]>(() => shuffle(chunks))
   const [submitted, setSubmitted] = useState(false)
   const [results, setResults] = useState<Results | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const dragIndexRef = useRef<number | null>(null)
   const startTime = useRef<Date>(new Date())
 
   useEffect(() => {
@@ -134,7 +75,6 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When chunks change (e.g. chunk mode changed), reshuffle with new chunks
   useEffect(() => {
     if (!submitted) {
       setItems(shuffle(chunks))
@@ -157,6 +97,37 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
       ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
       return next
     })
+  }, [])
+
+  const handleDragStart = useCallback((index: number) => {
+    dragIndexRef.current = index
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    const dragIndex = dragIndexRef.current
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragOverIndex(null)
+      return
+    }
+    setItems((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(dragIndex, 1)
+      next.splice(dropIndex, 0, removed)
+      return next
+    })
+    dragIndexRef.current = null
+    setDragOverIndex(null)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    dragIndexRef.current = null
+    setDragOverIndex(null)
   }, [])
 
   const handleSubmit = useCallback(() => {
@@ -226,7 +197,6 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
         contextAction={chunkModeSelect}
         showBottomActions={false}
       >
-        {/* Score card */}
         <div className={cn(
           "flex flex-col items-center gap-3 rounded-2xl border p-6 text-center",
           isAllCorrect ? "border-green-500/30 bg-green-500/5" : "border-primary/20 bg-primary/5"
@@ -250,7 +220,6 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
           )}
         </div>
 
-        {/* Per-chunk results */}
         <div className="flex flex-col gap-2">
           {itemResults.map((r, i) => (
             <div
@@ -278,7 +247,6 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
           ))}
         </div>
 
-        {/* Actions */}
         <div className="flex flex-col gap-3">
           <Button onClick={handleTryAgain} variant="outline" className="w-full gap-2">
             <RotateCcw className="size-4" />
@@ -309,27 +277,59 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     >
       <div className="rounded-lg bg-muted/50 p-3">
         <p className="text-sm text-muted-foreground">
-          Drag the chunks (or use the arrows) to put them back in the correct order, then tap Submit.
+          Drag the chunks (or use the arrows) to put them in the correct order, then tap Submit.
         </p>
       </div>
 
-      <Reorder.Group
-        axis="y"
-        values={items}
-        onReorder={setItems}
-        className="flex flex-col gap-3"
-      >
+      <div className="flex flex-col gap-3">
         {items.map((item, index) => (
-          <DraggableItem
+          <div
             key={item.id}
-            item={item}
-            index={index}
-            total={items.length}
-            onMoveUp={handleMoveUp}
-            onMoveDown={handleMoveDown}
-          />
+            draggable
+            onDragStart={() => handleDragStart(index)}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDrop={(e) => handleDrop(e, index)}
+            onDragEnd={handleDragEnd}
+            className={cn(
+              "flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm select-none cursor-grab active:cursor-grabbing transition-colors",
+              dragOverIndex === index && dragIndexRef.current !== index
+                ? "border-primary bg-primary/5"
+                : ""
+            )}
+          >
+            {/* Position badge */}
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary mt-0.5">
+              {index + 1}
+            </span>
+
+            {/* Text */}
+            <p className="flex-1 text-sm leading-relaxed line-clamp-3">{item.text}</p>
+
+            {/* Controls */}
+            <div className="flex flex-col items-center gap-0.5 shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); handleMoveUp(index) }}
+                disabled={index === 0}
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Move up"
+              >
+                <ChevronUp className="size-4" />
+              </button>
+              <div className="flex size-7 items-center justify-center text-muted-foreground">
+                <GripVertical className="size-4" />
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleMoveDown(index) }}
+                disabled={index === items.length - 1}
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Move down"
+              >
+                <ChevronDown className="size-4" />
+              </button>
+            </div>
+          </div>
         ))}
-      </Reorder.Group>
+      </div>
     </SessionLayout>
   )
 }
