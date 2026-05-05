@@ -266,6 +266,11 @@ export function ProgressiveChunkEncoder({
   }, [isLevelComplete])
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isMobileRef.current) {
+      e.target.value = ""
+      setMobileValue("")
+      return
+    }
     const val = e.target.value
     if (val.length > 0) {
       const firstLetter = val.toLowerCase().match(/[a-z]/)?.[0]
