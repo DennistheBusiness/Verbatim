@@ -1,9 +1,10 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +28,8 @@ function SignupContent() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
@@ -35,16 +38,19 @@ function SignupContent() {
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) { toast.error('Passwords do not match'); return }
-    if (password.length < 6) { toast.error('Password must be at least 6 characters'); return }
+    if (password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    if (!captchaToken) { toast.error('Please complete the security check'); return }
     setLoading(true)
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: { data: { full_name: fullName }, captchaToken: captchaToken ?? undefined },
       })
       if (error) {
         toast.error(error.message)
+        turnstileRef.current?.reset()
+        setCaptchaToken(null)
       } else if (data.session) {
         if (data.user) {
           identifyUser(data.user.id, { email: data.user.email, signup_date: data.user.created_at })
@@ -170,13 +176,21 @@ function SignupContent() {
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Min. 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} className="h-11" />
+              <Input id="password" type="password" placeholder="Min. 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} className="h-11" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input id="confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required disabled={loading} className="h-11" />
             </div>
-            <Button type="submit" size="lg" className="w-full h-12 text-sm font-semibold mt-1" disabled={loading}>
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              onSuccess={setCaptchaToken}
+              onExpire={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              onError={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              options={{ theme: 'auto', size: 'flexible' }}
+            />
+            <Button type="submit" size="lg" className="w-full h-12 text-sm font-semibold mt-1" disabled={loading || !captchaToken}>
               {loading ? (
                 <><Loader2 className="mr-2 size-4 animate-spin" />Creating account…</>
               ) : (
