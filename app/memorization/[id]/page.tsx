@@ -1045,7 +1045,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Train"
         setTitle={set.title}
         onBack={exitEncodeMethodSelect}
-        showBottomActions={false}
+        secondaryAction={{ label: "Back to Detail", onClick: exitEncodeMethodSelect }}
         contextAction={
           <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
             <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
@@ -1257,7 +1257,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Test"
         setTitle={set.title}
         onBack={exitTestSelect}
-        showBottomActions={false}
+        secondaryAction={{ label: "Back to Detail", onClick: exitTestSelect }}
         contextAction={
           <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
             <SelectTrigger className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-xs font-medium focus:ring-0">
