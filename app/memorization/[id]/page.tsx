@@ -178,7 +178,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     if (normalizedIndexes.length === 0) return
 
     // All chunks selected → train on the full content as one 3-stage exercise
-    if (normalizedIndexes.length === chunks.length) {
+    if (normalizedIndexes.length === (set?.chunks.length ?? 0)) {
       setSelectedPracticeChunkIndexes([])
       setPracticeQueuePosition(0)
       setPracticeChunkIndex(-1)
@@ -195,7 +195,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setPageMode("practice")
     updateSessionState(id, { currentStep: "encode", currentChunkIndex: firstIndex })
     trackEvent(ENCODE_STARTED, { set_id: id, chunk_indices: normalizedIndexes, chunk_count: normalizedIndexes.length })
-  }, [id, chunks.length, updateSessionState])
+  }, [id, set?.chunks.length, updateSessionState])
 
   const startPractice = useCallback((index: number) => {
     startPracticeQueue([index])
