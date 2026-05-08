@@ -42,7 +42,7 @@ export function MobileMemoNav({
           )}
         >
           <BookOpen className="size-5" />
-          <span className="text-[10px] font-medium">Familiarize</span>
+          <span className="text-[10px] font-medium">Teach</span>
         </button>
 
         <button
@@ -56,7 +56,7 @@ export function MobileMemoNav({
           )}
         >
           <Layers className="size-5" />
-          <span className="text-[10px] font-medium">Encode</span>
+          <span className="text-[10px] font-medium">Train</span>
         </button>
 
         <button

@@ -93,9 +93,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [selectedPracticeChunkIndexes, setSelectedPracticeChunkIndexes] = useState<number[]>([])
   const [practiceQueuePosition, setPracticeQueuePosition] = useState(0)
-  const [familiarizeSubView, setFamiliarizeSubView] = useState<"landing" | "reader">("landing")
+  const [familiarizeSubView, setFamiliarizeSubView] = useState<"landing" | "reader" | "tts">("landing")
   const [familiarizeView, setFamiliarizeView] = useState<"full" | "chunks">("full")
-  const [contentExpanded, setContentExpanded] = useState(false)
+  const [contentExpanded, setContentExpanded] = useState(true)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showTTSPlayer, setShowTTSPlayer] = useState(false)
   const [showListenOptions, setShowListenOptions] = useState(false)
@@ -115,8 +115,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   // ─── Stable callbacks (defined before early returns so useCallback is unconditional) ───
 
-  const handleOpenTTSPlayer = useCallback(() => setShowTTSPlayer(true), [])
-  const handleCloseTTSPlayer = useCallback(() => setShowTTSPlayer(false), [])
+  const handleOpenTTSPlayer = useCallback(() => {
+    setPageMode("familiarize")
+    setFamiliarizeSubView("tts")
+  }, [])
+  const handleCloseTTSPlayer = useCallback(() => setFamiliarizeSubView("landing"), [])
 
   const handleShare = useCallback(async () => {
     if (!set) return
@@ -621,6 +624,24 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   // Familiarize mode
   if (pageMode === "familiarize") {
+    // TTS sub-view
+    if (familiarizeSubView === "tts") {
+      return (
+        <SessionLayout
+          step="Step 1"
+          title="AI Read Aloud"
+          setTitle={set.title}
+          onBack={() => setFamiliarizeSubView("landing")}
+          showBottomActions={false}
+        >
+          <TextToSpeechPlayer
+            content={set.content}
+            onClose={() => setFamiliarizeSubView("landing")}
+          />
+        </SessionLayout>
+      )
+    }
+
     // Reader sub-view: shows content with view toggle and chunk selector
     if (familiarizeSubView === "reader" && hasContent) {
       return (
@@ -692,34 +713,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           {familiarizeView === "full" ? (
             <Card>
               <CardContent className="py-5">
-                <div className={contentExpanded ? "" : "max-h-[300px] overflow-hidden relative"}>
-                  <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
-                    {set.content}
-                  </p>
-                  {!contentExpanded && set.content.length > 500 && (
-                    <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent" />
-                  )}
-                </div>
-                {set.content.length > 500 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setContentExpanded(!contentExpanded)}
-                    className="w-full mt-3 gap-2"
-                  >
-                    {contentExpanded ? (
-                      <>
-                        <ChevronUp className="size-4" />
-                        Show Less
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="size-4" />
-                        See More
-                      </>
-                    )}
-                  </Button>
-                )}
+                <p className="whitespace-pre-wrap text-base leading-7 text-foreground">
+                  {set.content}
+                </p>
               </CardContent>
             </Card>
           ) : (
