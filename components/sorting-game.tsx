@@ -53,9 +53,7 @@ function shuffle<T extends { orderIndex: number }>(arr: T[]): T[] {
   if (arr.length <= 1) return [...arr]
   let result = fisherYates(arr)
   const isSorted = result.every((item, i) => item.orderIndex === arr[i].orderIndex)
-  if (isSorted) {
-    result = [...result.slice(1), result[0]]
-  }
+  if (isSorted) result = [...result.slice(1), result[0]]
   return result
 }
 
@@ -63,23 +61,21 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
   const [items, setItems] = useState<Chunk[]>(() => shuffle(chunks))
   const [submitted, setSubmitted] = useState(false)
   const [results, setResults] = useState<Results | null>(null)
+  // draft values for the position inputs — tracks what the user is typing
+  const [draftPositions, setDraftPositions] = useState<Record<string, string>>({})
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
   const startTime = useRef<Date>(new Date())
 
   useEffect(() => {
-    trackEvent(SORTING_GAME_STARTED, {
-      set_id: setId,
-      chunk_count: chunks.length,
-      chunk_mode: chunkMode,
-    })
+    trackEvent(SORTING_GAME_STARTED, { set_id: setId, chunk_count: chunks.length, chunk_mode: chunkMode })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!submitted) {
-      setItems(shuffle(chunks))
-    }
+    if (!submitted) setItems(shuffle(chunks))
   }, [chunks]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Arrow reorder ────────────────────────────────────────────────────────────
 
   const handleMoveUp = useCallback((index: number) => {
     if (index === 0) return
@@ -99,12 +95,44 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     })
   }, [])
 
-  const handleDragStart = useCallback((index: number) => {
+  // ── Numeric position input ───────────────────────────────────────────────────
+
+  const handlePositionFocus = (id: string, currentIndex: number) => {
+    setDraftPositions((d) => ({ ...d, [id]: String(currentIndex + 1) }))
+  }
+
+  const handlePositionChange = (id: string, value: string) => {
+    setDraftPositions((d) => ({ ...d, [id]: value }))
+  }
+
+  const handlePositionCommit = useCallback((id: string, rawValue: string) => {
+    const target = parseInt(rawValue, 10)
+    setDraftPositions((d) => {
+      const next = { ...d }
+      delete next[id]
+      return next
+    })
+    setItems((prev) => {
+      const fromIndex = prev.findIndex((c) => c.id === id)
+      const toIndex = Math.max(0, Math.min(prev.length - 1, target - 1))
+      if (fromIndex === -1 || fromIndex === toIndex || isNaN(target)) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  // ── HTML5 drag-and-drop ──────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
     dragIndexRef.current = index
+    e.dataTransfer.effectAllowed = 'move'
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
     setDragOverIndex(index)
   }, [])
 
@@ -130,6 +158,8 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     setDragOverIndex(null)
   }, [])
 
+  // ── Submit ───────────────────────────────────────────────────────────────────
+
   const handleSubmit = useCallback(() => {
     const itemResults: ItemResult[] = items.map((item, placedIdx) => ({
       chunkId: item.id,
@@ -142,7 +172,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     const correctCount = itemResults.filter((r) => r.isCorrect).length
     const totalCount = items.length
     const score = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0
-    const durationSeconds = Math.round((new Date().getTime() - startTime.current.getTime()) / 1000)
+    const durationSeconds = Math.round((Date.now() - startTime.current.getTime()) / 1000)
 
     trackEvent(SORTING_GAME_COMPLETED, {
       set_id: setId,
@@ -162,12 +192,11 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     setItems(shuffle(chunks))
     setResults(null)
     setSubmitted(false)
-    trackEvent(SORTING_GAME_STARTED, {
-      set_id: setId,
-      chunk_count: chunks.length,
-      chunk_mode: chunkMode,
-    })
+    setDraftPositions({})
+    trackEvent(SORTING_GAME_STARTED, { set_id: setId, chunk_count: chunks.length, chunk_mode: chunkMode })
   }, [chunks, setId, chunkMode])
+
+  // ── Shared UI ────────────────────────────────────────────────────────────────
 
   const chunkModeSelect = (
     <Select value={chunkMode} onValueChange={(v) => onChunkModeChange(v as ChunkMode)}>
@@ -183,7 +212,8 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     </Select>
   )
 
-  // ── Results screen ──────────────────────────────────────────────────────────
+  // ── Results screen ───────────────────────────────────────────────────────────
+
   if (submitted && results) {
     const { correctCount, totalCount, score, itemResults } = results
     const isAllCorrect = correctCount === totalCount
@@ -214,9 +244,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
             </p>
           </div>
           {isAllCorrect && (
-            <p className="text-sm font-medium text-green-600 dark:text-green-400">
-              Perfect order!
-            </p>
+            <p className="text-sm font-medium text-green-600 dark:text-green-400">Perfect order!</p>
           )}
         </div>
 
@@ -226,9 +254,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
               key={r.chunkId}
               className={cn(
                 "flex items-start gap-3 rounded-xl border p-4",
-                r.isCorrect
-                  ? "border-green-500/20 bg-green-500/5"
-                  : "border-destructive/20 bg-destructive/5"
+                r.isCorrect ? "border-green-500/20 bg-green-500/5" : "border-destructive/20 bg-destructive/5"
               )}
             >
               {r.isCorrect
@@ -236,7 +262,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
                 : <XCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
               }
               <div className="flex flex-1 flex-col gap-1">
-                <p className="text-sm leading-relaxed line-clamp-2">{r.text}</p>
+                <p className="text-sm leading-relaxed">{r.text}</p>
                 {!r.isCorrect && (
                   <p className="text-xs text-muted-foreground">
                     You placed it #{i + 1} — correct position is #{r.correctPosition + 1}
@@ -252,15 +278,14 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
             <RotateCcw className="size-4" />
             Try Again
           </Button>
-          <Button onClick={onFinish} className="w-full">
-            I&apos;m Done
-          </Button>
+          <Button onClick={onFinish} className="w-full">I&apos;m Done</Button>
         </div>
       </SessionLayout>
     )
   }
 
-  // ── Reorder screen ──────────────────────────────────────────────────────────
+  // ── Reorder screen ───────────────────────────────────────────────────────────
+
   return (
     <SessionLayout
       step="Step 2"
@@ -268,67 +293,87 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
       setTitle=""
       onBack={onBack}
       contextAction={chunkModeSelect}
-      primaryAction={{
-        label: 'Submit Order',
-        onClick: handleSubmit,
-        disabled: chunks.length === 0,
-      }}
+      primaryAction={{ label: 'Submit Order', onClick: handleSubmit, disabled: chunks.length === 0 }}
       secondaryAction={undefined}
     >
       <div className="rounded-lg bg-muted/50 p-3">
         <p className="text-sm text-muted-foreground">
-          Drag the chunks (or use the arrows) to put them in the correct order, then tap Submit.
+          Drag chunks to reorder, use the arrows, or type a position number to jump a chunk anywhere in the list.
         </p>
       </div>
 
       <div className="flex flex-col gap-3">
-        {items.map((item, index) => (
-          <div
-            key={item.id}
-            draggable
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDrop={(e) => handleDrop(e, index)}
-            onDragEnd={handleDragEnd}
-            className={cn(
-              "flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm select-none cursor-grab active:cursor-grabbing transition-colors",
-              dragOverIndex === index && dragIndexRef.current !== index
-                ? "border-primary bg-primary/5"
-                : ""
-            )}
-          >
-            {/* Position badge */}
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary mt-0.5">
-              {index + 1}
-            </span>
+        {items.map((item, index) => {
+          const isDragTarget = dragOverIndex === index && dragIndexRef.current !== index
+          const draftVal = draftPositions[item.id]
 
-            {/* Text */}
-            <p className="flex-1 text-sm leading-relaxed line-clamp-3">{item.text}</p>
-
-            {/* Controls */}
-            <div className="flex flex-col items-center gap-0.5 shrink-0">
-              <button
-                onClick={(e) => { e.stopPropagation(); handleMoveUp(index) }}
-                disabled={index === 0}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Move up"
-              >
-                <ChevronUp className="size-4" />
-              </button>
-              <div className="flex size-7 items-center justify-center text-muted-foreground">
-                <GripVertical className="size-4" />
+          return (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+              className={cn(
+                "flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors",
+                isDragTarget ? "border-primary bg-primary/5 shadow-md" : "cursor-grab active:cursor-grabbing"
+              )}
+            >
+              {/* Editable position number */}
+              <div className="flex shrink-0 flex-col items-center gap-1 pt-0.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={items.length}
+                  value={draftVal !== undefined ? draftVal : index + 1}
+                  onFocus={() => handlePositionFocus(item.id, index)}
+                  onChange={(e) => handlePositionChange(item.id, e.target.value)}
+                  onBlur={(e) => handlePositionCommit(item.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "w-9 rounded-lg border text-center text-sm font-semibold tabular-nums",
+                    "bg-primary/10 text-primary border-primary/20",
+                    "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary",
+                    "py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  )}
+                />
+                <span className="text-[9px] text-muted-foreground/50 leading-none">#</span>
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleMoveDown(index) }}
-                disabled={index === items.length - 1}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Move down"
-              >
-                <ChevronDown className="size-4" />
-              </button>
+
+              {/* Full chunk text — no clamping */}
+              <p className="flex-1 text-sm leading-relaxed">{item.text}</p>
+
+              {/* Controls */}
+              <div className="flex shrink-0 flex-col items-center gap-0.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleMoveUp(index) }}
+                  disabled={index === 0}
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Move up"
+                >
+                  <ChevronUp className="size-4" />
+                </button>
+                <div className="flex size-7 items-center justify-center text-muted-foreground/40">
+                  <GripVertical className="size-4" />
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleMoveDown(index) }}
+                  disabled={index === items.length - 1}
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Move down"
+                >
+                  <ChevronDown className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </SessionLayout>
   )
