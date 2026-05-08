@@ -177,6 +177,17 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     const normalizedIndexes = Array.from(new Set(indexes)).sort((a, b) => a - b)
     if (normalizedIndexes.length === 0) return
 
+    // All chunks selected → train on the full content as one 3-stage exercise
+    if (normalizedIndexes.length === chunks.length) {
+      setSelectedPracticeChunkIndexes([])
+      setPracticeQueuePosition(0)
+      setPracticeChunkIndex(-1)
+      setPageMode("practice")
+      updateSessionState(id, { currentStep: "encode", currentChunkIndex: null })
+      trackEvent(ENCODE_STARTED, { set_id: id, chunk_indices: normalizedIndexes, chunk_count: normalizedIndexes.length })
+      return
+    }
+
     const firstIndex = normalizedIndexes[0]
     setSelectedPracticeChunkIndexes(normalizedIndexes)
     setPracticeQueuePosition(0)
@@ -184,7 +195,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setPageMode("practice")
     updateSessionState(id, { currentStep: "encode", currentChunkIndex: firstIndex })
     trackEvent(ENCODE_STARTED, { set_id: id, chunk_indices: normalizedIndexes, chunk_count: normalizedIndexes.length })
-  }, [id, updateSessionState])
+  }, [id, chunks.length, updateSessionState])
 
   const startPractice = useCallback((index: number) => {
     startPracticeQueue([index])
@@ -1157,9 +1168,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Select>
         }
         primaryAction={hasContent ? {
-          label: selectedPracticeCount > 0
-            ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
-            : "Select chunks to practice",
+          label: selectedPracticeCount === chunks.length
+            ? "Train Entire Selection"
+            : selectedPracticeCount > 0
+              ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
+              : "Select chunks to practice",
           onClick: () => startPracticeQueue(selectedPracticeChunkIndexes),
           disabled: selectedPracticeCount === 0,
         } : undefined}
@@ -1189,7 +1202,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             {/* Instructions */}
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-sm text-muted-foreground">
-                Select one or more chunks to practice. Verbatim will queue them in order and move you through the selected set.
+                Select specific chunks to practice one by one, or select all to train on the entire text as a single 3-stage exercise.
               </p>
             </div>
 
@@ -1197,9 +1210,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{selectedPracticeCount} selected</span>
                 <span className="text-xs text-muted-foreground">
-                  {selectedPracticeCount > 0
-                    ? `${selectedPracticeWordCount} words queued`
-                    : "Tap chunks below to build a practice queue"}
+                  {selectedPracticeCount === chunks.length
+                    ? "Full text · 3-stage progressive exercise"
+                    : selectedPracticeCount > 0
+                      ? `${selectedPracticeWordCount} words queued`
+                      : "Tap chunks below to build a practice queue"}
                 </span>
               </div>
               <div className="flex gap-2">
