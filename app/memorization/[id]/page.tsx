@@ -1878,13 +1878,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           emptyStateDescription={progressModuleCTA.description}
         />
 
-        {/* Metadata */}
         <p className="text-xs text-center text-muted-foreground">
           Created {formatDate(set.createdAt)}
-          {set.updatedAt !== set.createdAt && (
-            <> · Updated {formatDate(set.updatedAt)}</>
-          )}
         </p>
+
       </main>
       <MobileMemoNav 
         memoId={id}
