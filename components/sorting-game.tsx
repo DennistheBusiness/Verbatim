@@ -65,6 +65,10 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
   const [draftPositions, setDraftPositions] = useState<Record<string, string>>({})
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
+  const touchDragIndexRef = useRef<number | null>(null)
+  const dragOverIndexRef = useRef<number | null>(null)
+  const itemRectsRef = useRef<DOMRect[]>([])
+  const listRef = useRef<HTMLDivElement>(null)
   const startTime = useRef<Date>(new Date())
 
   useEffect(() => {
@@ -156,6 +160,63 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
   const handleDragEnd = useCallback(() => {
     dragIndexRef.current = null
     setDragOverIndex(null)
+  }, [])
+
+  // ── Touch drag-and-drop (mobile) ─────────────────────────────────────────────
+
+  const handleGripTouchStart = useCallback((e: React.TouchEvent, index: number) => {
+    // Don't intercept taps on interactive elements inside the card
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'INPUT' || tag === 'BUTTON') return
+
+    e.preventDefault()
+    touchDragIndexRef.current = index
+    dragOverIndexRef.current = index
+    setDragOverIndex(index)
+
+    // Snapshot item rects at drag start
+    if (listRef.current) {
+      itemRectsRef.current = Array.from(listRef.current.children).map(
+        (el) => (el as HTMLElement).getBoundingClientRect()
+      )
+    }
+
+    const onTouchMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const y = ev.touches[0].clientY
+      const rects = itemRectsRef.current
+      let overIndex = touchDragIndexRef.current ?? 0
+      for (let i = 0; i < rects.length; i++) {
+        if (y < rects[i].top + rects[i].height / 2) {
+          overIndex = i
+          break
+        }
+        overIndex = i
+      }
+      dragOverIndexRef.current = overIndex
+      setDragOverIndex(overIndex)
+    }
+
+    const onTouchEnd = () => {
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
+      const from = touchDragIndexRef.current
+      const to = dragOverIndexRef.current
+      if (from !== null && to !== null && from !== to) {
+        setItems((prev) => {
+          const next = [...prev]
+          const [removed] = next.splice(from, 1)
+          next.splice(to, 0, removed)
+          return next
+        })
+      }
+      touchDragIndexRef.current = null
+      dragOverIndexRef.current = null
+      setDragOverIndex(null)
+    }
+
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd)
   }, [])
 
   // ── Submit ───────────────────────────────────────────────────────────────────
@@ -298,13 +359,14 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
     >
       <div className="rounded-lg bg-muted/50 p-3">
         <p className="text-sm text-muted-foreground">
-          Drag chunks to reorder, use the arrows, or type a position number to jump a chunk anywhere in the list.
+          Drag any chunk to reorder, use the arrows, or type a position number to jump a chunk anywhere in the list.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" ref={listRef}>
         {items.map((item, index) => {
-          const isDragTarget = dragOverIndex === index && dragIndexRef.current !== index
+          const activeDragIndex = dragIndexRef.current ?? touchDragIndexRef.current
+          const isDragTarget = dragOverIndex === index && activeDragIndex !== index
           const draftVal = draftPositions[item.id]
 
           return (
@@ -315,6 +377,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
+              onTouchStart={(e) => handleGripTouchStart(e, index)}
               className={cn(
                 "flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors",
                 isDragTarget ? "border-primary bg-primary/5 shadow-md" : "cursor-grab active:cursor-grabbing"
@@ -359,7 +422,9 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
                 >
                   <ChevronUp className="size-4" />
                 </button>
-                <div className="flex size-7 items-center justify-center text-muted-foreground/40">
+                <div
+                  className="flex size-7 items-center justify-center text-muted-foreground/40"
+                >
                   <GripVertical className="size-4" />
                 </div>
                 <button
