@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { NavigationMenu } from "@/components/navigation-menu"
@@ -64,7 +65,7 @@ export function SessionLayout({
           </Button>
 
           {/* Centered logo */}
-          <div className="flex flex-1 items-center justify-center gap-2">
+          <Link href="/" className="flex flex-1 items-center justify-center gap-2">
             <Image
               src="/verbatim-logo-icon.png"
               alt="Verbatim"
@@ -75,7 +76,7 @@ export function SessionLayout({
             <span className="text-base font-bold tracking-tight bg-gradient-to-r from-[oklch(0.55_0.22_240)] to-[oklch(0.65_0.20_150)] bg-clip-text text-transparent">
               Verbatim
             </span>
-          </div>
+          </Link>
 
           <div className="shrink-0">
             <NavigationMenu user={user} />
