@@ -1722,24 +1722,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Score Charts</h2>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/analytics?set=${id}`}>
-              <BarChart3 className="size-3.5" />
-              <span>View Full Charts</span>
-            </Link>
-          </Button>
-        </div>
-
-        {/* Progress Over Time */}
-        <ScoreChart
-          setId={id}
-          onStartTest={progressModuleCTA.onClick}
-          emptyStateCtaLabel={progressModuleCTA.label}
-          emptyStateDescription={progressModuleCTA.description}
-        />
-
         {/* Share Panel — lazy-loaded to keep vaul/framer-motion out of the main chunk */}
         <ShareDrawer
           open={showSharePanel}
@@ -1877,6 +1859,24 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               progress={(set.progress.tests.audioTest.bestScore ?? 0) / 100} />
           </div>
         </div>
+
+        {/* Score Charts */}
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Score Charts</h2>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/analytics?set=${id}`}>
+              <BarChart3 className="size-3.5" />
+              <span>View Full Charts</span>
+            </Link>
+          </Button>
+        </div>
+
+        <ScoreChart
+          setId={id}
+          onStartTest={progressModuleCTA.onClick}
+          emptyStateCtaLabel={progressModuleCTA.label}
+          emptyStateDescription={progressModuleCTA.description}
+        />
 
         {/* Metadata */}
         <p className="text-xs text-center text-muted-foreground">
