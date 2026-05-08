@@ -363,7 +363,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
       chunkQueuePosRef.current = nextPos
       setPhase("transitioning")
       setTimeout(() => {
-        initChunk(chunkQueueRef.current, nextPos, true)
+        initChunk(chunkQueueRef.current, nextPos, false)
         setPhase("playing")
       }, 80)
     }
@@ -374,7 +374,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
     setTotalCorrect((t) => t - (pendingChunkResult?.correct ?? 0))
     setTotalWrong((t) => t - (pendingChunkResult?.wrong ?? 0))
     setPendingChunkResult(null)
-    initChunk(chunkQueueRef.current, chunkQueuePosRef.current, true)
+    initChunk(chunkQueueRef.current, chunkQueuePosRef.current, false)
     setPhase("playing")
   }, [initChunk, pendingChunkResult])
 
