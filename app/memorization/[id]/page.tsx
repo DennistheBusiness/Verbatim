@@ -26,7 +26,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3 } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { TimedAudioPlayer } from "@/components/timed-audio-player"
 import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
@@ -270,6 +270,13 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     updateSessionState(id, { currentStep: "familiarize", currentChunkIndex: null, currentEncodeStage: null })
   }, [id, updateSessionState])
 
+  const startFamiliarizeReader = useCallback(() => {
+    setFamiliarizeSubView("reader")
+    setContentExpanded(false)
+    setPageMode("familiarize")
+    updateSessionState(id, { currentStep: "familiarize" })
+  }, [id, updateSessionState])
+
   const exitFamiliarize = useCallback(() => {
     setPageMode("view")
     updateSessionState(id, { currentStep: null })
@@ -289,7 +296,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [id, updateSessionState])
 
   const exitFlashcards = useCallback(() => {
-    setPageMode("familiarize")
+    setPageMode("view")
     setShowMarkedOnly(false)
     updateSessionState(id, { currentChunkIndex: null })
   }, [id, updateSessionState])
@@ -318,14 +325,14 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'sorting', chunk_count: set?.chunks.length ?? 0 })
   }, [id, set?.chunks.length])
 
-  const exitSortingGame = useCallback(() => setPageMode("encode-method-select"), [])
+  const exitSortingGame = useCallback(() => setPageMode("view"), [])
 
   const startFinishPhrase = useCallback(() => {
     setPageMode("finish-phrase")
     trackEvent(ENCODE_STARTED, { set_id: id, method: 'finish_phrase', chunk_count: set?.chunks.length ?? 0 })
   }, [id, set?.chunks.length])
 
-  const exitFinishPhrase = useCallback(() => setPageMode("encode-method-select"), [])
+  const exitFinishPhrase = useCallback(() => setPageMode("view"), [])
 
   const finishSortingGame = useCallback(() => {
     setPageMode("view")
@@ -333,7 +340,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [id, updateSessionState])
 
   // Encode chunk-select navigation
-  const exitChunkSelect = useCallback(() => setPageMode("encode-method-select"), [])
+  const exitChunkSelect = useCallback(() => setPageMode("view"), [])
 
   // Test navigation
   const handleTest = useCallback(() => {
@@ -349,7 +356,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(TEST_STARTED, { set_id: id, test_type: 'first_letter' })
   }, [id, updateSessionState])
 
-  const exitFirstLetterTest = useCallback(() => setPageMode("test-select"), [])
+  const exitFirstLetterTest = useCallback(() => setPageMode("view"), [])
 
   const finishTesting = useCallback(() => {
     setPageMode("view")
@@ -362,7 +369,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(TEST_STARTED, { set_id: id, test_type: 'full_text' })
   }, [id, updateSessionState])
 
-  const exitTypingTest = useCallback(() => setPageMode("test-select"), [])
+  const exitTypingTest = useCallback(() => setPageMode("view"), [])
 
   const startAudioTest = useCallback(() => {
     setPageMode("audio-test")
@@ -370,7 +377,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(TEST_STARTED, { set_id: id, test_type: 'audio' })
   }, [id, updateSessionState])
 
-  const exitAudioTest = useCallback(() => setPageMode("test-select"), [])
+  const exitAudioTest = useCallback(() => setPageMode("view"), [])
 
   if (!isLoaded) {
     return (
@@ -1563,6 +1570,70 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     )
   }
 
+  // ── Circle-grid helpers ──────────────────────────────────────────────────
+  const CIRC = 2 * Math.PI * 35
+
+  const CIRCLE_COLORS = {
+    blue:    { ring: 'text-blue-500',    track: 'text-blue-500/20',    pct: 'text-blue-500',    innerCls: 'bg-blue-500/10 group-hover:bg-blue-500/20'       },
+    violet:  { ring: 'text-violet-500',  track: 'text-violet-500/20',  pct: 'text-violet-500',  innerCls: 'bg-violet-500/10 group-hover:bg-violet-500/20'   },
+    emerald: { ring: 'text-emerald-500', track: 'text-emerald-500/20', pct: 'text-emerald-500', innerCls: 'bg-emerald-500/10 group-hover:bg-emerald-500/20' },
+  }
+
+  function CircleBtn({
+    Icon, label, progress, onClick, color,
+  }: {
+    Icon: LucideIcon; label: string; progress: number; onClick: () => void;
+    color: 'blue' | 'violet' | 'emerald';
+  }) {
+    const c = CIRCLE_COLORS[color]
+    const p = Math.min(Math.max(progress, 0), 1)
+    const filled = CIRC * p
+    const gap    = CIRC - filled
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <button
+          onClick={onClick}
+          className="group relative size-[84px] touch-manipulation cursor-pointer
+                     transition-transform duration-150 ease-out
+                     hover:scale-110 active:scale-[0.91] active:opacity-80"
+        >
+          {/* Progress ring SVG */}
+          <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 84 84">
+            {/* Track */}
+            <circle cx="42" cy="42" r="35" fill="none" strokeWidth="5.5" stroke="currentColor"
+              className={`${c.track} transition-opacity duration-200 group-hover:opacity-60`} />
+            {/* Fill */}
+            {filled > 0.5 && (
+              <circle cx="42" cy="42" r="35" fill="none" strokeWidth="5.5" stroke="currentColor"
+                strokeLinecap="round"
+                strokeDasharray={`${filled.toFixed(2)} ${gap.toFixed(2)}`}
+                className={`${c.ring} transition-all duration-300`} />
+            )}
+          </svg>
+
+          {/* Inner icon area — fills on hover */}
+          <div className={`
+            absolute inset-[10px] rounded-full flex flex-col items-center justify-center gap-0.5
+            transition-colors duration-200
+            ${c.innerCls}
+          `}>
+            <Icon
+              className={`size-[24px] ${c.pct} transition-transform duration-200 group-hover:scale-110`}
+              strokeWidth={1.7}
+            />
+            {p >= 0.99 && <span className={`text-[9px] font-bold leading-none ${c.pct}`}>✓</span>}
+            {p > 0.01 && p < 0.99 && (
+              <span className={`text-[9px] font-bold leading-none ${c.pct}`}>{Math.round(p * 100)}%</span>
+            )}
+          </div>
+        </button>
+        <span className="text-[11px] font-medium text-center leading-tight text-foreground/65 max-w-[80px]">
+          {label}
+        </span>
+      </div>
+    )
+  }
+
   // View mode - Progress Hub
   return (
     <div className="flex min-h-svh flex-col">
@@ -1681,40 +1752,70 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         />
 
         <Dialog open={showSystemInfo} onOpenChange={setShowSystemInfo}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>How the system works</DialogTitle>
+          <DialogContent className="max-w-sm gap-0 p-0 overflow-hidden">
+            <DialogHeader className="px-5 pt-5 pb-4 border-b">
+              <DialogTitle className="text-base font-semibold">Learning Methods</DialogTitle>
             </DialogHeader>
-            <div className="flex flex-col gap-4 text-sm">
-              <div className="flex items-start gap-2.5">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 mt-0.5">
-                  <span className="text-xs font-bold text-blue-600">1</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground mb-1">Familiarize</p>
-                  <p className="text-muted-foreground">Read through your content multiple times. Use flashcard mode to review chunk-by-chunk.</p>
-                </div>
+            <div className="flex flex-col divide-y divide-border/50 text-sm overflow-y-auto max-h-[70vh]">
+              {/* Teach */}
+              <div className="px-5 py-3 bg-blue-500/5">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-blue-500">Teach</span>
               </div>
+              {[
+                { Icon: BookOpenText, name: "Read it yourself",  desc: "Read through your full content or chunk-by-chunk at your own pace." },
+                { Icon: StickyNote,   name: "Flashcards",        desc: "Flip through each chunk one at a time to lock in the material." },
+                { Icon: AudioLines,   name: "AI Read it",        desc: "Listen to an AI voice read the text aloud while you follow along." },
+              ].map(({ Icon, name, desc }) => (
+                <div key={name} className="flex items-start gap-3 px-5 py-3">
+                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                    <Icon className="size-3.5 text-blue-500" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-medium text-foreground leading-snug">{name}</p>
+                    <p className="text-xs text-muted-foreground leading-snug">{desc}</p>
+                  </div>
+                </div>
+              ))}
 
-              <div className="flex items-start gap-2.5">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-purple-500/10 mt-0.5">
-                  <span className="text-xs font-bold text-purple-600">2</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground mb-1">Encode with First Letter Method</p>
-                  <p className="text-muted-foreground">Train your memory in 3 progressive levels. Start seeing first letters, then gradually less, until you can recall from memory alone.</p>
-                </div>
+              {/* Train */}
+              <div className="px-5 py-3 bg-violet-500/5">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-violet-500">Train</span>
               </div>
+              {[
+                { Icon: ALargeSmall,  name: "First Letter",       desc: "See just the first letter of each word across 3 progressive reveal stages." },
+                { Icon: PenLine,      name: "Finish that Phrase",  desc: "The first 20% of each chunk is shown — type the rest from memory against the clock." },
+                { Icon: ListOrdered,  name: "Sorting Game",        desc: "Drag and drop scrambled chunks back into their correct order." },
+              ].map(({ Icon, name, desc }) => (
+                <div key={name} className="flex items-start gap-3 px-5 py-3">
+                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-500/10">
+                    <Icon className="size-3.5 text-violet-500" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-medium text-foreground leading-snug">{name}</p>
+                    <p className="text-xs text-muted-foreground leading-snug">{desc}</p>
+                  </div>
+                </div>
+              ))}
 
-              <div className="flex items-start gap-2.5">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-500/10 mt-0.5">
-                  <span className="text-xs font-bold text-green-600">3</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground mb-1">Test Your Recall</p>
-                  <p className="text-muted-foreground">Prove your mastery with multiple test modes: first letters only, full typing, or audio recording.</p>
-                </div>
+              {/* Test */}
+              <div className="px-5 py-3 bg-emerald-500/5">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-500">Test</span>
               </div>
+              {[
+                { Icon: NotebookPen, name: "Full Recall",      desc: "Type the entire passage from memory with no prompts or hints." },
+                { Icon: Hash,        name: "1st Ltr Recall",   desc: "Type only the first letter of every word to prove you know the sequence." },
+                { Icon: Mic2,        name: "Audio Recall",     desc: "Record yourself reciting the passage — reviewed and scored afterward." },
+              ].map(({ Icon, name, desc }) => (
+                <div key={name} className="flex items-start gap-3 px-5 py-3">
+                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                    <Icon className="size-3.5 text-emerald-500" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-medium text-foreground leading-snug">{name}</p>
+                    <p className="text-xs text-muted-foreground leading-snug">{desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </DialogContent>
         </Dialog>
@@ -1726,152 +1827,55 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           onModeChange={(mode, config) => updateRepetitionMode(id, mode, config)}
         />
 
-        {/* Step Cards */}
-        <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Learning Steps</h2>
-          
-          {/* Step 1: Familiarize */}
-          <Card className={set.recommendedStep === "familiarize" ? "border-primary ring-2 ring-primary/20" : ""}>
-            <CardContent className="flex items-start gap-4 p-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-                <BookOpen className="size-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Familiarize</h3>
-                      {getStatusBadge(getFamiliarizeStatus())}
-                    </div>
-                    <p className="text-sm text-muted-foreground">Read and absorb the content</p>
-                  </div>
-                  {getFamiliarizeStatus() === "complete" && (
-                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {getFamiliarizeStatus() === "not-started" && (
-                    <Button onClick={handleFamiliarize} size="sm" className="w-full sm:w-auto">
-                      <BookOpen className="size-4 mr-2" />
-                      Dive In
-                    </Button>
-                  )}
-                  {getFamiliarizeStatus() === "complete" && (
-                    <Button onClick={handleFamiliarize} size="sm" variant="outline" className="w-full sm:w-auto">
-                      <BookOpen className="size-4 mr-2" />
-                      Review Again
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Learning Steps — circular progress grid */}
+        <div className="-mx-4 flex flex-col">
+          <div className="px-4 pb-3 flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Learning Steps</h2>
+            <button
+              onClick={() => setShowSystemInfo(true)}
+              className="flex items-center justify-center size-5 rounded-full text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              aria-label="About learning methods"
+            >
+              <HelpCircle className="size-4" />
+            </button>
+          </div>
 
-          {/* Step 2: Encode */}
-          <Card className={set.recommendedStep === "encode" ? "border-primary ring-2 ring-primary/20" : ""}>
-            <CardContent className="flex items-start gap-4 p-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-purple-500/10">
-                <Sparkles className="size-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Train Your Recall</h3>
-                      {getStatusBadge(getEncodeStatus())}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Build memory through 3 progressive levels
-                      {getEncodeStatus() === "in-progress" && (
-                        <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getEncodeProgress()}</span>
-                      )}
-                    </p>
-                  </div>
-                  {getEncodeStatus() === "complete" && (
-                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  )}
-                  {getEncodeStatus() === "in-progress" && (
-                    <div className="flex size-5 shrink-0 items-center justify-center">
-                      <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {getEncodeStatus() === "not-started" && (
-                    <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      <Sparkles className="size-4 mr-2" />
-                      Start Training
-                    </Button>
-                  )}
-                  {getEncodeStatus() === "in-progress" && (
-                    <Button onClick={handleEncode} size="sm" className="w-full sm:w-auto">
-                      <Sparkles className="size-4 mr-2" />
-                      Resume Training
-                    </Button>
-                  )}
-                  {getEncodeStatus() === "complete" && (
-                    <Button onClick={handleEncode} size="sm" variant="outline" className="w-full sm:w-auto">
-                      <Sparkles className="size-4 mr-2" />
-                      Practice More
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── TEACH ────────────────────────────────── */}
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+            <span className="text-[13px] font-semibold text-foreground/60">Teach</span>
+          </div>
+          <div className="flex justify-around px-4 py-6">
+            <CircleBtn Icon={BookOpenText} label="Read it yourself" onClick={startFamiliarizeReader} color="blue"
+              progress={set.progress.familiarizeCompleted ? 1 : 0} />
+            <CircleBtn Icon={StickyNote} label="Flashcards" onClick={handleFlashcards} color="blue"
+              progress={chunks.length > 0 ? Math.min((set.progress.reviewedChunks?.length ?? 0) / chunks.length, 1) : 0} />
+            <CircleBtn Icon={AudioLines} label="AI Read it" onClick={handleOpenTTSPlayer} color="blue" progress={0} />
+          </div>
 
-          {/* Step 3: Test */}
-          <Card className={set.recommendedStep === "test" ? "border-primary ring-2 ring-primary/20" : ""}>
-            <CardContent className="flex items-start gap-4 p-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
-                <Target className="size-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">Test Your Recall</h3>
-                      {getStatusBadge(getTestStatus())}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Validate complete recall from memory
-                      {getTestStatus() === "in-progress" && (
-                        <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· {getTestProgress()}</span>
-                      )}
-                    </p>
-                  </div>
-                  {getTestStatus() === "complete" && (
-                    <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  )}
-                  {getTestStatus() === "in-progress" && (
-                    <div className="flex size-5 shrink-0 items-center justify-center">
-                      <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {getTestStatus() === "not-started" && (
-                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      <Target className="size-4 mr-2" />
-                      Take the Test
-                    </Button>
-                  )}
-                  {getTestStatus() === "in-progress" && (
-                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      <Target className="size-4 mr-2" />
-                      Finish Testing
-                    </Button>
-                  )}
-                  {getTestStatus() === "complete" && (
-                    <Button onClick={handleTest} size="sm" className="w-full sm:w-auto">
-                      <Target className="size-4 mr-2" />
-                      Test Again
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── TRAIN ────────────────────────────────── */}
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+            <span className="text-[13px] font-semibold text-foreground/60">Train</span>
+          </div>
+          <div className="flex justify-around px-4 py-6">
+            <CircleBtn Icon={ALargeSmall} label="First Letter" onClick={startFirstLetterMethod} color="violet"
+              progress={[set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length / 3} />
+            <CircleBtn Icon={PenLine} label="Finish that Phrase" onClick={startFinishPhrase} color="violet"
+              progress={(set.progress.tests.finishPhrase?.bestScore ?? 0) / 100} />
+            <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={0} />
+          </div>
+
+          {/* ── TEST ─────────────────────────────────── */}
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+            <span className="text-[13px] font-semibold text-foreground/60">Test</span>
+          </div>
+          <div className="flex justify-around px-4 py-6">
+            <CircleBtn Icon={NotebookPen} label="Full Recall" onClick={startTypingTest} color="emerald"
+              progress={(set.progress.tests.fullText.bestScore ?? 0) / 100} />
+            <CircleBtn Icon={Hash} label="1st Ltr Recall" onClick={startFirstLetterTest} color="emerald"
+              progress={(set.progress.tests.firstLetter.bestScore ?? 0) / 100} />
+            <CircleBtn Icon={Mic2} label="Audio Recall" onClick={startAudioTest} color="emerald"
+              progress={(set.progress.tests.audioTest.bestScore ?? 0) / 100} />
+          </div>
         </div>
 
         {/* Metadata */}

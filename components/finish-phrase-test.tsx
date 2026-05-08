@@ -576,7 +576,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   if (showIntro) {
     return (
       <div className="flex flex-col gap-5">
-        <Dialog open onOpenChange={() => {}}>
+        <Dialog open onOpenChange={(open) => { if (!open) onBack() }}>
           <DialogContent className="max-w-sm gap-0 p-0 overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
             <DialogHeader className="px-6 pt-6 pb-4 border-b">
               <DialogTitle className="flex items-center gap-2">
