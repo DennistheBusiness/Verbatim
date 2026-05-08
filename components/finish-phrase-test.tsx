@@ -221,6 +221,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   const [totalTime, setTotalTime] = useState(0)
   const [hasStarted, setHasStarted] = useState(false)
   const [mobileValue, setMobileValue] = useState("")
+  const [isMobile, setIsMobile] = useState(false)
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lockedRef = useRef(false)
@@ -240,7 +241,11 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   const totalWrongRef = useRef(0)
   const chunkOrderRef = useRef<ChunkOrder>("succession")
 
-  useEffect(() => { isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) }, [])
+  useEffect(() => {
+    const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    isMobileRef.current = mobile
+    setIsMobile(mobile)
+  }, [])
   useEffect(() => { activeIndexRef.current = activeIndex }, [activeIndex])
   useEffect(() => { chunkCorrectRef.current = chunkCorrect }, [chunkCorrect])
   useEffect(() => { chunkWrongRef.current = chunkWrong }, [chunkWrong])
@@ -823,6 +828,16 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
           <ChevronRight className="size-4" />
           Start Game
         </Button>
+      )}
+
+      {isMobile && hasStarted && (
+        <button
+          onClick={() => inputRef.current?.focus()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-muted-foreground/30 py-3 text-xs text-muted-foreground active:bg-muted/40"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M6 16h4M14 16h4"/></svg>
+          Tap to open keyboard
+        </button>
       )}
 
       <input
