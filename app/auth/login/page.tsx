@@ -1,9 +1,10 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,17 +30,23 @@ function LoginContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
   const supabase = createClient()
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!captchaToken) { toast.error('Please complete the security check'); return }
     setLoading(true)
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) { toast.error(error.message) }
-      else {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } })
+      if (error) {
+        toast.error(error.message)
+        turnstileRef.current?.reset()
+        setCaptchaToken(null)
+      } else {
         if (data.user) identifyUser(data.user.id, { email: data.user.email })
         trackEvent(USER_LOGGED_IN, { method: 'email' })
         sessionStorage.removeItem("verbatim-splash-seen")
@@ -255,7 +262,15 @@ function LoginContent() {
               />
             </div>
 
-            <Button type="submit" size="lg" className="w-full h-12 text-[15px] font-semibold mt-1" disabled={loading}>
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              onSuccess={setCaptchaToken}
+              onExpire={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              onError={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              options={{ theme: 'auto', size: 'flexible' }}
+            />
+            <Button type="submit" size="lg" className="w-full h-12 text-[15px] font-semibold mt-1" disabled={loading || !captchaToken}>
               {loading ? <><Loader2 className="mr-2 size-4 animate-spin" />Signing in…</> : 'Sign in'}
             </Button>
           </form>
