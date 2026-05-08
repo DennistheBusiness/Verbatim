@@ -36,13 +36,14 @@ import { SessionLayout } from "@/components/session-layout"
 import { FlashcardViewer } from "@/components/flashcard-viewer"
 import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
 import { AudioTest } from "@/components/audio-test"
+import { FinishPhraseTest } from "@/components/finish-phrase-test"
 import { MobileMemoNav } from "@/components/mobile-memo-nav"
 import { ScoreChart } from "@/components/score-chart"
 import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game"
+type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game" | "finish-phrase"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -318,6 +319,13 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [id, set?.chunks.length])
 
   const exitSortingGame = useCallback(() => setPageMode("encode-method-select"), [])
+
+  const startFinishPhrase = useCallback(() => {
+    setPageMode("finish-phrase")
+    trackEvent(ENCODE_STARTED, { set_id: id, method: 'finish_phrase', chunk_count: set?.chunks.length ?? 0 })
+  }, [id, set?.chunks.length])
+
+  const exitFinishPhrase = useCallback(() => setPageMode("encode-method-select"), [])
 
   const finishSortingGame = useCallback(() => {
     setPageMode("view")
@@ -1073,7 +1081,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       >
         <div className="rounded-lg bg-muted/50 p-3">
           <p className="text-sm text-muted-foreground">
-            Choose a training method. Both methods help reinforce recall from memory.
+            Choose a training method. All methods help reinforce recall from memory.
           </p>
         </div>
 
@@ -1127,7 +1135,41 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </Button>
             </CardContent>
           </Card>
+
+          {/* Finish That Phrase */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <Sparkles className="size-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Finish That Phrase</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    See 20% of each chunk and recall the rest under the clock
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} · 3 seconds per hidden word
+                </p>
+              </div>
+              <Button onClick={startFinishPhrase} className="w-full" disabled={!hasContent}>
+                Start
+              </Button>
+            </CardContent>
+          </Card>
         </div>
+      </SessionLayout>
+    )
+  }
+
+  // Finish That Phrase (Step 2)
+  if (pageMode === "finish-phrase") {
+    return (
+      <SessionLayout step="Step 2" title="Finish That Phrase" setTitle={set.title} onBack={exitFinishPhrase} showBottomActions={false}>
+        <FinishPhraseTest setId={id} chunks={chunks} onBack={exitFinishPhrase} />
       </SessionLayout>
     )
   }
