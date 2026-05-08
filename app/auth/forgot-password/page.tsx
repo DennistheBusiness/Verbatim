@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,19 +17,25 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!captchaToken) { toast.error('Please complete the security check'); return }
     setLoading(true)
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
-      })
+        captchaToken,
+      } as Parameters<typeof supabase.auth.resetPasswordForEmail>[1])
 
       if (error) {
         toast.error(error.message)
+        turnstileRef.current?.reset()
+        setCaptchaToken(null)
       } else {
         setSubmitted(true)
         toast.success('Password reset email sent!')
@@ -137,7 +144,15 @@ export default function ForgotPasswordPage() {
                 autoFocus
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              onSuccess={setCaptchaToken}
+              onExpire={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              onError={() => { turnstileRef.current?.reset(); setCaptchaToken(null) }}
+              options={{ theme: 'auto', size: 'flexible' }}
+            />
+            <Button type="submit" className="w-full" disabled={loading || !captchaToken}>
               {loading ? 'Sending...' : 'Send reset link'}
             </Button>
           </form>
