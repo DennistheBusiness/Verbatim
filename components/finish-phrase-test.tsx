@@ -233,6 +233,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   const isMobileRef = useRef(false)
   const hasStartedRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const chunkQueueRef = useRef<number[]>([])
   const chunkQueuePosRef = useRef(0)
@@ -256,6 +257,13 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   useEffect(() => { totalCorrectRef.current = totalCorrect }, [totalCorrect])
   useEffect(() => { totalWrongRef.current = totalWrong }, [totalWrong])
   useEffect(() => { chunkOrderRef.current = chunkOrder }, [chunkOrder])
+
+  // Scroll bottom into view on mobile whenever active word advances
+  useEffect(() => {
+    if (isMobileRef.current && hasStartedRef.current) {
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50)
+    }
+  }, [activeIndex])
 
   const initChunk = useCallback((queue: number[], pos: number, autoStart = false) => {
     const realIdx = queue[pos]
@@ -845,12 +853,17 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
         className="sr-only"
         value={mobileValue}
         onChange={handleMobileChange}
+        onFocus={() => {
+          // After keyboard slides up, scroll bottom of content into view
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350)
+        }}
         aria-label="Letter input"
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
       />
+      <div ref={bottomRef} className="h-1" />
     </div>
   )
 }
