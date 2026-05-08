@@ -37,7 +37,7 @@ interface Attempt {
 }
 
 type ChartMode = "test" | "encode" | "all"
-type TestFilterMode = "all" | "first_letter" | "full_text" | "audio"
+type TestFilterMode = "all" | "first_letter" | "full_text" | "audio" | "finish_phrase"
 type EncodeFilterMode = "all" | "word" | "sentence" | "full"
 
 interface ScoreChartProps {
@@ -57,6 +57,7 @@ const MODE_LABELS: Record<ChartMode, string> = {
 const TEST_FILTER_LABELS: Record<TestFilterMode, string> = {
   all: "All",
   first_letter: "First Letter",
+  finish_phrase: "Finish That Phrase",
   full_text: "Full Recall",
   audio: "Audio",
 }
