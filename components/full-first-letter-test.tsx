@@ -435,6 +435,9 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
               </span>
             ))}
           </div>
+          {/* Mobile-only spacer: gives enough scroll room so the last line
+              clears the virtual keyboard. Invisible and aria-hidden. */}
+          <div className="h-48 sm:hidden" aria-hidden="true" />
         </CardContent>
       </Card>
     </div>
