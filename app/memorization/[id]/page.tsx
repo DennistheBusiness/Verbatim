@@ -152,7 +152,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [shareCopied, setShareCopied] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [chunkSelectPurpose, setChunkSelectPurpose] = useState<'practice' | 'first-letter'>('practice')
-  const [firstLetterTestContent, setFirstLetterTestContent] = useState('')
+  const [practiceOverrideContent, setPracticeOverrideContent] = useState('')
 
   // Fetch audio URL via cached context helper (24-hour signed URL)
   useEffect(() => {
@@ -269,12 +269,14 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const exitPractice = useCallback(() => {
     setPracticeChunkIndex(null)
     setPracticeQueuePosition(0)
+    setPracticeOverrideContent('')
     setPageMode("chunk-select")
   }, [])
 
   const finishEncoding = useCallback(() => {
     setPracticeChunkIndex(null)
     setPracticeQueuePosition(0)
+    setPracticeOverrideContent('')
     setPageMode("view")
     updateSessionState(id, { currentStep: null, currentChunkIndex: null, currentEncodeStage: null })
   }, [id, updateSessionState])
@@ -388,16 +390,21 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'first_letter', chunk_count: set?.chunks.length ?? 0 })
   }, [id, set?.chunks.length])
 
-  const startFirstLetterFromChunks = useCallback((indexes: number[]) => {
+  const startCombinedPractice = useCallback((indexes: number[]) => {
     const allChunks = set?.chunks ?? []
     const ordered = [...indexes].sort((a, b) => a - b)
     const combined = ordered
       .map(idx => allChunks.find(c => c.orderIndex === idx)?.text ?? '')
       .filter(Boolean)
       .join(' ')
-    setFirstLetterTestContent(combined)
-    setPageMode('first-letter-test')
-  }, [set?.chunks])
+    setPracticeOverrideContent(combined)
+    setSelectedPracticeChunkIndexes([])
+    setPracticeQueuePosition(0)
+    setPracticeChunkIndex(-1)
+    setPageMode('practice')
+    updateSessionState(id, { currentStep: 'encode', currentChunkIndex: null })
+    trackEvent(ENCODE_STARTED, { set_id: id, chunk_indices: indexes, chunk_count: indexes.length })
+  }, [set?.chunks, id, updateSessionState])
 
   const startSortingGame = useCallback(() => {
     setPageMode("sorting-game")
@@ -436,7 +443,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(TEST_STARTED, { set_id: id, test_type: 'first_letter' })
   }, [id, updateSessionState])
 
-  const exitFirstLetterTest = useCallback(() => { setFirstLetterTestContent(''); setPageMode("view") }, [])
+  const exitFirstLetterTest = useCallback(() => setPageMode("view"), [])
 
   const finishTesting = useCallback(() => {
     setPageMode("view")
@@ -1217,7 +1224,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
                 : "Select chunks to practice",
           onClick: chunkSelectPurpose === 'first-letter'
-            ? () => startFirstLetterFromChunks(selectedPracticeChunkIndexes)
+            ? () => startCombinedPractice(selectedPracticeChunkIndexes)
             : () => startPracticeQueue(selectedPracticeChunkIndexes),
           disabled: selectedPracticeCount === 0,
         } : undefined}
@@ -1443,7 +1450,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       >
         <FullFirstLetterTest
           setId={id}
-          content={firstLetterTestContent || set.content}
+          content={set.content}
           onBack={finishTesting}
         />
       </SessionLayout>
@@ -1501,7 +1508,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           <ProgressiveChunkEncoder
             setId={id}
             chunkId={null}
-            chunk={set.content}
+            chunk={practiceOverrideContent || set.content}
             chunkIndex={0}
             totalChunks={1}
             onRetryChunk={handleRetryEntireSelection}
@@ -1847,10 +1854,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </div>
           <div className="flex justify-around px-4 py-6">
             <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={0} />
-            <CircleBtn Icon={PenLine} label="Finish that Phrase" onClick={startFinishPhrase} color="violet"
-              progress={(set.progress.tests.finishPhrase?.bestScore ?? 0) / 100} />
             <CircleBtn Icon={ALargeSmall} label="First Letter Method" onClick={startFirstLetterMethod} color="violet"
               progress={[set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length / 3} />
+            <CircleBtn Icon={PenLine} label="Finish that Phrase" onClick={startFinishPhrase} color="violet"
+              progress={(set.progress.tests.finishPhrase?.bestScore ?? 0) / 100} />
           </div>
 
           {/* ── TEST ─────────────────────────────────── */}
