@@ -44,6 +44,7 @@ export function ChunkEncoder({
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
   const wordsRef = useRef<WordStatus[]>([])
   const currentIndexRef = useRef(0)
   const isCompleteRef = useRef(false)
@@ -213,7 +214,7 @@ export function ChunkEncoder({
 
   return (
     <>
-      <Card>
+      <Card ref={cardRef}>
       <CardContent className="flex flex-col gap-4 py-5">
         <div className="flex items-center gap-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
@@ -244,6 +245,11 @@ export function ChunkEncoder({
             spellCheck={false}
             className="sr-only"
             aria-hidden="true"
+            onFocus={() => {
+              if (isMobileRef.current) {
+                setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+              }
+            }}
           />
         )}
 

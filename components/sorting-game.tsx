@@ -165,25 +165,21 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
   // ── Touch drag-and-drop (mobile) ─────────────────────────────────────────────
 
   const handleGripTouchStart = useCallback((e: React.TouchEvent, index: number) => {
-    // Don't intercept taps on interactive elements inside the card
-    const tag = (e.target as HTMLElement).tagName
-    if (tag === 'INPUT' || tag === 'BUTTON') return
-
     e.preventDefault()
+    e.stopPropagation()
     touchDragIndexRef.current = index
     dragOverIndexRef.current = index
     setDragOverIndex(index)
 
-    // Snapshot item rects at drag start
-    if (listRef.current) {
-      itemRectsRef.current = Array.from(listRef.current.children).map(
-        (el) => (el as HTMLElement).getBoundingClientRect()
-      )
-    }
-
     const onTouchMove = (ev: TouchEvent) => {
       ev.preventDefault()
       const y = ev.touches[0].clientY
+      // Re-fetch rects each move so scroll-adjusted positions are accurate
+      if (listRef.current) {
+        itemRectsRef.current = Array.from(listRef.current.children).map(
+          (el) => (el as HTMLElement).getBoundingClientRect()
+        )
+      }
       const rects = itemRectsRef.current
       let overIndex = touchDragIndexRef.current ?? 0
       for (let i = 0; i < rects.length; i++) {
@@ -377,10 +373,9 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
-              onTouchStart={(e) => handleGripTouchStart(e, index)}
               className={cn(
                 "flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors",
-                isDragTarget ? "border-primary bg-primary/5 shadow-md" : "cursor-grab active:cursor-grabbing"
+                isDragTarget ? "border-primary bg-primary/5 shadow-md" : ""
               )}
             >
               {/* Editable position number */}
@@ -390,7 +385,10 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
                   min={1}
                   max={items.length}
                   value={draftVal !== undefined ? draftVal : index + 1}
-                  onFocus={() => handlePositionFocus(item.id, index)}
+                  onFocus={(e) => {
+                    handlePositionFocus(item.id, index)
+                    setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 350)
+                  }}
                   onChange={(e) => handlePositionChange(item.id, e.target.value)}
                   onBlur={(e) => handlePositionCommit(item.id, e.target.value)}
                   onKeyDown={(e) => {
@@ -423,7 +421,8 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
                   <ChevronUp className="size-4" />
                 </button>
                 <div
-                  className="flex size-7 items-center justify-center text-muted-foreground/40"
+                  onTouchStart={(e) => handleGripTouchStart(e, index)}
+                  className="flex size-7 touch-none cursor-grab items-center justify-center text-muted-foreground/40 active:text-foreground"
                 >
                   <GripVertical className="size-4" />
                 </div>
