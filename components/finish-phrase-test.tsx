@@ -397,7 +397,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
     if (lockedRef.current) return
     if (!hasStartedRef.current) return
     const key = rawKey.toLowerCase()
-    if (!/^[a-z]$/.test(key)) return
+    if (!/^[a-z&]$/.test(key)) return
     const idx = activeIndexRef.current
     const now = Date.now()
     const last = lastInputRef.current
@@ -466,7 +466,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
     const val = e.target.value
     setMobileValue("")
     if (!val) return
-    const letter = val.replace(/[^a-zA-Z]/g, "").slice(-1)
+    const letter = val.replace(/[^a-zA-Z&]/g, "").slice(-1)
     if (letter) processLetterInput(letter)
   }, [processLetterInput])
 
