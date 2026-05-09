@@ -59,6 +59,7 @@ export default function EditPage({ params }: EditPageProps) {
   const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
   const [contentFocused, setContentFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   const existingTags = getAllTags
 
@@ -417,11 +418,24 @@ export default function EditPage({ params }: EditPageProps) {
               <FieldLabel>Tags <span className="text-muted-foreground font-normal">(optional)</span></FieldLabel>
               <div className="relative">
                 <Input
+                  ref={tagInputRef}
                   id="tags"
                   placeholder="Type a tag and press Enter…"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}
+                  onFocus={() => {
+                    if (!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return
+                    setTimeout(() => {
+                      const el = tagInputRef.current
+                      if (!el) return
+                      const rect = el.getBoundingClientRect()
+                      const visibleH = window.visualViewport?.height ?? window.innerHeight
+                      if (rect.bottom > visibleH - 20) {
+                        window.scrollBy({ top: rect.bottom - visibleH + 100, behavior: 'smooth' })
+                      }
+                    }, 350)
+                  }}
                   autoComplete="off"
                   className="pr-10"
                 />

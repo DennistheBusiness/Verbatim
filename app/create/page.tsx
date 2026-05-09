@@ -49,6 +49,7 @@ export default function CreatePage() {
   const [isSaving, setIsSaving] = useState(false)
   const [contentFocused, setContentFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -367,11 +368,24 @@ export default function CreatePage() {
               <FieldLabel>Tags <span className="text-muted-foreground font-normal">(optional)</span></FieldLabel>
               <div className="relative">
                 <Input
+                  ref={tagInputRef}
                   id="tags"
                   placeholder="Type a tag and press Enter…"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKey}
+                  onFocus={() => {
+                    if (!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return
+                    setTimeout(() => {
+                      const el = tagInputRef.current
+                      if (!el) return
+                      const rect = el.getBoundingClientRect()
+                      const visibleH = window.visualViewport?.height ?? window.innerHeight
+                      if (rect.bottom > visibleH - 20) {
+                        window.scrollBy({ top: rect.bottom - visibleH + 100, behavior: 'smooth' })
+                      }
+                    }, 350)
+                  }}
                   autoComplete="off"
                   className="pr-10"
                 />

@@ -1,6 +1,7 @@
 "use client"
 
 import { use, useState, useEffect, useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
@@ -73,11 +74,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, type LucideIcon } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, Trash2, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { SessionLayout } from "@/components/session-layout"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game" | "finish-phrase"
 type StepStatus = "not-started" | "in-progress" | "complete"
@@ -124,7 +136,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   // useSetList for reactive data (re-renders when this set's progress updates)
   const { isLoaded, sets } = useSetList()
   // useSetActions for stable mutation callbacks (never change identity)
-  const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl, updateRepetitionMode } = useSetActions()
+  const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl, updateRepetitionMode, deleteSet } = useSetActions()
+  const router = useRouter()
   const set = useMemo(() => sets.find((s) => s.id === id), [sets, id])
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
@@ -146,6 +159,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [readerVisited, setReaderVisited] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Fetch audio URL via cached context helper (24-hour signed URL)
   useEffect(() => {
@@ -214,6 +228,18 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       toast.error('Failed to disable share link')
     }
   }, [set])
+  const handleDelete = useCallback(async () => {
+    if (!set) return
+    setIsDeleting(true)
+    try {
+      await deleteSet(set.id)
+      router.push('/')
+    } catch {
+      toast.error('Failed to delete memorization')
+      setIsDeleting(false)
+    }
+  }, [set, deleteSet, router])
+
   const handleChunkModeChange = useCallback((mode: ChunkMode) => {
     updateChunkMode(id, mode)
   }, [id, updateChunkMode])
@@ -1842,10 +1868,52 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         {/* Metadata */}
         <p className="text-xs text-center text-muted-foreground">
           Created {formatDate(set.createdAt)}
-          {set.updatedAt !== set.createdAt && (
-            <> · Updated {formatDate(set.updatedAt)}</>
-          )}
         </p>
+
+        {/* Control Center */}
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-center uppercase tracking-wider text-muted-foreground">Memorization Control Center</p>
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+              <Link href={`/edit/${set.id}`}>
+                <Edit3 className="size-4" />
+                Edit
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleShare} disabled={shareLoading}>
+              {shareLoading
+                ? <div className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                : <Share2 className="size-4" />}
+              Share
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60">
+                  <Trash2 className="size-4" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete memorization?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete &ldquo;{set.title}&rdquo; and all your progress. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeleting ? 'Deleting…' : 'Delete'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
       </main>
       <MobileMemoNav 
         memoId={id}
