@@ -103,6 +103,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [showSystemInfo, setShowSystemInfo] = useState(false)
   const [showSharePanel, setShowSharePanel] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  // Session-local completion flags for exercises not tracked in DB
+  const [sortingGameCompleted, setSortingGameCompleted] = useState(false)
+  const [ttsVisited, setTtsVisited] = useState(false)
+  const [readerVisited, setReaderVisited] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
 
@@ -118,6 +122,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const handleOpenTTSPlayer = useCallback(() => {
     setPageMode("familiarize")
     setFamiliarizeSubView("tts")
+    setTtsVisited(true)
   }, [])
   const handleCloseTTSPlayer = useCallback(() => setFamiliarizeSubView("landing"), [])
 
@@ -338,6 +343,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const exitFinishPhrase = useCallback(() => setPageMode("view"), [])
 
   const finishSortingGame = useCallback(() => {
+    setSortingGameCompleted(true)
     setPageMode("view")
     updateSessionState(id, { currentStep: null })
   }, [id, updateSessionState])
@@ -622,6 +628,36 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const progressModuleCTA = getProgressModuleCTA()
   const highestTestScore = getHighestTestScore()
 
+  // ─── Dynamic step CTAs ─────────────────────────────────────────────────────
+  const getTeachCTA = (): { label: string; onClick: () => void } => {
+    const flashcardsDone = (set.progress.reviewedChunks?.length ?? 0) > 0
+    if (!readerVisited) return { label: "Start Reading", onClick: () => { setFamiliarizeSubView("reader"); setReaderVisited(true) } }
+    if (!flashcardsDone) return { label: "Try Flashcard Mode", onClick: handleFlashcards }
+    if (!ttsVisited) return { label: "Try AI Read Aloud", onClick: handleOpenTTSPlayer }
+    return { label: "Continue to Training", onClick: continueToEncode }
+  }
+
+  const getTrainCTA = (): { label: string; onClick: () => void } => {
+    const firstLetterDone = set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed
+    const sortingDone = sortingGameCompleted
+    const finishPhraseDone = (set.progress.tests.finishPhrase?.bestScore ?? null) !== null
+    if (!firstLetterDone) return { label: "Start First Letter Method", onClick: startFirstLetterMethod }
+    if (!sortingDone) return { label: "Try Sorting Game", onClick: startSortingGame }
+    if (!finishPhraseDone) return { label: "Try Finish That Phrase", onClick: startFinishPhrase }
+    return { label: "Continue to Test", onClick: continueFromEncodeToTest }
+  }
+
+  const getTestCTA = (): { label: string; onClick: () => void } => {
+    const firstLetterDone = set.progress.tests.firstLetter.lastScore !== null
+    const fullRecallDone = set.progress.tests.fullText.lastScore !== null
+    const audioDone = set.progress.tests.audioTest.lastScore !== null
+    if (!firstLetterDone) return { label: "Start First Letter Recall", onClick: startFirstLetterTest }
+    if (!fullRecallDone) return { label: "Try Full Recall", onClick: startTypingTest }
+    if (!audioDone) return { label: "Try Audio Recall", onClick: startAudioTest }
+    return { label: "All Tests Complete · Back to Overview", onClick: exitTestSelect }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   // Familiarize mode
   if (pageMode === "familiarize") {
     // TTS sub-view
@@ -651,8 +687,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           setTitle={set.title}
           onBack={exitFamiliarize}
           primaryAction={{
-            label: "Continue to Training",
-            onClick: continueToEncode,
+            label: getTeachCTA().label,
+            onClick: getTeachCTA().onClick,
             icon: <ArrowRight className="size-4" />,
           }}
           secondaryAction={{
@@ -777,8 +813,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Select>
         }
         primaryAction={hasContent ? {
-          label: "Continue to Training",
-          onClick: continueToEncode,
+          label: getTeachCTA().label,
+          onClick: getTeachCTA().onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{
@@ -814,7 +850,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     </p>
                   </div>
                   <Button
-                    onClick={() => { setContentExpanded(false); setFamiliarizeSubView("reader") }}
+                    onClick={() => { setContentExpanded(false); setFamiliarizeSubView("reader"); setReaderVisited(true) }}
                     size="sm"
                     className="w-full sm:w-auto"
                   >
@@ -973,8 +1009,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitFlashcards}
         primaryAction={hasContent ? {
-          label: "Continue to Training",
-          onClick: continueFromFlashcards,
+          label: getTeachCTA().label,
+          onClick: getTeachCTA().onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{
@@ -1067,6 +1103,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Train"
         setTitle={set.title}
         onBack={exitEncodeMethodSelect}
+        primaryAction={hasContent ? {
+          label: getTrainCTA().label,
+          onClick: getTrainCTA().onClick,
+          icon: <ArrowRight className="size-4" />,
+        } : undefined}
         secondaryAction={{ label: "Back to Detail", onClick: exitEncodeMethodSelect }}
         contextAction={
           <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
@@ -1317,6 +1358,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         title="Test"
         setTitle={set.title}
         onBack={exitTestSelect}
+        primaryAction={hasContent ? {
+          label: getTestCTA().label,
+          onClick: getTestCTA().onClick,
+          icon: <ArrowRight className="size-4" />,
+        } : undefined}
         secondaryAction={{ label: "Back to Detail", onClick: exitTestSelect }}
         contextAction={
           <Select value={set.chunkMode} onValueChange={(v) => updateChunkMode(id, v as ChunkMode)}>
