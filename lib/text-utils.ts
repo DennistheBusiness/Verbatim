@@ -45,13 +45,10 @@ export function parseWords(text: string): ParsedWord[] {
     .split(/\s+/)
     .filter((word) => word.length > 0)
     .map((word) => {
+      // & is a valid standalone word — user must type '&' to advance
+      if (word.startsWith('&')) return { word, firstLetter: '&' }
       const match = word.match(/[a-zA-Z]/)
-      if (match) {
-        return {
-          word,
-          firstLetter: match[0].toLowerCase(),
-        }
-      }
+      if (match) return { word, firstLetter: match[0].toLowerCase() }
       return null
     })
     .filter((item): item is ParsedWord => item !== null)

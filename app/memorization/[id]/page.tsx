@@ -1057,7 +1057,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <LetterText className="size-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold">First Letter</h3>
+                  <h3 className="font-semibold">First Letter Method</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Progressive first-letter encoding across 3 difficulty levels
                   </p>
@@ -1156,7 +1156,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     return (
       <SessionLayout
         step="Step 2"
-        title="First Letter"
+        title="First Letter Method"
         setTitle={set.title}
         onBack={exitChunkSelect}
         contextAction={
@@ -1725,7 +1725,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                 <span className="text-[11px] font-bold uppercase tracking-widest text-violet-500">Train</span>
               </div>
               {[
-                { Icon: ALargeSmall,  name: "First Letter",       desc: "See just the first letter of each word across 3 progressive reveal stages." },
+                { Icon: ALargeSmall,  name: "First Letter Method", desc: "See just the first letter of each word across 3 progressive reveal stages." },
                 { Icon: PenLine,      name: "Finish that Phrase",  desc: "The first 20% of each chunk is shown — type the rest from memory against the clock." },
                 { Icon: ListOrdered,  name: "Sorting Game",        desc: "Drag and drop scrambled chunks back into their correct order." },
               ].map(({ Icon, name, desc }) => (
@@ -1800,11 +1800,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             <span className="text-[13px] font-semibold text-foreground/60">Train</span>
           </div>
           <div className="flex justify-around px-4 py-6">
-            <CircleBtn Icon={ALargeSmall} label="First Letter" onClick={startFirstLetterMethod} color="violet"
-              progress={[set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length / 3} />
+            <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={0} />
             <CircleBtn Icon={PenLine} label="Finish that Phrase" onClick={startFinishPhrase} color="violet"
               progress={(set.progress.tests.finishPhrase?.bestScore ?? 0) / 100} />
-            <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={0} />
+            <CircleBtn Icon={ALargeSmall} label="First Letter Method" onClick={startFirstLetterMethod} color="violet"
+              progress={[set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length / 3} />
           </div>
 
           {/* ── TEST ─────────────────────────────────── */}
