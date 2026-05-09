@@ -65,6 +65,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const isMobileRef = useRef(false)
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
 
@@ -111,9 +112,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   }, [])
 
-  // Scroll the active word into view, accounting for the virtual keyboard height
+  // Scroll the active word into view, accounting for the virtual keyboard height.
+  // Cancels any pending scroll before scheduling so rapid keypresses don't
+  // fire competing smooth-scroll calls that cancel each other out.
   const scrollActiveWordIntoView = useCallback((delay = 50) => {
-    setTimeout(() => {
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+    scrollTimerRef.current = setTimeout(() => {
+      scrollTimerRef.current = null
       const el = wordRefs.current[currentIndexRef.current]
       if (!el) return
       const rect = el.getBoundingClientRect()
