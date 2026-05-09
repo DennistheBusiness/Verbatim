@@ -119,7 +119,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       const rect = el.getBoundingClientRect()
       const visibleH = window.visualViewport?.height ?? window.innerHeight
       if (rect.bottom > visibleH - 20) {
-        window.scrollBy({ top: rect.bottom - visibleH + 80, behavior: 'smooth' })
+        window.scrollBy({ top: rect.bottom - visibleH + 160, behavior: 'smooth' })
       }
     }, delay)
   }, [])
