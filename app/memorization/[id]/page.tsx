@@ -96,19 +96,10 @@ type StepStatus = "not-started" | "in-progress" | "complete"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
-  const now = new Date()
-  const diffTime = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return "Today"
-  if (diffDays === 1) return "Yesterday"
-  if (diffDays < 7) return `${diffDays} days ago`
-  
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-  })
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}/${day}/${year}`
 }
 
 function getChunkLabel(mode: ChunkMode, count: number): string {
@@ -160,6 +151,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [shareLoading, setShareLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [chunkSelectPurpose, setChunkSelectPurpose] = useState<'practice' | 'first-letter'>('practice')
+  const [firstLetterTestContent, setFirstLetterTestContent] = useState('')
 
   // Fetch audio URL via cached context helper (24-hour signed URL)
   useEffect(() => {
@@ -356,6 +349,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const continueToEncode = useCallback(() => {
     markFamiliarizeComplete(id)
     toast.success("Progress saved")
+    setChunkSelectPurpose('practice')
     setPageMode("chunk-select")
   }, [id, markFamiliarizeComplete])
 
@@ -375,6 +369,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const continueFromFlashcards = useCallback(() => {
     markFamiliarizeComplete(id)
     toast.success("Progress saved")
+    setChunkSelectPurpose('practice')
     setPageMode("chunk-select")
   }, [id, markFamiliarizeComplete])
 
@@ -387,9 +382,22 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const exitEncodeMethodSelect = useCallback(() => setPageMode("view"), [])
 
   const startFirstLetterMethod = useCallback(() => {
+    setChunkSelectPurpose('first-letter')
+    setSelectedPracticeChunkIndexes([])
     setPageMode("chunk-select")
     trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'first_letter', chunk_count: set?.chunks.length ?? 0 })
   }, [id, set?.chunks.length])
+
+  const startFirstLetterFromChunks = useCallback((indexes: number[]) => {
+    const allChunks = set?.chunks ?? []
+    const ordered = [...indexes].sort((a, b) => a - b)
+    const combined = ordered
+      .map(idx => allChunks.find(c => c.orderIndex === idx)?.text ?? '')
+      .filter(Boolean)
+      .join(' ')
+    setFirstLetterTestContent(combined)
+    setPageMode('first-letter-test')
+  }, [set?.chunks])
 
   const startSortingGame = useCallback(() => {
     setPageMode("sorting-game")
@@ -428,7 +436,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(TEST_STARTED, { set_id: id, test_type: 'first_letter' })
   }, [id, updateSessionState])
 
-  const exitFirstLetterTest = useCallback(() => setPageMode("view"), [])
+  const exitFirstLetterTest = useCallback(() => { setFirstLetterTestContent(''); setPageMode("view") }, [])
 
   const finishTesting = useCallback(() => {
     setPageMode("view")
@@ -1075,31 +1083,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* First Letter Method */}
-          <Card>
-            <CardContent className="flex flex-col gap-4 py-5">
-              <div className="flex items-start gap-4">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <LetterText className="size-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold">First Letter Method</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Progressive first-letter encoding across 3 difficulty levels
-                  </p>
-                </div>
-              </div>
-              <div className="rounded-lg bg-muted/30 p-3">
-                <p className="text-sm text-muted-foreground">
-                  {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} · select which chunks to practice
-                </p>
-              </div>
-              <Button onClick={startFirstLetterMethod} className="w-full" disabled={!hasContent}>
-                Practice
-              </Button>
-            </CardContent>
-          </Card>
-
           {/* Sorting Game */}
           <Card>
             <CardContent className="flex flex-col gap-4 py-5">
@@ -1121,6 +1104,31 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </div>
               <Button onClick={startSortingGame} className="w-full" disabled={!hasContent || chunks.length < 2}>
                 {chunks.length < 2 ? 'Need at least 2 chunks' : 'Start Game'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* First Letter Method */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 py-5">
+              <div className="flex items-start gap-4">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <LetterText className="size-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">First Letter Method</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Progressive first-letter encoding across 3 difficulty levels
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {chunks.length} {getChunkLabel(set.chunkMode, chunks.length)} · select which chunks to practice
+                </p>
+              </div>
+              <Button onClick={startFirstLetterMethod} className="w-full" disabled={!hasContent}>
+                Practice
               </Button>
             </CardContent>
           </Card>
@@ -1199,12 +1207,18 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Select>
         }
         primaryAction={hasContent ? {
-          label: selectedPracticeCount === chunks.length
-            ? "Train Entire Selection"
-            : selectedPracticeCount > 0
-              ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
-              : "Select chunks to practice",
-          onClick: () => startPracticeQueue(selectedPracticeChunkIndexes),
+          label: chunkSelectPurpose === 'first-letter'
+            ? selectedPracticeCount > 0
+              ? `Start First Letter · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
+              : "Select chunks to train"
+            : selectedPracticeCount === chunks.length
+              ? "Train Entire Selection"
+              : selectedPracticeCount > 0
+                ? `Start Practice · ${selectedPracticeCount} ${getChunkLabel(set.chunkMode, selectedPracticeCount)}`
+                : "Select chunks to practice",
+          onClick: chunkSelectPurpose === 'first-letter'
+            ? () => startFirstLetterFromChunks(selectedPracticeChunkIndexes)
+            : () => startPracticeQueue(selectedPracticeChunkIndexes),
           disabled: selectedPracticeCount === 0,
         } : undefined}
         secondaryAction={hasContent ? {
@@ -1233,7 +1247,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             {/* Instructions */}
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-sm text-muted-foreground">
-                Select specific chunks to practice one by one, or select all to train on the entire text as a single 3-stage exercise.
+                {chunkSelectPurpose === 'first-letter'
+                  ? "Select the chunks to combine into a single First Letter Method exercise."
+                  : "Select specific chunks to practice one by one, or select all to train on the entire text as a single 3-stage exercise."}
               </p>
             </div>
 
@@ -1241,11 +1257,15 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{selectedPracticeCount} selected</span>
                 <span className="text-xs text-muted-foreground">
-                  {selectedPracticeCount === chunks.length
-                    ? "Full text · 3-stage progressive exercise"
-                    : selectedPracticeCount > 0
-                      ? `${selectedPracticeWordCount} words queued`
-                      : "Tap chunks below to build a practice queue"}
+                  {chunkSelectPurpose === 'first-letter'
+                    ? selectedPracticeCount > 0
+                      ? `${selectedPracticeWordCount} words combined`
+                      : "Tap chunks below to select"
+                    : selectedPracticeCount === chunks.length
+                      ? "Full text · 3-stage progressive exercise"
+                      : selectedPracticeCount > 0
+                        ? `${selectedPracticeWordCount} words queued`
+                        : "Tap chunks below to build a practice queue"}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -1421,9 +1441,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         onBack={exitFirstLetterTest}
         showBottomActions={false}
       >
-        <FullFirstLetterTest 
+        <FullFirstLetterTest
           setId={id}
-          content={set.content}
+          content={firstLetterTestContent || set.content}
           onBack={finishTesting}
         />
       </SessionLayout>
@@ -1865,14 +1885,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           emptyStateDescription={progressModuleCTA.description}
         />
 
-        {/* Metadata */}
-        <p className="text-xs text-center text-muted-foreground">
-          Created {formatDate(set.createdAt)}
-        </p>
-
         {/* Control Center */}
         <div className="flex flex-col gap-2">
           <p className="text-xs font-medium text-center uppercase tracking-wider text-muted-foreground">Memorization Control Center</p>
+          <p className="text-xs text-center text-muted-foreground">Created {formatDate(set.createdAt)}</p>
           <div className="grid grid-cols-3 gap-2">
             <Button variant="outline" size="sm" className="gap-1.5" asChild>
               <Link href={`/edit/${set.id}`}>
