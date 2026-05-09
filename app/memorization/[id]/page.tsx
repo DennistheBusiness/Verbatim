@@ -668,7 +668,15 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           title="AI Read Aloud"
           setTitle={set.title}
           onBack={() => setFamiliarizeSubView("landing")}
-          showBottomActions={false}
+          primaryAction={{
+            label: getTeachCTA().label,
+            onClick: getTeachCTA().onClick,
+            icon: <ArrowRight className="size-4" />,
+          }}
+          secondaryAction={{
+            label: "Back to Overview",
+            onClick: () => setFamiliarizeSubView("landing"),
+          }}
         >
           <TextToSpeechPlayer
             content={set.content}
