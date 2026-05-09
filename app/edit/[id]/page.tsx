@@ -406,6 +406,9 @@ export default function EditPage({ params }: EditPageProps) {
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}
+                  onFocus={(e) => {
+                    setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+                  }}
                   autoComplete="off"
                   className="pr-10"
                 />
@@ -447,6 +450,11 @@ export default function EditPage({ params }: EditPageProps) {
               )}
             </Field>
           </FieldGroup>
+
+          {/* Inline CTA — only on mobile, visible when keyboard covers the fixed bar */}
+          <Button onClick={handleSave} disabled={!isValid} className="w-full sm:hidden" size="lg">
+            Save Changes
+          </Button>
 
           {/* Live stats */}
           {content.trim() && (

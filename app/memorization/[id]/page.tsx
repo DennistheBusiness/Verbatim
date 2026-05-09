@@ -19,6 +19,53 @@ const ShareDrawer = dynamic(
   () => import("@/components/share-drawer").then((m) => ({ default: m.ShareDrawer })),
   { ssr: false }
 )
+// Lazy-load mutually-exclusive session components — only one is ever active at
+// a time, so bundling all of them statically wastes initial parse time.
+const ProgressiveChunkEncoder = dynamic(
+  () => import("@/components/progressive-chunk-encoder").then((m) => ({ default: m.ProgressiveChunkEncoder })),
+  { ssr: false }
+)
+const TypingTest = dynamic(
+  () => import("@/components/typing-test").then((m) => ({ default: m.TypingTest })),
+  { ssr: false }
+)
+const FullFirstLetterTest = dynamic(
+  () => import("@/components/full-first-letter-test").then((m) => ({ default: m.FullFirstLetterTest })),
+  { ssr: false }
+)
+const FinishPhraseTest = dynamic(
+  () => import("@/components/finish-phrase-test").then((m) => ({ default: m.FinishPhraseTest })),
+  { ssr: false }
+)
+const AudioTest = dynamic(
+  () => import("@/components/audio-test").then((m) => ({ default: m.AudioTest })),
+  { ssr: false }
+)
+const FlashcardViewer = dynamic(
+  () => import("@/components/flashcard-viewer").then((m) => ({ default: m.FlashcardViewer })),
+  { ssr: false }
+)
+const TextToSpeechPlayer = dynamic(
+  () => import("@/components/text-to-speech-player").then((m) => ({ default: m.TextToSpeechPlayer })),
+  { ssr: false }
+)
+const TimedAudioPlayer = dynamic(
+  () => import("@/components/timed-audio-player").then((m) => ({ default: m.TimedAudioPlayer })),
+  { ssr: false }
+)
+// ScoreChart pulls in recharts (~300 KB) — isolate in its own chunk.
+const ScoreChart = dynamic(
+  () => import("@/components/score-chart").then((m) => ({ default: m.ScoreChart })),
+  { ssr: false }
+)
+const MobileMemoNav = dynamic(
+  () => import("@/components/mobile-memo-nav").then((m) => ({ default: m.MobileMemoNav })),
+  { ssr: false }
+)
+const SRToggle = dynamic(
+  () => import("@/components/sr-toggle").then((m) => ({ default: m.SRToggle })),
+  { ssr: false }
+)
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -28,18 +75,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import { TimedAudioPlayer } from "@/components/timed-audio-player"
-import { ProgressiveChunkEncoder } from "@/components/progressive-chunk-encoder"
-import { TypingTest } from "@/components/typing-test"
-import { FullFirstLetterTest } from "@/components/full-first-letter-test"
 import { SessionLayout } from "@/components/session-layout"
-import { FlashcardViewer } from "@/components/flashcard-viewer"
-import { TextToSpeechPlayer } from "@/components/text-to-speech-player"
-import { AudioTest } from "@/components/audio-test"
-import { FinishPhraseTest } from "@/components/finish-phrase-test"
-import { MobileMemoNav } from "@/components/mobile-memo-nav"
-import { ScoreChart } from "@/components/score-chart"
-import { SRToggle } from "@/components/sr-toggle"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
