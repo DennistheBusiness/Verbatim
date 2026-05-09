@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState, useEffect, useCallback } from "react"
+import { use, useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { useSetList, useSetActions, countWords, type ChunkMode } from "@/lib/memorization-context"
@@ -44,6 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 type PageMode = "view" | "familiarize" | "flashcards" | "chunk-select" | "practice" | "test-select" | "first-letter-test" | "typing-test" | "audio-test" | "encode-method-select" | "sorting-game" | "finish-phrase"
+type StepStatus = "not-started" | "in-progress" | "complete"
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
@@ -88,7 +89,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const { isLoaded, sets } = useSetList()
   // useSetActions for stable mutation callbacks (never change identity)
   const { updateChunkMode, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateSessionState, updateReviewedChunks, updateMarkedChunks, getAudioUrl, updateRepetitionMode } = useSetActions()
-  const set = sets.find((s) => s.id === id)
+  const set = useMemo(() => sets.find((s) => s.id === id), [sets, id])
   const [pageMode, setPageMode] = useState<PageMode>("view")
   const [practiceChunkIndex, setPracticeChunkIndex] = useState<number | null>(null)
   const [selectedPracticeChunkIndexes, setSelectedPracticeChunkIndexes] = useState<number[]>([])
@@ -388,12 +389,116 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const exitAudioTest = useCallback(() => setPageMode("view"), [])
 
+  // ─── Memoized derived values ───────────────────────────────────────────────
+
+  const chunks = useMemo(() => set?.chunks ?? [], [set])
+  const wordCount = useMemo(() => countWords(set?.content ?? ""), [set])
+  const hasContent = useMemo(() => chunks.length > 0 && wordCount > 0, [chunks, wordCount])
+
+  const selectedPracticeWordCount = useMemo(
+    () => selectedPracticeChunkIndexes.reduce((total, index) => {
+      const chunk = chunks[index]
+      return total + (chunk ? countWords(chunk.text) : 0)
+    }, 0),
+    [selectedPracticeChunkIndexes, chunks],
+  )
+
+  const overallCompletion = useMemo((): number => {
+    if (!set) return 0
+    let completed = 0
+    if (set.progress.familiarizeCompleted) completed++
+    if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
+    const { firstLetter, fullText, audioTest } = set.progress.tests
+    if (firstLetter.lastScore !== null || fullText.lastScore !== null || audioTest.lastScore !== null) completed++
+    return Math.round((completed / 3) * 100)
+  }, [set])
+
+  const lastPracticedDate = useMemo((): string | null => set?.sessionState.lastVisitedAt ?? null, [set])
+
+  const highestTestScore = useMemo((): number => {
+    if (!set) return 0
+    const scores = [
+      set.progress.tests.firstLetter.bestScore,
+      set.progress.tests.fullText.bestScore,
+      set.progress.tests.audioTest.bestScore,
+    ].filter((s): s is number => s !== null)
+    return scores.length > 0 ? Math.max(...scores) : 0
+  }, [set])
+
+  const progressModuleCTA = useMemo((): { label: string; description: string; onClick: () => void } => {
+    if (!set) return { label: "", description: "", onClick: () => {} }
+    const hasResume = set.sessionState.currentStep !== null && set.sessionState.lastVisitedAt !== null
+    if (hasResume) {
+      const onResume = () => {
+        const { currentStep, currentChunkIndex } = set.sessionState
+        if (!currentStep) {
+          switch (set.recommendedStep) {
+            case "familiarize": handleFamiliarize(); break
+            case "encode": handleEncode(); break
+            case "test": handleTest(); break
+          }
+          return
+        }
+        switch (currentStep) {
+          case "familiarize": setPageMode("familiarize"); break
+          case "encode":
+            if (currentChunkIndex !== null) { setPracticeChunkIndex(currentChunkIndex); setPageMode("practice") }
+            else setPageMode("encode-method-select")
+            break
+          case "test": setPageMode("test-select"); break
+          default: setPageMode("view")
+        }
+      }
+      switch (set.sessionState.currentStep) {
+        case "encode": return { label: "Resume Training", description: "Continue where you left off and keep building recall.", onClick: onResume }
+        case "familiarize": return { label: "Continue Familiarizing", description: "Pick up reading practice where you left off.", onClick: onResume }
+        case "test": return { label: "Resume Testing", description: "Jump back into your last test flow.", onClick: onResume }
+      }
+    }
+    switch (set.recommendedStep) {
+      case "familiarize": return { label: "Start Familiarizing", description: "Build a strong first pass before training recall.", onClick: handleFamiliarize }
+      case "encode": return { label: "Start Training", description: "Begin encoding to strengthen recall accuracy.", onClick: handleEncode }
+      case "test":
+      default: return { label: "Take a Test", description: "Complete your first test to see your progress over time.", onClick: handleTest }
+    }
+  }, [set, handleFamiliarize, handleEncode, handleTest])
+
+  const teachCTA = useMemo((): { label: string; onClick: () => void } => {
+    if (!set) return { label: "", onClick: () => {} }
+    const flashcardsDone = (set.progress.reviewedChunks?.length ?? 0) > 0
+    if (!readerVisited) return { label: "Start Reading", onClick: () => { setFamiliarizeSubView("reader"); setReaderVisited(true) } }
+    if (!flashcardsDone) return { label: "Try Flashcard Mode", onClick: handleFlashcards }
+    if (!ttsVisited) return { label: "Try AI Read Aloud", onClick: handleOpenTTSPlayer }
+    return { label: "Continue to Training", onClick: continueToEncode }
+  }, [set, readerVisited, ttsVisited, handleFlashcards, handleOpenTTSPlayer, continueToEncode])
+
+  const trainCTA = useMemo((): { label: string; onClick: () => void } => {
+    if (!set) return { label: "", onClick: () => {} }
+    const firstLetterDone = set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed
+    const finishPhraseDone = (set.progress.tests.finishPhrase?.bestScore ?? null) !== null
+    if (!firstLetterDone) return { label: "Start First Letter Method", onClick: startFirstLetterMethod }
+    if (!sortingGameCompleted) return { label: "Try Sorting Game", onClick: startSortingGame }
+    if (!finishPhraseDone) return { label: "Try Finish That Phrase", onClick: startFinishPhrase }
+    return { label: "Continue to Test", onClick: continueFromEncodeToTest }
+  }, [set, sortingGameCompleted, startFirstLetterMethod, startSortingGame, startFinishPhrase, continueFromEncodeToTest])
+
+  const testCTA = useMemo((): { label: string; onClick: () => void } => {
+    if (!set) return { label: "", onClick: () => {} }
+    const firstLetterDone = set.progress.tests.firstLetter.lastScore !== null
+    const fullRecallDone = set.progress.tests.fullText.lastScore !== null
+    const audioDone = set.progress.tests.audioTest.lastScore !== null
+    if (!firstLetterDone) return { label: "Start First Letter Recall", onClick: startFirstLetterTest }
+    if (!fullRecallDone) return { label: "Try Full Recall", onClick: startTypingTest }
+    if (!audioDone) return { label: "Try Audio Recall", onClick: startAudioTest }
+    return { label: "All Tests Complete · Back to Overview", onClick: exitTestSelect }
+  }, [set, startFirstLetterTest, startTypingTest, startAudioTest, exitTestSelect])
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-svh flex-col">
         <Header title="" showBack />
         <main className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Spinner size="lg" />
+          <Spinner className="size-8" />
           <p className="text-sm text-muted-foreground">Loading memorization...</p>
         </main>
       </div>
@@ -426,237 +531,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     )
   }
 
-  const chunks = set.chunks
-  const wordCount = countWords(set.content)
-  const hasContent = chunks.length > 0 && wordCount > 0
   const selectedPracticeCount = selectedPracticeChunkIndexes.length
-  const selectedPracticeWordCount = selectedPracticeChunkIndexes.reduce((total, index) => {
-    const chunk = chunks[index]
-    return total + (chunk ? countWords(chunk.text) : 0)
-  }, 0)
-
-  // Helper functions for progress hub
-  type StepStatus = "not-started" | "in-progress" | "complete"
-
-  const getFamiliarizeStatus = (): StepStatus => {
-    return set.progress.familiarizeCompleted ? "complete" : "not-started"
-  }
-
-  const getEncodeStatus = (): StepStatus => {
-    const { stage1Completed, stage2Completed, stage3Completed } = set.progress.encode
-    if (stage1Completed && stage2Completed && stage3Completed) return "complete"
-    if (stage1Completed || stage2Completed || stage3Completed) return "in-progress"
-    return "not-started"
-  }
-
-  const getEncodeProgress = (): string => {
-    const { stage1Completed, stage2Completed, stage3Completed } = set.progress.encode
-    const completed = [stage1Completed, stage2Completed, stage3Completed].filter(Boolean).length
-    return `${completed}/3 levels`
-  }
-
-  const getTestStatus = (): StepStatus => {
-    const { firstLetter, fullText, audioTest } = set.progress.tests
-    const hasFirstLetter = firstLetter.lastScore !== null
-    const hasFullText = fullText.lastScore !== null
-    const hasAudioTest = audioTest.lastScore !== null
-    
-    // Test section complete when ANY test is taken (changed from requiring all 3)
-    if (hasFirstLetter || hasFullText || hasAudioTest) return "complete"
-    return "not-started"
-  }
-
-  const getTestProgress = (): string => {
-    const { firstLetter, fullText, audioTest } = set.progress.tests
-    const completed = [firstLetter.lastScore !== null, fullText.lastScore !== null, audioTest.lastScore !== null].filter(Boolean).length
-    return `${completed}/3 tests`
-  }
-
-  /**
-   * Calculates overall completion percentage.
-   * Each step contributes 33.33% to the total:
-   * - Familiarize: 33.33% (complete when familiarizeCompleted = true)
-   * - Encode: 33.33% (complete when all 3 stages done)
-   * - Test: 33.33% (complete when any 1 test taken)
-   */
-  const getOverallCompletion = (): number => {
-    let completed = 0
-    let total = 3
-
-    if (set.progress.familiarizeCompleted) completed++
-    if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
-    
-    const { firstLetter, fullText, audioTest } = set.progress.tests
-    if (firstLetter.lastScore !== null || fullText.lastScore !== null || audioTest.lastScore !== null) completed++
-
-    return Math.round((completed / total) * 100)
-  }
-
-  const getLastPracticedDate = (): string | null => {
-    return set.sessionState.lastVisitedAt
-  }
-
-  const getHighestTestScore = (): number => {
-    const scores = [
-      set.progress.tests.firstLetter.bestScore,
-      set.progress.tests.fullText.bestScore,
-      set.progress.tests.audioTest.bestScore,
-    ].filter((score): score is number => score !== null)
-
-    return scores.length > 0 ? Math.max(...scores) : 0
-  }
-
-  const getStatusBadge = (status: StepStatus) => {
-    switch (status) {
-      case "complete":
-        return (
-          <Badge variant="default" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20">
-            Complete
-          </Badge>
-        )
-      case "in-progress":
-        return (
-          <Badge variant="default" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20">
-            In Progress
-          </Badge>
-        )
-      case "not-started":
-        return null
-    }
-  }
-
-  const hasResumePoint = (): boolean => {
-    const { currentStep, lastVisitedAt } = set.sessionState
-    return currentStep !== null && lastVisitedAt !== null
-  }
-
-  const handleResume = () => {
-    const { currentStep, currentChunkIndex, currentEncodeStage } = set.sessionState
-
-    if (!currentStep) {
-      // Fallback to recommended path
-      handleRecommendedPath()
-      return
-    }
-
-    switch (currentStep) {
-      case "familiarize":
-        setPageMode("familiarize")
-        break
-      
-      case "encode":
-        if (currentChunkIndex !== null) {
-          // Resume specific chunk
-          setPracticeChunkIndex(currentChunkIndex)
-          setPageMode("practice")
-        } else {
-          // Go to method selection
-          setPageMode("encode-method-select")
-        }
-        break
-      
-      case "test":
-        setPageMode("test-select")
-        break
-      
-      default:
-        setPageMode("view")
-    }
-  }
-
-  const handleRecommendedPath = () => {
-    switch (set.recommendedStep) {
-      case "familiarize":
-        handleFamiliarize()
-        break
-      case "encode":
-        handleEncode()
-        break
-      case "test":
-        handleTest()
-        break
-    }
-  }
-
-  const getProgressModuleCTA = (): { label: string; description: string; onClick: () => void } => {
-    if (hasResumePoint()) {
-      switch (set.sessionState.currentStep) {
-        case "encode":
-          return {
-            label: "Resume Training",
-            description: "Continue where you left off and keep building recall.",
-            onClick: handleResume,
-          }
-        case "familiarize":
-          return {
-            label: "Continue Familiarizing",
-            description: "Pick up reading practice where you left off.",
-            onClick: handleResume,
-          }
-        case "test":
-          return {
-            label: "Resume Testing",
-            description: "Jump back into your last test flow.",
-            onClick: handleResume,
-          }
-      }
-    }
-
-    switch (set.recommendedStep) {
-      case "familiarize":
-        return {
-          label: "Start Familiarizing",
-          description: "Build a strong first pass before training recall.",
-          onClick: handleFamiliarize,
-        }
-      case "encode":
-        return {
-          label: "Start Training",
-          description: "Begin encoding to strengthen recall accuracy.",
-          onClick: handleEncode,
-        }
-      case "test":
-      default:
-        return {
-          label: "Take a Test",
-          description: "Complete your first test to see your progress over time.",
-          onClick: handleTest,
-        }
-    }
-  }
-
-  const progressModuleCTA = getProgressModuleCTA()
-  const highestTestScore = getHighestTestScore()
-
-  // ─── Dynamic step CTAs ─────────────────────────────────────────────────────
-  const getTeachCTA = (): { label: string; onClick: () => void } => {
-    const flashcardsDone = (set.progress.reviewedChunks?.length ?? 0) > 0
-    if (!readerVisited) return { label: "Start Reading", onClick: () => { setFamiliarizeSubView("reader"); setReaderVisited(true) } }
-    if (!flashcardsDone) return { label: "Try Flashcard Mode", onClick: handleFlashcards }
-    if (!ttsVisited) return { label: "Try AI Read Aloud", onClick: handleOpenTTSPlayer }
-    return { label: "Continue to Training", onClick: continueToEncode }
-  }
-
-  const getTrainCTA = (): { label: string; onClick: () => void } => {
-    const firstLetterDone = set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed
-    const sortingDone = sortingGameCompleted
-    const finishPhraseDone = (set.progress.tests.finishPhrase?.bestScore ?? null) !== null
-    if (!firstLetterDone) return { label: "Start First Letter Method", onClick: startFirstLetterMethod }
-    if (!sortingDone) return { label: "Try Sorting Game", onClick: startSortingGame }
-    if (!finishPhraseDone) return { label: "Try Finish That Phrase", onClick: startFinishPhrase }
-    return { label: "Continue to Test", onClick: continueFromEncodeToTest }
-  }
-
-  const getTestCTA = (): { label: string; onClick: () => void } => {
-    const firstLetterDone = set.progress.tests.firstLetter.lastScore !== null
-    const fullRecallDone = set.progress.tests.fullText.lastScore !== null
-    const audioDone = set.progress.tests.audioTest.lastScore !== null
-    if (!firstLetterDone) return { label: "Start First Letter Recall", onClick: startFirstLetterTest }
-    if (!fullRecallDone) return { label: "Try Full Recall", onClick: startTypingTest }
-    if (!audioDone) return { label: "Try Audio Recall", onClick: startAudioTest }
-    return { label: "All Tests Complete · Back to Overview", onClick: exitTestSelect }
-  }
-  // ──────────────────────────────────────────────────────────────────────────
 
   // Familiarize mode
   if (pageMode === "familiarize") {
@@ -669,8 +544,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           setTitle={set.title}
           onBack={() => setFamiliarizeSubView("landing")}
           primaryAction={{
-            label: getTeachCTA().label,
-            onClick: getTeachCTA().onClick,
+            label: teachCTA.label,
+            onClick: teachCTA.onClick,
             icon: <ArrowRight className="size-4" />,
           }}
           secondaryAction={{
@@ -695,8 +570,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           setTitle={set.title}
           onBack={exitFamiliarize}
           primaryAction={{
-            label: getTeachCTA().label,
-            onClick: getTeachCTA().onClick,
+            label: teachCTA.label,
+            onClick: teachCTA.onClick,
             icon: <ArrowRight className="size-4" />,
           }}
           secondaryAction={{
@@ -821,8 +696,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
           </Select>
         }
         primaryAction={hasContent ? {
-          label: getTeachCTA().label,
-          onClick: getTeachCTA().onClick,
+          label: teachCTA.label,
+          onClick: teachCTA.onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{
@@ -1017,8 +892,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitFlashcards}
         primaryAction={hasContent ? {
-          label: getTeachCTA().label,
-          onClick: getTeachCTA().onClick,
+          label: teachCTA.label,
+          onClick: teachCTA.onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{
@@ -1112,8 +987,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitEncodeMethodSelect}
         primaryAction={hasContent ? {
-          label: getTrainCTA().label,
-          onClick: getTrainCTA().onClick,
+          label: trainCTA.label,
+          onClick: trainCTA.onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{ label: "Back to Detail", onClick: exitEncodeMethodSelect }}
@@ -1367,8 +1242,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         setTitle={set.title}
         onBack={exitTestSelect}
         primaryAction={hasContent ? {
-          label: getTestCTA().label,
-          onClick: getTestCTA().onClick,
+          label: testCTA.label,
+          onClick: testCTA.onClick,
           icon: <ArrowRight className="size-4" />,
         } : undefined}
         secondaryAction={{ label: "Back to Detail", onClick: exitTestSelect }}
@@ -1737,7 +1612,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <p className="text-sm font-medium text-muted-foreground">Overall Progress</p>
-                  <p className="text-3xl font-bold text-primary">{getOverallCompletion()}%</p>
+                  <p className="text-3xl font-bold text-primary">{overallCompletion}%</p>
                   <p className="text-xs text-muted-foreground">
                     Memorized (best test): <span className="font-semibold text-foreground">{highestTestScore}%</span>
                   </p>
@@ -1746,7 +1621,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <Trophy className="size-8 text-primary" />
                 </div>
               </div>
-              <Progress value={getOverallCompletion()} className="h-2" />
+              <Progress value={overallCompletion} className="h-2" />
             </CardContent>
           </Card>
 
@@ -1765,7 +1640,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
               <Clock className="size-4 text-muted-foreground" />
               <span className="text-xs font-semibold tabular-nums">
-                {getLastPracticedDate() ? formatDate(getLastPracticedDate()!) : "Never"}
+                {lastPracticedDate ? formatDate(lastPracticedDate) : "Never"}
               </span>
               <span className="text-xs text-muted-foreground">Last practiced</span>
             </div>
