@@ -430,8 +430,9 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         </button>
       )}
 
-      {/* Words Display */}
-      <Card className="flex-1">
+      {/* Words Display — no flex-1 so the card grows with content and
+          overflows the viewport, giving the page real scroll height */}
+      <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap gap-2">
             {words.map((wordStatus, i) => (
@@ -440,11 +441,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
               </span>
             ))}
           </div>
-          {/* Mobile-only spacer: gives enough scroll room so the last line
-              clears the virtual keyboard. Invisible and aria-hidden. */}
-          <div className="h-48 sm:hidden" aria-hidden="true" />
         </CardContent>
       </Card>
+
+      {/* Mobile-only scroll spacer — lives OUTSIDE the card so it adds real
+          document height below the last word, letting the user scroll the
+          final line above the virtual keyboard. aria-hidden, zero impact. */}
+      <div className="h-56 sm:hidden" aria-hidden="true" />
     </div>
   )
 }
