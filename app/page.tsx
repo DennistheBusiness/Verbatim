@@ -279,7 +279,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
-  const allTags = useMemo(() => getAllTags(), [getAllTags])
+  const allTags = getAllTags
 
   const filteredSets = useMemo(() => {
     let filtered = sets

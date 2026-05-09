@@ -58,7 +58,7 @@ export default function EditPage({ params }: EditPageProps) {
   const [hasExistingAudio, setHasExistingAudio] = useState(false)
   const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
 
-  const existingTags = useMemo(() => getAllTags(), [getAllTags])
+  const existingTags = getAllTags
 
   const suggestedTags = useMemo(() => {
     const q = tagInput.trim().toLowerCase()

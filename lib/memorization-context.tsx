@@ -109,7 +109,7 @@ interface SetListContextType {
   isLoaded: boolean
   isLoading: boolean
   error: string | null
-  getAllTags: () => string[]
+  getAllTags: string[]
   loadMore: () => Promise<void>
   refreshSets: () => Promise<void>
 }
@@ -435,7 +435,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     await fetchSets(true)
   }, [fetchSets])
 
-  const getAllTags = useCallback((): string[] => {
+  const getAllTags = useMemo<string[]>(() => {
     const tagSet = new Set<string>()
     sets.forEach((set) => set.tags.forEach((tag) => tagSet.add(tag)))
     return Array.from(tagSet).sort()

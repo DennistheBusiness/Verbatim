@@ -89,7 +89,7 @@ export default function CreatePage() {
     return t ? t.split(/\s+/).filter(Boolean).length : 0
   }, [content])
 
-  const existingTags = useMemo(() => getAllTags(), [getAllTags])
+  const existingTags = getAllTags
 
   const suggestedTags = useMemo(() => {
     const q = tagInput.trim().toLowerCase()
