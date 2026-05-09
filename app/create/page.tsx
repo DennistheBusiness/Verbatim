@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -47,6 +47,8 @@ export default function CreatePage() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [transcriptWords, setTranscriptWords] = useState<TranscriptWord[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [contentFocused, setContentFocused] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -321,14 +323,28 @@ export default function CreatePage() {
                 }}
                 textContent={
                   <>
-                    <Textarea
-                      id="content"
-                      placeholder="Paste or type the text you want to memorize…"
-                      className="min-h-[200px] resize-none leading-relaxed"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      onBlur={() => setTouched(p => ({ ...p, content: true }))}
-                    />
+                    <div className="relative">
+                      <Textarea
+                        ref={textareaRef}
+                        id="content"
+                        placeholder="Paste or type the text you want to memorize…"
+                        className="min-h-[200px] resize-none leading-relaxed"
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        onFocus={() => setContentFocused(true)}
+                        onBlur={() => { setTouched(p => ({ ...p, content: true })); setContentFocused(false) }}
+                      />
+                      {contentFocused && (
+                        <button
+                          type="button"
+                          onPointerDown={(e) => e.preventDefault()}
+                          onClick={() => { textareaRef.current?.blur(); setContentFocused(false) }}
+                          className="absolute bottom-2 right-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground sm:hidden"
+                        >
+                          Done
+                        </button>
+                      )}
+                    </div>
                     <FieldDescription>
                       Separate paragraphs with blank lines, or use / to create custom chunks
                     </FieldDescription>
@@ -356,9 +372,6 @@ export default function CreatePage() {
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={handleTagKey}
-                  onFocus={(e) => {
-                    setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
-                  }}
                   autoComplete="off"
                   className="pr-10"
                 />
@@ -409,11 +422,6 @@ export default function CreatePage() {
               <span>words</span>
             </div>
           )}
-
-          {/* Inline CTA — only on mobile, visible when keyboard covers the fixed bar */}
-          <Button onClick={handleContinue} disabled={!isValid} className="w-full sm:hidden" size="lg">
-            Create Memorization
-          </Button>
 
         </div>
       </main>

@@ -111,12 +111,23 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
     isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   }, [])
 
-  // Scroll the active word into view as the index advances (mobile only)
+  // Scroll the active word into view, accounting for the virtual keyboard height
+  const scrollActiveWordIntoView = useCallback((delay = 50) => {
+    setTimeout(() => {
+      const el = wordRefs.current[currentIndexRef.current]
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const visibleH = window.visualViewport?.height ?? window.innerHeight
+      if (rect.bottom > visibleH - 20) {
+        window.scrollBy({ top: rect.bottom - visibleH + 80, behavior: 'smooth' })
+      }
+    }, delay)
+  }, [])
+
   useEffect(() => {
     if (!isMobileRef.current || currentIndex === 0) return
-    const el = wordRefs.current[currentIndex]
-    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
-  }, [currentIndex])
+    scrollActiveWordIntoView(100)
+  }, [currentIndex, scrollActiveWordIntoView])
 
   const processLetterInput = useCallback(
     (rawKey: string) => {
@@ -394,9 +405,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
           onClick={() => {
             setHasStarted(true)
             inputRef.current?.focus()
-            setTimeout(() => {
-              wordRefs.current[currentIndexRef.current]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-            }, 350)
+            scrollActiveWordIntoView(350)
           }}
           className="w-full gap-2"
           size="lg"
@@ -408,9 +417,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         <button
           onClick={() => {
             inputRef.current?.focus()
-            setTimeout(() => {
-              wordRefs.current[currentIndexRef.current]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-            }, 350)
+            scrollActiveWordIntoView(350)
           }}
           className="text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
