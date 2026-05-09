@@ -64,6 +64,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const hasStartedRef = useRef(false)
   const isMobileRef = useRef(false)
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
+  const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
 
@@ -109,6 +110,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   useEffect(() => {
     isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   }, [])
+
+  // Scroll the active word into view as the index advances (mobile only)
+  useEffect(() => {
+    if (!isMobileRef.current || currentIndex === 0) return
+    const el = wordRefs.current[currentIndex]
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+  }, [currentIndex])
 
   const processLetterInput = useCallback(
     (rawKey: string) => {
@@ -383,7 +391,13 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       {/* Start / keyboard CTA */}
       {!hasStarted ? (
         <Button
-          onClick={() => { setHasStarted(true); inputRef.current?.focus() }}
+          onClick={() => {
+            setHasStarted(true)
+            inputRef.current?.focus()
+            setTimeout(() => {
+              wordRefs.current[currentIndexRef.current]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            }, 350)
+          }}
           className="w-full gap-2"
           size="lg"
         >
@@ -392,7 +406,12 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         </Button>
       ) : (
         <button
-          onClick={() => inputRef.current?.focus()}
+          onClick={() => {
+            inputRef.current?.focus()
+            setTimeout(() => {
+              wordRefs.current[currentIndexRef.current]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+            }, 350)
+          }}
           className="text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           Tap here if keyboard closed
@@ -404,7 +423,9 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         <CardContent className="py-4">
           <div className="flex flex-wrap gap-2">
             {words.map((wordStatus, i) => (
-              <WordBlock key={i} status={wordStatus} />
+              <span key={i} ref={el => { wordRefs.current[i] = el }}>
+                <WordBlock status={wordStatus} />
+              </span>
             ))}
           </div>
         </CardContent>

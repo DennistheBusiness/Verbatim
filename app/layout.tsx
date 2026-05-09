@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Montserrat, Poppins, Inter } from 'next/font/google'
+import { Montserrat } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { MemorizationProvider } from '@/lib/memorization-context'
 import { PostHogProvider } from '@/components/posthog-provider'
@@ -7,21 +7,10 @@ import { SessionHandler } from '@/components/session-handler'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const montserrat = Montserrat({ 
+const montserrat = Montserrat({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-montserrat"
-});
-
-const poppins = Poppins({ 
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-poppins"
-});
-
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: "--font-inter"
 });
 
 export const metadata: Metadata = {
@@ -51,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`bg-background ${montserrat.variable} ${poppins.variable} ${inter.variable}`}>
+    <html lang="en" className={`bg-background ${montserrat.variable}`}>
       <body className="font-sans antialiased">
         <PostHogProvider>
           <SessionHandler />
