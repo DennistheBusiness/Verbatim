@@ -124,6 +124,9 @@ export function TypingTest({ setId, content, onBack }: TypingTestProps) {
               onChange={(e) => setTypedText(e.target.value)}
               className="min-h-48 resize-none"
               autoFocus
+              onFocus={(e) => {
+                setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 350)
+              }}
             />
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
