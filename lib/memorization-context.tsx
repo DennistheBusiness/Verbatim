@@ -297,6 +297,37 @@ function transformSetRow(set: any): MemorizationSet {
   }
 }
 
+async function upsertTagsForSet(
+  supabase: ReturnType<typeof createClient>,
+  setId: string,
+  userId: string,
+  tagNames: string[],
+): Promise<void> {
+  if (tagNames.length === 0) return
+  const tagIds = await Promise.all(
+    tagNames.map(async (tagName) => {
+      const { data: existing } = await supabase
+        .from("tags")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("name", tagName)
+        .single()
+      if (existing) return existing.id
+      const { data: newTag, error } = await supabase
+        .from("tags")
+        .insert({ user_id: userId, name: tagName })
+        .select("id")
+        .single()
+      if (error) throw error
+      return newTag.id
+    }),
+  )
+  const { error } = await supabase
+    .from("set_tags")
+    .insert(tagIds.map((tagId) => ({ set_id: setId, tag_id: tagId })))
+  if (error) throw error
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
@@ -309,7 +340,9 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  if (!supabaseRef.current) supabaseRef.current = createClient()
+  const supabase = supabaseRef.current
   const audioUrlCache = useRef<Map<string, { url: string; expiresAt: number }>>(new Map())
 
   // setsRef is always in sync with the sets state.
@@ -524,36 +557,30 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         if (chunksError) throw chunksError
       }
 
-      if (validTags.length > 0) {
-        for (const tagName of validTags) {
-          const { data: existingTag } = await supabase
-            .from("tags")
-            .select("id")
-            .eq("user_id", effectiveUserId)
-            .eq("name", tagName)
-            .single()
+      await upsertTagsForSet(supabase, id, effectiveUserId, validTags)
 
-          let tagId: string
-          if (existingTag) {
-            tagId = existingTag.id
-          } else {
-            const { data: newTag, error: tagError } = await supabase
-              .from("tags")
-              .insert({ user_id: effectiveUserId, name: tagName })
-              .select("id")
-              .single()
-            if (tagError) throw tagError
-            tagId = newTag.id
-          }
-
-          const { error: setTagError } = await supabase
-            .from("set_tags")
-            .insert({ set_id: id, tag_id: tagId })
-          if (setTagError) throw setTagError
-        }
+      const newSet: MemorizationSet = {
+        id,
+        title: validTitle,
+        content: validContent,
+        createdAt: now,
+        updatedAt: now,
+        chunkMode: validChunkMode,
+        chunks,
+        progress,
+        sessionState: createInitialSessionState(),
+        recommendedStep: computeRecommendedStep(progress),
+        repetitionMode: "off" as RepetitionMode,
+        repetitionConfig: {},
+        tags: validTags,
+        audioFilePath,
+        originalFilename,
+        createdFrom,
+        transcript: transcript || null,
+        transcriptWords: transcriptWords || null,
+        shareToken: null,
       }
-
-      await fetchSets(true)
+      commitSets([newSet, ...setsRef.current])
 
       trackEvent(AnalyticsEvents.MEMORIZATION_CREATED, {
         chunk_mode: validChunkMode,
@@ -571,7 +598,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, fetchSets])
+  }, [supabase, commitSets])
 
   const deleteAudioFile = useCallback(async (audioFilePath: string) => {
     try {
@@ -707,51 +734,35 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       }
 
       if (tags !== undefined) {
-        const { data: { user: tagUser } } = await supabase.auth.getUser()
-        if (!tagUser) throw new Error("Not authenticated")
-
         const { error: deleteTagsError } = await supabase
           .from("set_tags")
           .delete()
           .eq("set_id", id)
         if (deleteTagsError) throw deleteTagsError
 
-        for (const tagName of validTags ?? []) {
-          const { data: existingTag } = await supabase
-            .from("tags")
-            .select("id")
-            .eq("user_id", tagUser.id)
-            .eq("name", tagName)
-            .single()
-
-          let tagId: string
-          if (existingTag) {
-            tagId = existingTag.id
-          } else {
-            const { data: newTag, error: tagError } = await supabase
-              .from("tags")
-              .insert({ user_id: tagUser.id, name: tagName })
-              .select("id")
-              .single()
-            if (tagError) throw tagError
-            tagId = newTag.id
-          }
-
-          const { error: setTagError } = await supabase
-            .from("set_tags")
-            .insert({ set_id: id, tag_id: tagId })
-          if (setTagError) throw setTagError
-        }
+        await upsertTagsForSet(supabase, id, user.id, validTags ?? [])
       }
 
-      await fetchSets(true)
+      patchSet(id, (s) => ({
+        ...s,
+        title: validTitle,
+        content: validContent,
+        chunks: hasContentChanged ? chunks : s.chunks,
+        audioFilePath,
+        originalFilename: audioOriginalFilename,
+        createdFrom: audioCreatedFrom,
+        tags: tags !== undefined ? (validTags ?? []) : s.tags,
+        updatedAt: updatePayload.updated_at,
+        ...(transcript !== undefined ? { transcript: transcript || null } : {}),
+        ...(transcriptWords !== undefined ? { transcriptWords: transcriptWords ?? null } : {}),
+      }))
       toast.success("Memorization set updated")
     } catch (err) {
       console.error("Error updating set:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, fetchSets, deleteAudioFile])
+  }, [supabase, patchSet, deleteAudioFile])
 
   const updateChunkMode = useCallback(async (id: string, mode: ChunkMode) => {
     try {
@@ -791,14 +802,14 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         chunk_count_after: chunks.length,
       })
 
-      await fetchSets(true)
+      patchSet(id, (s) => ({ ...s, chunkMode: mode, chunks }))
       toast.success("Chunk mode updated")
     } catch (err) {
       console.error("Error updating chunk mode:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, fetchSets])
+  }, [supabase, patchSet])
 
   const updateSessionState = useCallback(async (id: string, sessionState: Partial<SessionState>) => {
     try {
@@ -1117,46 +1128,21 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const { error: deleteError } = await supabase.from("set_tags").delete().eq("set_id", id)
       if (deleteError) throw deleteError
 
-      for (const tagName of tags) {
-        const { data: existingTag } = await supabase
-          .from("tags")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("name", tagName)
-          .single()
-
-        let tagId: string
-        if (existingTag) {
-          tagId = existingTag.id
-        } else {
-          const { data: newTag, error: tagError } = await supabase
-            .from("tags")
-            .insert({ user_id: user.id, name: tagName })
-            .select("id")
-            .single()
-          if (tagError) throw tagError
-          tagId = newTag.id
-        }
-
-        const { error: setTagError } = await supabase
-          .from("set_tags")
-          .insert({ set_id: id, tag_id: tagId })
-        if (setTagError) throw setTagError
-      }
+      await upsertTagsForSet(supabase, id, user.id, tags)
 
       await supabase
         .from("memorization_sets")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", id)
 
-      await fetchSets(true)
+      patchSet(id, (s) => ({ ...s, tags }))
       toast.success("Tags updated")
     } catch (err) {
       console.error("Error updating tags:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, fetchSets])
+  }, [supabase, patchSet])
 
   const deleteSet = useCallback(async (id: string) => {
     try {
@@ -1196,14 +1182,14 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         chunk_count: set?.chunks.length || 0,
       })
 
-      await fetchSets(true)
+      commitSets(setsRef.current.filter((s) => s.id !== id))
       toast.success("Memorization set deleted")
     } catch (err) {
       console.error("Error deleting set:", err)
       toast.error(getSupabaseErrorMessage(err))
       throw err
     }
-  }, [supabase, fetchSets])
+  }, [supabase, commitSets])
 
   const getAudioUrl = useCallback(async (setId: string): Promise<string | null> => {
     const set = setsRef.current.find((s) => s.id === setId)
