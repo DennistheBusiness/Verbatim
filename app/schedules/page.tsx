@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarClock, Layers } from "lucide-react"
+import { CalendarClock, Layers, Bell, BellOff, Smartphone } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Header } from "@/components/header"
@@ -14,11 +14,90 @@ import { useSetList, useSetActions } from "@/lib/memorization-context"
 import type { RepetitionMode, RepetitionConfig } from "@/lib/memorization-context"
 import { createClient } from "@/lib/supabase/client"
 import { formatNextReview } from "@/lib/srs"
+import {
+  checkNotificationPermission,
+  requestNotificationPermission,
+  scheduleReviewNotifications,
+  type NotificationPermission,
+} from "@/lib/notifications"
+import { Capacitor } from "@capacitor/core"
 
 interface SetDueInfo {
   setId: string
   dueCount: number
   nextDue: string | null
+}
+
+function NotificationPermissionCard() {
+  const [perm, setPerm] = useState<NotificationPermission | null>(null)
+
+  useEffect(() => {
+    checkNotificationPermission().then(setPerm).catch(() => setPerm('denied'))
+  }, [])
+
+  if (!Capacitor.isNativePlatform()) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-4">
+        <Smartphone className="size-5 shrink-0 text-muted-foreground" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Review reminders</p>
+          <p className="text-xs text-muted-foreground">
+            Push notifications when chunks are due — available on the Verbatim iOS & Android app
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (perm === null) return null
+
+  if (perm === 'granted') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl bg-emerald-50 p-4 dark:bg-emerald-900/20">
+        <Bell className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          Review reminders are active
+        </p>
+      </div>
+    )
+  }
+
+  if (perm === 'denied') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border p-4">
+        <BellOff className="size-5 shrink-0 text-muted-foreground" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold">Notifications blocked</p>
+          <p className="text-xs text-muted-foreground">Enable in your device Settings to receive review reminders</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border-2 border-dashed p-4">
+      <BellOff className="size-5 shrink-0 text-muted-foreground" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold">Enable review reminders</p>
+        <p className="text-xs text-muted-foreground">Get notified when chunks are due for review</p>
+      </div>
+      <Button
+        size="sm"
+        className="shrink-0"
+        onClick={async () => {
+          const granted = await requestNotificationPermission()
+          if (granted) {
+            setPerm('granted')
+            scheduleReviewNotifications().catch(() => {})
+          } else {
+            setPerm('denied')
+          }
+        }}
+      >
+        Enable
+      </Button>
+    </div>
+  )
 }
 
 export default function SchedulesPage() {
@@ -95,6 +174,8 @@ export default function SchedulesPage() {
           </Empty>
         ) : (
           <>
+            <NotificationPermissionCard />
+
             <p className="text-sm text-muted-foreground">
               Manage how often each set gets scheduled for review.
             </p>

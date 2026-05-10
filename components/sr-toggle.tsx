@@ -25,6 +25,14 @@ const PERIODS: { value: "day" | "week" | "month"; label: string }[] = [
   { value: "month", label: "Month" },
 ]
 
+const PRESETS: { label: string; frequency: number; period: "day" | "week" | "month" }[] = [
+  { label: "Daily", frequency: 1, period: "day" },
+  { label: "2× Week", frequency: 2, period: "week" },
+  { label: "3× Week", frequency: 3, period: "week" },
+  { label: "Weekly", frequency: 1, period: "week" },
+  { label: "Monthly", frequency: 1, period: "month" },
+]
+
 function formatInterval(frequency: number, period: "day" | "week" | "month"): string {
   const days = manualIntervalDays(frequency, period)
   if (days < 1) {
@@ -46,6 +54,15 @@ export function SRToggle({ mode, config, onModeChange }: SRToggleProps) {
       return
     }
     onModeChange(value)
+  }
+
+  function applyPreset(preset: typeof PRESETS[number]) {
+    setFrequency(preset.frequency)
+    setPeriod(preset.period)
+  }
+
+  function isPresetActive(preset: typeof PRESETS[number]) {
+    return frequency === preset.frequency && period === preset.period
   }
 
   function handleManualSave() {
@@ -82,20 +99,48 @@ export function SRToggle({ mode, config, onModeChange }: SRToggleProps) {
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl pb-safe">
           <SheetHeader className="mb-6">
-            <SheetTitle className="text-center">Review Schedule</SheetTitle>
+            <SheetTitle className="text-center">Manual Schedule</SheetTitle>
           </SheetHeader>
 
-          <div className="flex flex-col gap-6 px-2">
+          <div className="flex flex-col gap-5 px-2">
+            {/* Quick presets */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick presets</p>
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => applyPreset(preset)}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-sm font-medium transition-all border",
+                      isPresetActive(preset)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-muted/50 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground">or customize</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
             {/* Frequency picker */}
             <div className="flex flex-col gap-3">
               <p className="text-sm font-medium text-center text-muted-foreground">How many times?</p>
-              <div className="flex items-center justify-center gap-3">
-                {[1, 2, 3, 5, 7].map((n) => (
+              <div className="flex items-center justify-center gap-2">
+                {[1, 2, 3, 4, 5, 7].map((n) => (
                   <button
                     key={n}
                     onClick={() => setFrequency(n)}
                     className={cn(
-                      "flex size-12 items-center justify-center rounded-full text-base font-semibold transition-all",
+                      "flex size-11 items-center justify-center rounded-full text-sm font-semibold transition-all",
                       frequency === n
                         ? "bg-primary text-primary-foreground shadow-md scale-105"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
