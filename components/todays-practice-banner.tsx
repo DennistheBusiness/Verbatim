@@ -6,6 +6,7 @@ import { Flame, CalendarClock, CheckCircle2, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { formatNextReview } from "@/lib/srs"
+import { useSetList } from "@/lib/memorization-context"
 
 type BannerState = "loading" | "due" | "caught-up" | "not-started"
 
@@ -18,6 +19,8 @@ export function TodaysPracticeBanner() {
   const [upNextData, setUpNextData] = useState<UpNextData | null>(null)
   const router = useRouter()
   const supabase = createClient()
+  const { sets } = useSetList()
+  const activeSetsCount = sets.filter(s => (s.progress.streak?.currentStreak ?? 0) > 0).length
 
   useEffect(() => {
     async function fetchData() {
@@ -66,6 +69,7 @@ export function TodaysPracticeBanner() {
               {dueData.totalChunks} chunk{dueData.totalChunks !== 1 ? "s" : ""} due
               {" · "}
               {dueData.totalSets} set{dueData.totalSets !== 1 ? "s" : ""}
+              {activeSetsCount > 0 && ` · 🔥 ${activeSetsCount} active`}
             </p>
           </div>
           <Button
@@ -91,7 +95,9 @@ export function TodaysPracticeBanner() {
           <div className="flex flex-1 flex-col gap-0.5 min-w-0">
             <p className="font-semibold text-base leading-tight">All Caught Up</p>
             <p className="text-sm text-white/80">
-              Next review: {formatNextReview(upNextData.nextReviewAt)}
+              {activeSetsCount > 0
+                ? `🔥 ${activeSetsCount} active streak${activeSetsCount !== 1 ? "s" : ""} · Next: ${formatNextReview(upNextData.nextReviewAt)}`
+                : `Next review: ${formatNextReview(upNextData.nextReviewAt)}`}
             </p>
           </div>
           <Button

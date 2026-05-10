@@ -71,6 +71,11 @@ export interface Progress {
       lastScore: number | null
     }
   }
+  streak?: {
+    currentStreak: number
+    longestStreak: number
+    lastPracticeDate: string | null
+  }
 }
 
 export interface SessionState {
@@ -163,6 +168,27 @@ function generateId(): string {
   return crypto.randomUUID()
 }
 
+function getTodayDateString(): string {
+  return new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
+}
+
+function computeUpdatedStreak(
+  current: Progress["streak"],
+  today: string,
+): NonNullable<Progress["streak"]> {
+  const s = current ?? { currentStreak: 0, longestStreak: 0, lastPracticeDate: null }
+  if (s.lastPracticeDate === today) return s
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toLocaleDateString('en-CA')
+  const newCurrent = s.lastPracticeDate === yesterdayStr ? s.currentStreak + 1 : 1
+  return {
+    currentStreak: newCurrent,
+    longestStreak: Math.max(s.longestStreak, newCurrent),
+    lastPracticeDate: today,
+  }
+}
+
 function createInitialProgress(): Progress {
   return {
     familiarizeCompleted: false,
@@ -181,6 +207,7 @@ function createInitialProgress(): Progress {
       finishPhrase: { bestScore: null, lastScore: null },
       sortingGame: { bestScore: null, lastScore: null },
     },
+    streak: { currentStreak: 0, longestStreak: 0, lastPracticeDate: null },
   }
 }
 
@@ -873,6 +900,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
                 : (set.progress.tests.sortingGame ?? { bestScore: null, lastScore: null }),
             }
           : set.progress.tests,
+        streak: computeUpdatedStreak(set.progress.streak, getTodayDateString()),
       }
 
       const updatedSessionState = {
@@ -931,6 +959,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
       const updatedProgress = {
         ...set.progress,
         encode: { ...set.progress.encode, ...updates },
+        streak: computeUpdatedStreak(set.progress.streak, getTodayDateString()),
       }
 
       const updatedSessionState = {
@@ -986,6 +1015,25 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           }
         })
 
+      // Also record in test_attempts for unified history across all 6 methods
+      const encodeModeMap: Record<1 | 2 | 3, string> = { 1: 'encode_l1', 2: 'encode_l2', 3: 'encode_l3' }
+      supabase
+        .from('test_attempts')
+        .insert({
+          set_id: id,
+          mode: encodeModeMap[stage],
+          step: 'train',
+          score: computedScore,
+          total_words: totalWords,
+          correct_words: correctWords,
+          chunk_id: meta?.chunkId ?? null,
+        } as any)
+        .then(({ error: insertError }) => {
+          if (insertError) {
+            console.error('Error recording encode attempt in test_attempts:', insertError)
+          }
+        })
+
       const timeSpent = set.sessionState.lastVisitedAt
         ? AnalyticsEvents.getTimeDifferenceSeconds(set.sessionState.lastVisitedAt)
         : 0
@@ -1018,6 +1066,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
           ...set.progress.tests,
           [testType]: { lastScore: score, bestScore: newBest },
         },
+        streak: computeUpdatedStreak(set.progress.streak, getTodayDateString()),
       }
 
       const updatedSessionState = {
@@ -1044,16 +1093,24 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         finishPhrase: 'finish_phrase',
         sortingGame: 'sorting_game',
       }
+      const stepMap: Record<typeof testType, 'train' | 'test'> = {
+        firstLetter: 'test',
+        fullText: 'test',
+        audioTest: 'test',
+        finishPhrase: 'train',
+        sortingGame: 'train',
+      }
       supabase
         .from('test_attempts')
         .insert({
           set_id: id,
           mode: modeMap[testType],
+          step: stepMap[testType],
           score,
           total_words: meta?.totalWords ?? 0,
           correct_words: meta?.correctWords ?? 0,
           chunk_id: meta?.chunkId ?? null,
-        })
+        } as any)
         .then(({ error: insertError }) => {
           if (insertError) {
             console.error('Error recording test attempt:', insertError)
