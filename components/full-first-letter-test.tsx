@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { Check, X, RotateCcw, Trophy, TrendingUp, BookOpen, FileText, Keyboard } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
-import { useMemorization } from "@/lib/memorization-context"
+import { useSetActions } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import { hapticError, hapticSuccess } from "@/lib/haptics"
 
@@ -49,7 +49,7 @@ function getFeedback(accuracy: number): { label: string; color: string; icon: Re
 }
 
 export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFirstLetterTestProps) {
-  const { updateTestScore } = useMemorization()
+  const { updateTestScore } = useSetActions()
   const [words, setWords] = useState<WordStatus[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [correctCount, setCorrectCount] = useState(0)

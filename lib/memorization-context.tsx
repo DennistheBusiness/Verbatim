@@ -157,10 +157,41 @@ interface SetActionsContextType {
 // Combined for backward compatibility
 interface MemorizationContextType extends SetListContextType, SetActionsContextType {}
 
+// Granular action context types for fine-grained re-render optimization
+interface SetCRUDContextType {
+  addSet: SetActionsContextType["addSet"]
+  getSet: SetActionsContextType["getSet"]
+  updateSet: SetActionsContextType["updateSet"]
+  updateChunkMode: SetActionsContextType["updateChunkMode"]
+  updateTags: SetActionsContextType["updateTags"]
+  deleteSet: SetActionsContextType["deleteSet"]
+  deleteAudioFile: SetActionsContextType["deleteAudioFile"]
+  getAudioUrl: SetActionsContextType["getAudioUrl"]
+}
+
+interface SetProgressContextType {
+  updateProgress: SetActionsContextType["updateProgress"]
+  updateSessionState: SetActionsContextType["updateSessionState"]
+  markFamiliarizeComplete: SetActionsContextType["markFamiliarizeComplete"]
+  updateEncodeProgress: SetActionsContextType["updateEncodeProgress"]
+  updateTestScore: SetActionsContextType["updateTestScore"]
+  updateReviewedChunks: SetActionsContextType["updateReviewedChunks"]
+  updateMarkedChunks: SetActionsContextType["updateMarkedChunks"]
+}
+
+interface SRSContextType {
+  updateRepetitionMode: SetActionsContextType["updateRepetitionMode"]
+  upsertChunkProgress: SetActionsContextType["upsertChunkProgress"]
+  getDueChunks: SetActionsContextType["getDueChunks"]
+}
+
 // ─── Contexts ─────────────────────────────────────────────────────────────────
 
 const SetListContext = createContext<SetListContextType | undefined>(undefined)
 const SetActionsContext = createContext<SetActionsContextType | undefined>(undefined)
+const SetCRUDContext = createContext<SetCRUDContextType | undefined>(undefined)
+const SetProgressContext = createContext<SetProgressContextType | undefined>(undefined)
+const SRSContext = createContext<SRSContextType | undefined>(undefined)
 
 // ─── Pure functions ───────────────────────────────────────────────────────────
 
@@ -1415,6 +1446,20 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     refreshSets,
   }), [sets, hasMore, isLoadingMore, isLoaded, isLoading, error, getAllTags, loadMore, refreshSets])
 
+  // Granular action contexts — stable callbacks so these never change after mount
+  const crudValue = useMemo<SetCRUDContextType>(() => ({
+    addSet, getSet, updateSet, updateChunkMode, updateTags, deleteSet, deleteAudioFile, getAudioUrl,
+  }), [addSet, getSet, updateSet, updateChunkMode, updateTags, deleteSet, deleteAudioFile, getAudioUrl])
+
+  const progressValue = useMemo<SetProgressContextType>(() => ({
+    updateProgress, updateSessionState, markFamiliarizeComplete,
+    updateEncodeProgress, updateTestScore, updateReviewedChunks, updateMarkedChunks,
+  }), [updateProgress, updateSessionState, markFamiliarizeComplete, updateEncodeProgress, updateTestScore, updateReviewedChunks, updateMarkedChunks])
+
+  const srsValue = useMemo<SRSContextType>(() => ({
+    updateRepetitionMode, upsertChunkProgress, getDueChunks,
+  }), [updateRepetitionMode, upsertChunkProgress, getDueChunks])
+
   // Actions context: all callbacks are stable (setsRef pattern) so this is created once
   const actionsValue = useMemo<SetActionsContextType>(() => ({
     addSet,
@@ -1445,7 +1490,13 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
   return (
     <SetListContext.Provider value={listValue}>
       <SetActionsContext.Provider value={actionsValue}>
-        {children}
+        <SetCRUDContext.Provider value={crudValue}>
+          <SetProgressContext.Provider value={progressValue}>
+            <SRSContext.Provider value={srsValue}>
+              {children}
+            </SRSContext.Provider>
+          </SetProgressContext.Provider>
+        </SetCRUDContext.Provider>
       </SetActionsContext.Provider>
     </SetListContext.Provider>
   )
@@ -1468,4 +1519,23 @@ export function useSetActions(): SetActionsContextType {
 // Backward-compatible combined hook — existing consumers need no changes
 export function useMemorization(): MemorizationContextType {
   return { ...useSetList(), ...useSetActions() }
+}
+
+// Granular hooks for fine-grained re-render control
+export function useSetCRUD(): SetCRUDContextType {
+  const context = useContext(SetCRUDContext)
+  if (!context) throw new Error("useSetCRUD must be used within MemorizationProvider")
+  return context
+}
+
+export function useSetProgress(): SetProgressContextType {
+  const context = useContext(SetProgressContext)
+  if (!context) throw new Error("useSetProgress must be used within MemorizationProvider")
+  return context
+}
+
+export function useSRS(): SRSContextType {
+  const context = useContext(SRSContext)
+  if (!context) throw new Error("useSRS must be used within MemorizationProvider")
+  return context
 }
