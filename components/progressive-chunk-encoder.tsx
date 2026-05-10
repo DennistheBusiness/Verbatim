@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
+import { hapticError, hapticSuccess, hapticLight } from "@/lib/haptics"
 import { Check, X, Trophy, ArrowRight, Sparkles, Target, Keyboard } from "lucide-react"
 import { useMemorization } from "@/lib/memorization-context"
 import { toast } from "sonner"
@@ -216,6 +217,7 @@ export function ProgressiveChunkEncoder({
         )
       } else {
         // Incorrect — lock input, show error, then advance after delay
+        hapticError()
         lockedRef.current = true
         setIncorrectCount((c) => c + 1)
         setWords((prev) =>
@@ -284,6 +286,9 @@ export function ProgressiveChunkEncoder({
 
   useEffect(() => {
     if (isLevelComplete) {
+      if (currentLevel === 3) hapticSuccess()
+      else hapticLight()
+
       const totalAttempts = correctCount + incorrectCount
       const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 0
 

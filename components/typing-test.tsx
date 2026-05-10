@@ -9,6 +9,7 @@ import { CheckCircle2, XCircle, AlertTriangle, Plus, RotateCcw, ArrowLeft, Troph
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { useMemorization } from "@/lib/memorization-context"
 import { toast } from "sonner"
+import { hapticSuccess } from "@/lib/haptics"
 
 interface TypingTestProps {
   setId: string
@@ -63,6 +64,7 @@ export function TypingTest({ setId, content, onBack }: TypingTestProps) {
   const handleSubmit = () => {
     const comparison = compareTexts(typedText, content)
     setResult(comparison)
+    hapticSuccess()
     setIsSubmitted(true)
     
     // Save test score
