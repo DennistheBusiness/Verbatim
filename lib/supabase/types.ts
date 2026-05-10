@@ -375,6 +375,27 @@ export type Database = {
           },
         ]
       }
+      native_auth_transfers: {
+        Row: {
+          id: string
+          nonce: string
+          code: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nonce: string
+          code?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nonce?: string
+          code?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

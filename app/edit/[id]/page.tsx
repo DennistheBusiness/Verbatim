@@ -122,7 +122,7 @@ export default function EditPage({ params }: EditPageProps) {
       setTags(set.tags || [])
       setContentSource(set.createdFrom)
       setHasExistingAudio(!!set.audioFilePath)
-      setOriginalFilename(set.originalFilename)
+      setOriginalFilename(set.originalFilename ?? null)
     }
   }, [set])
 
@@ -208,7 +208,8 @@ export default function EditPage({ params }: EditPageProps) {
       await updateChunkMode(id, chunkMode)
     }
     await updateSet(
-      id, title.trim(), content.trim(), tags, audioBlob, originalFilename, contentSource,
+      id, title.trim(), content.trim(), tags, audioBlob, originalFilename,
+      (contentSource === "image" ? "text" : contentSource) as "text" | "voice",
       transcriptWords.length > 0 ? content.trim() : undefined,
       transcriptWords.length > 0 ? transcriptWords : undefined,
     )

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { hapticError, hapticSuccess } from "@/lib/haptics"
 import { ResultsScreen } from "@/components/results-screen"
@@ -58,7 +59,7 @@ export function ChunkEncoder({
     const parsed = parseWords(chunk)
     const initialWords = parsed.map((word, i) => ({
         word,
-        state: i === 0 ? "active" : "hidden",
+      state: (i === 0 ? "active" : "hidden") as WordState,
         showError: false,
         wasIncorrect: false,
       }))

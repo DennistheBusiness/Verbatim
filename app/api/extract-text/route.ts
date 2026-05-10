@@ -68,7 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExtractTe
 
     const sourceBuffer = Buffer.from(await image.arrayBuffer())
 
-    let payloadBuffer = sourceBuffer
+    let payloadBuffer: Buffer<ArrayBufferLike> = sourceBuffer
     let payloadMime = mimeType
 
     if (isHeicOrHeif(mimeTypeRaw, extension)) {
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExtractTe
           format: 'JPEG',
           quality: 0.92,
         })
-        payloadBuffer = Buffer.isBuffer(output) ? output : Buffer.from(output)
+        payloadBuffer = Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer)
         payloadMime = 'image/jpeg'
       } catch (conversionError) {
         console.error('HEIC conversion failed:', conversionError)

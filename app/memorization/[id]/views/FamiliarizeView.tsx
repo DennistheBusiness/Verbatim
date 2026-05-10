@@ -260,7 +260,7 @@ export function FamiliarizeView({ state }: FamiliarizeViewProps) {
                   <h3 className="font-medium text-foreground">Flashcard Mode</h3>
                   <p className="text-sm text-muted-foreground">
                     Review chunks one at a time with swipe navigation. Track progress and mark chunks for later review.
-                    {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks.length} marked for review.`}
+                    {(set.progress.markedChunks?.length ?? 0) > 0 && ` ${set.progress.markedChunks!.length} marked for review.`}
                   </p>
                 </div>
                 <Button onClick={handleFlashcards} className="w-full sm:w-auto" size="sm">

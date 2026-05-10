@@ -148,7 +148,7 @@ export interface MemorizationPageState {
   // Context action passthroughs (needed by HubView inline JSX)
   updateChunkMode: (id: string, mode: ChunkMode) => void
   updateRepetitionMode: (id: string, mode: RepetitionMode, config?: RepetitionConfig) => void
-  updateTestScore: (id: string, testType: string, score: number) => void
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest" | "finishPhrase" | "sortingGame", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => Promise<void>
   updateReviewedChunks: (id: string, chunkIds: string[]) => void
   updateMarkedChunks: (id: string, chunkIds: string[]) => void
 }

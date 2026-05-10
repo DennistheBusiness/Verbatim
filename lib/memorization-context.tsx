@@ -1320,7 +1320,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await supabase
         .from("memorization_sets")
-        .update({ repetition_mode: mode, repetition_config: (config ?? {}) as Record<string, unknown> })
+        .update({ repetition_mode: mode, repetition_config: (config ?? {}) as unknown as import('@/lib/supabase/types').Json })
         .eq("id", setId)
       if (error) throw error
       patchSet(setId, (s) => ({ ...s, repetitionMode: mode, repetitionConfig: config ?? {} }))

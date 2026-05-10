@@ -9,7 +9,7 @@ import { NavigationMenu } from "@/components/navigation-menu"
 import { type ReactNode, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
-import { getImpersonationState } from "@/lib/impersonation"
+
 
 interface HeaderProps {
   title: string

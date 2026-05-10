@@ -13,7 +13,9 @@ if (typeof window !== 'undefined') {
     defaults: '2026-01-30',
     debug: false,
     capture_pageview: false,
-    flush_interval_ms: 2000,
+    // flush_interval_ms is not in the official type but works at runtime
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...(({ flush_interval_ms: 2000 }) as any),
     loaded: (ph) => {
       if (process.env.NODE_ENV === 'development') {
         console.log('[PostHog] ✅ Initialized — distinct_id:', ph.get_distinct_id())

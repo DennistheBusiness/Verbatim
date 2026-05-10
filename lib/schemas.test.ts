@@ -84,7 +84,6 @@ describe("createSetSchema", () => {
   })
 
   it("rejects invalid chunkMode", () => {
-    // @ts-expect-error intentional bad input
     expect(() => createSetSchema.parse({ ...valid, chunkMode: "word" })).toThrow()
   })
 
