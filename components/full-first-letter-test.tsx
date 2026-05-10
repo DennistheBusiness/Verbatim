@@ -411,7 +411,8 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         {currentIndex + 1} of {words.length} words
       </p>
 
-      {/* Hidden input captures keyboard input on mobile */}
+      {/* Hidden input captures keyboard input on mobile.
+          Fixed + bottom-0 means iOS focuses it in-place and never scrolls to it. */}
       <input
         ref={inputRef}
         value={mobileValue}
@@ -422,7 +423,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         autoCorrect="off"
         autoComplete="off"
         spellCheck={false}
-        className="sr-only"
+        className="fixed bottom-0 left-0 h-px w-px opacity-0 pointer-events-none"
         aria-hidden="true"
       />
 
