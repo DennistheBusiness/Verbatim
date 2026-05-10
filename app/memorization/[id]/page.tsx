@@ -338,8 +338,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     setFamiliarizeSubView("reader")
     setContentExpanded(false)
     setPageMode("familiarize")
+    setReaderVisited(true)
+    markFamiliarizeComplete(id)
     updateSessionState(id, { currentStep: "familiarize" })
-  }, [id, updateSessionState])
+  }, [id, markFamiliarizeComplete, updateSessionState])
 
   const exitFamiliarize = useCallback(() => {
     setPageMode("view")
@@ -565,11 +567,11 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const teachCTA = useMemo((): { label: string; onClick: () => void } => {
     if (!set) return { label: "", onClick: () => {} }
     const flashcardsDone = (set.progress.reviewedChunks?.length ?? 0) > 0
-    if (!readerVisited) return { label: "Start Reading", onClick: () => { setFamiliarizeSubView("reader"); setReaderVisited(true) } }
+    if (!readerVisited) return { label: "Start Reading", onClick: startFamiliarizeReader }
     if (!flashcardsDone) return { label: "Try Flashcard Mode", onClick: handleFlashcards }
     if (!ttsVisited) return { label: "Try AI Read Aloud", onClick: handleOpenTTSPlayer }
     return { label: "Continue to Training", onClick: continueToEncode }
-  }, [set, readerVisited, ttsVisited, handleFlashcards, handleOpenTTSPlayer, continueToEncode])
+  }, [set, readerVisited, ttsVisited, startFamiliarizeReader, handleFlashcards, handleOpenTTSPlayer, continueToEncode])
 
   const trainCTA = useMemo((): { label: string; onClick: () => void } => {
     if (!set) return { label: "", onClick: () => {} }
@@ -833,7 +835,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                     </p>
                   </div>
                   <Button
-                    onClick={() => { setContentExpanded(false); setFamiliarizeSubView("reader"); setReaderVisited(true) }}
+                    onClick={startFamiliarizeReader}
                     size="sm"
                     className="w-full sm:w-auto"
                   >
