@@ -388,6 +388,10 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     trackEvent(ENCODE_METHOD_SELECTED, { set_id: id, method: 'first_letter', chunk_count: set?.chunks.length ?? 0 })
   }, [id, set?.chunks.length])
 
+  const backToFirstLetterChunkSelect = useCallback(() => {
+    setPageMode("chunk-select")
+  }, [])
+
   const startCombinedPractice = useCallback((indexes: number[]) => {
     const allChunks = set?.chunks ?? []
     const ordered = [...indexes].sort((a, b) => a - b)
@@ -1274,7 +1278,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-sm text-muted-foreground">
                 {chunkSelectPurpose === 'first-letter'
-                  ? "Select the chunks to combine into a single First Letter Method exercise."
+                  ? "Select chunks to combine into one First Letter Method exercise. All selected chunks are trained together."
                   : "Select specific chunks to practice one by one, or select all to train on the entire text as a single 3-stage exercise."}
               </p>
             </div>
@@ -1531,8 +1535,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             chunkIndex={0}
             totalChunks={1}
             onRetryChunk={handleRetryEntireSelection}
-            onContinueToTest={continueFromEncodeToTest}
-            onBackToDetail={finishEncoding}
+            onContinueToTest={chunkSelectPurpose !== 'first-letter' ? continueFromEncodeToTest : undefined}
+            onBackToDetail={chunkSelectPurpose !== 'first-letter' ? finishEncoding : undefined}
+            onBackToChunkSelect={chunkSelectPurpose === 'first-letter' ? backToFirstLetterChunkSelect : undefined}
             hasNextChunk={false}
           />
         </SessionLayout>
