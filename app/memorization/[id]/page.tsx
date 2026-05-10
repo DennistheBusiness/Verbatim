@@ -74,7 +74,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Clock, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, Trash2, type LucideIcon } from "lucide-react"
+import { AlertCircle, FileText, Layers, Type, Keyboard, LetterText, BookOpen, ArrowRight, CheckCircle2, Flame, Trophy, Target, Sparkles, BookMarked, Volume2, Headphones, Edit3, Mic, ChevronDown, ChevronUp, Bookmark, X, HelpCircle, Share2, BarChart3, BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered, NotebookPen, Hash, Mic2, Trash2, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 import { SessionLayout } from "@/components/session-layout"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -497,6 +497,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   }, [set])
 
   const lastPracticedDate = useMemo((): string | null => set?.sessionState.lastVisitedAt ?? null, [set])
+  const currentStreak = set?.progress.streak?.currentStreak ?? 0
 
   const highestTestScore = useMemo((): number => {
     if (!set) return 0
@@ -1783,11 +1784,9 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               <span className="text-xs text-muted-foreground">Chunks</span>
             </div>
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
-              <Clock className="size-4 text-muted-foreground" />
-              <span className="text-xs font-semibold tabular-nums">
-                {lastPracticedDate ? formatDate(lastPracticedDate) : "Never"}
-              </span>
-              <span className="text-xs text-muted-foreground">Last practiced</span>
+              <Flame className={`size-4 ${currentStreak > 0 ? "text-orange-500" : "text-muted-foreground"}`} />
+              <span className="text-lg font-semibold tabular-nums">{currentStreak}</span>
+              <span className="text-xs text-muted-foreground">Day streak</span>
             </div>
           </div>
         </div>
