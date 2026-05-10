@@ -104,7 +104,7 @@ export function SessionLayout({
       </header>
 
       {/* Main content */}
-      <main className={`flex flex-1 flex-col gap-6 p-4 ${showBottomActions && hasActions ? "pb-32" : "pb-8"}`}>
+      <main className={`flex grow shrink-0 flex-col gap-6 p-4 ${showBottomActions && hasActions ? "pb-32" : "pb-8"}`}>
         {children}
       </main>
 
