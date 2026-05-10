@@ -866,7 +866,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
         autoCapitalize="off"
         spellCheck={false}
       />
-      <div ref={bottomRef} className="h-1" />
+      <div ref={bottomRef} aria-hidden="true" className="h-[50vh]" />
     </div>
   )
 }
