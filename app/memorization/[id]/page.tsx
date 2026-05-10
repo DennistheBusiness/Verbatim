@@ -144,8 +144,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const [showSystemInfo, setShowSystemInfo] = useState(false)
   const [showSharePanel, setShowSharePanel] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
-  // Session-local completion flags for exercises not tracked in DB
-  const [sortingGameCompleted, setSortingGameCompleted] = useState(false)
   const [ttsVisited, setTtsVisited] = useState(false)
   const [readerVisited, setReaderVisited] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
@@ -421,7 +419,6 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
   const exitFinishPhrase = useCallback(() => setPageMode("view"), [])
 
   const finishSortingGame = useCallback(() => {
-    setSortingGameCompleted(true)
     setPageMode("view")
     updateSessionState(id, { currentStep: null })
   }, [id, updateSessionState])
@@ -482,12 +479,17 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
 
   const overallCompletion = useMemo((): number => {
     if (!set) return 0
-    let completed = 0
-    if (set.progress.familiarizeCompleted) completed++
-    if (set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed) completed++
-    const { firstLetter, fullText, audioTest } = set.progress.tests
-    if (firstLetter.lastScore !== null || fullText.lastScore !== null || audioTest.lastScore !== null) completed++
-    return Math.round((completed / 3) * 100)
+    const teachPct = set.progress.familiarizeCompleted ? 100
+      : Math.min(((set.progress.reviewedChunks?.length ?? 0) / Math.max(set.chunks.length, 1)) * 100, 99)
+    const trainStages = [set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length
+    const trainPct = Math.round((trainStages / 3) * 100)
+    const testScores = [
+      set.progress.tests.firstLetter.bestScore,
+      set.progress.tests.fullText.bestScore,
+      set.progress.tests.audioTest.bestScore,
+    ].filter((s): s is number => s !== null)
+    const testPct = testScores.length > 0 ? Math.max(...testScores) : 0
+    return Math.round((teachPct * 0.25 + trainPct * 0.35 + testPct * 0.40))
   }, [set])
 
   const lastPracticedDate = useMemo((): string | null => set?.sessionState.lastVisitedAt ?? null, [set])
@@ -500,6 +502,21 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
       set.progress.tests.audioTest.bestScore,
     ].filter((s): s is number => s !== null)
     return scores.length > 0 ? Math.max(...scores) : 0
+  }, [set])
+
+  const stepProgress = useMemo(() => {
+    if (!set) return { teach: 0, train: 0, test: 0, trainStages: 0 }
+    const teach = set.progress.familiarizeCompleted ? 100
+      : Math.min(((set.progress.reviewedChunks?.length ?? 0) / Math.max(set.chunks.length, 1)) * 100, 99)
+    const trainStages = [set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length
+    const train = Math.round((trainStages / 3) * 100)
+    const testScores = [
+      set.progress.tests.firstLetter.bestScore,
+      set.progress.tests.fullText.bestScore,
+      set.progress.tests.audioTest.bestScore,
+    ].filter((s): s is number => s !== null)
+    const test = testScores.length > 0 ? Math.max(...testScores) : 0
+    return { teach, train, test, trainStages }
   }, [set])
 
   const progressModuleCTA = useMemo((): { label: string; description: string; onClick: () => void } => {
@@ -553,11 +570,12 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
     if (!set) return { label: "", onClick: () => {} }
     const firstLetterDone = set.progress.encode.stage1Completed && set.progress.encode.stage2Completed && set.progress.encode.stage3Completed
     const finishPhraseDone = (set.progress.tests.finishPhrase?.bestScore ?? null) !== null
+    const sortingGameDone = (set.progress.tests.sortingGame?.bestScore ?? null) !== null
     if (!firstLetterDone) return { label: "Start First Letter Method", onClick: startFirstLetterMethod }
-    if (!sortingGameCompleted) return { label: "Try Sorting Game", onClick: startSortingGame }
+    if (!sortingGameDone) return { label: "Try Sorting Game", onClick: startSortingGame }
     if (!finishPhraseDone) return { label: "Try Finish That Phrase", onClick: startFinishPhrase }
     return { label: "Continue to Test", onClick: continueFromEncodeToTest }
-  }, [set, sortingGameCompleted, startFirstLetterMethod, startSortingGame, startFinishPhrase, continueFromEncodeToTest])
+  }, [set, startFirstLetterMethod, startSortingGame, startFinishPhrase, continueFromEncodeToTest])
 
   const testCTA = useMemo((): { label: string; onClick: () => void } => {
     if (!set) return { label: "", onClick: () => {} }
@@ -1188,6 +1206,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         onChunkModeChange={(mode) => updateChunkMode(id, mode)}
         onBack={exitSortingGame}
         onFinish={finishSortingGame}
+        onScore={(score) => updateTestScore(id, "sortingGame", score)}
       />
     )
   }
@@ -1697,20 +1716,52 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         <div className="flex flex-col gap-4">
           {/* Completion Progress */}
           <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-            <CardContent className="flex flex-col gap-4 p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-medium text-muted-foreground">Overall Progress</p>
-                  <p className="text-3xl font-bold text-primary">{overallCompletion}%</p>
-                  <p className="text-xs text-muted-foreground">
-                    Memorized (best test): <span className="font-semibold text-foreground">{highestTestScore}%</span>
-                  </p>
+            <CardContent className="flex flex-col gap-4 p-5">
+              {/* Headline % */}
+              <div className="flex items-end justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Overall</p>
+                  <span className="text-5xl font-extrabold leading-none text-primary tabular-nums">{overallCompletion}<span className="text-2xl font-bold">%</span></span>
                 </div>
-                <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
-                  <Trophy className="size-8 text-primary" />
+                <p className="text-xs text-muted-foreground pb-1">
+                  {overallCompletion === 0 ? "Just getting started" : overallCompletion < 40 ? "Building the foundation" : overallCompletion < 75 ? "Making solid progress" : overallCompletion < 100 ? "Almost there" : "Complete"}
+                </p>
+              </div>
+
+              {/* 3-segment bar */}
+              <div className="flex gap-1 h-3">
+                <div className="flex-1 rounded-l-full overflow-hidden bg-blue-500/20">
+                  <div className="h-full bg-blue-500 transition-all duration-500 rounded-l-full" style={{ width: `${stepProgress.teach}%` }} />
+                </div>
+                <div className="flex-1 overflow-hidden bg-violet-500/20">
+                  <div className="h-full bg-violet-500 transition-all duration-500" style={{ width: `${stepProgress.train}%` }} />
+                </div>
+                <div className="flex-1 rounded-r-full overflow-hidden bg-emerald-500/20">
+                  <div className="h-full bg-emerald-500 transition-all duration-500 rounded-r-full" style={{ width: `${stepProgress.test}%` }} />
                 </div>
               </div>
-              <Progress value={overallCompletion} className="h-2" />
+
+              {/* Labels + status under each segment */}
+              <div className="flex">
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-blue-500">Teach</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {set.progress.familiarizeCompleted ? "✓ Done" : (set.progress.reviewedChunks?.length ?? 0) > 0 ? `${set.progress.reviewedChunks!.length}/${chunks.length} cards` : "Not started"}
+                  </span>
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-violet-500">Train</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {stepProgress.trainStages === 0 ? "Not started" : stepProgress.trainStages === 3 ? "✓ Done" : `Stage ${stepProgress.trainStages}/3`}
+                  </span>
+                </div>
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-emerald-500">Test</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {stepProgress.test > 0 ? `Best: ${stepProgress.test}%` : "Not started"}
+                  </span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1853,7 +1904,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
             <span className="text-[13px] font-semibold text-foreground/60">Train</span>
           </div>
           <div className="flex justify-around px-4 py-6">
-            <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={0} />
+            <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={(set.progress.tests.sortingGame?.bestScore ?? 0) / 100} />
             <CircleBtn Icon={ALargeSmall} label="First Letter Method" onClick={startFirstLetterMethod} color="violet"
               progress={[set.progress.encode.stage1Completed, set.progress.encode.stage2Completed, set.progress.encode.stage3Completed].filter(Boolean).length / 3} />
             <CircleBtn Icon={PenLine} label="Finish that Phrase" onClick={startFinishPhrase} color="violet"

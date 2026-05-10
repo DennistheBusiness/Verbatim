@@ -23,6 +23,7 @@ interface SortingGameProps {
   onChunkModeChange: (mode: ChunkMode) => void
   onBack: () => void
   onFinish: () => void
+  onScore?: (score: number) => void
 }
 
 interface ItemResult {
@@ -57,7 +58,7 @@ function shuffle<T extends { orderIndex: number }>(arr: T[]): T[] {
   return result
 }
 
-export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBack, onFinish }: SortingGameProps) {
+export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBack, onFinish, onScore }: SortingGameProps) {
   const [items, setItems] = useState<Chunk[]>(() => shuffle(chunks))
   const [submitted, setSubmitted] = useState(false)
   const [results, setResults] = useState<Results | null>(null)
@@ -240,9 +241,10 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
       duration_seconds: durationSeconds,
     })
 
+    onScore?.(score)
     setResults({ correctCount, totalCount, score, itemResults })
     setSubmitted(true)
-  }, [items, setId, chunkMode])
+  }, [items, setId, chunkMode, onScore])
 
   const handleTryAgain = useCallback(() => {
     startTime.current = new Date()

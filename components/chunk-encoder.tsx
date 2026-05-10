@@ -105,7 +105,7 @@ export function ChunkEncoder({
       if (isMobileRef.current && !hasStartedRef.current) return
 
       const key = rawKey.toLowerCase()
-      if (!/^[a-z]$/.test(key)) return
+      if (!/^[a-z&]$/.test(key)) return
 
       const idx = currentIndexRef.current
       const now = Date.now()
@@ -205,7 +205,7 @@ export function ChunkEncoder({
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     if (val.length > 0) {
-      const firstLetter = val.toLowerCase().match(/[a-z]/)?.[0]
+      const firstLetter = val.toLowerCase().match(/[a-z&]/)?.[0]
       if (firstLetter) processLetterInput(firstLetter)
     }
     e.target.value = ""
