@@ -1723,7 +1723,8 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
         {/* Overview Section */}
         <div className="flex flex-col gap-4">
           {/* Completion Progress */}
-          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+          <Link href={`/analytics?set=${id}`}>
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 cursor-pointer transition-shadow hover:shadow-md active:opacity-90">
             <CardContent className="flex flex-col gap-4 p-5">
               {/* Headline % */}
               <div className="flex items-end justify-between">
@@ -1772,8 +1773,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
               </div>
             </CardContent>
           </Card>
-
-          {/* Stats Row */}
+          </Link>
           <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col items-center gap-1 rounded-lg bg-muted/50 p-3">
               <Type className="size-4 text-muted-foreground" />
