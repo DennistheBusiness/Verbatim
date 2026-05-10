@@ -82,6 +82,7 @@ export function ProgressiveChunkEncoder({
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [topCtaVisible, setTopCtaVisible] = useState(true)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
   const topCtaRef = useRef<HTMLButtonElement>(null)
   const activeWordRef = useRef<HTMLSpanElement>(null)
   const levelStartAtRef = useRef<number>(Date.now())
@@ -173,6 +174,16 @@ export function ProgressiveChunkEncoder({
 
   useEffect(() => {
     isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return
+    const initialHeight = window.visualViewport.height
+    const handleResize = () => {
+      setKeyboardOpen(window.visualViewport!.height < initialHeight - 100)
+    }
+    window.visualViewport.addEventListener('resize', handleResize)
+    return () => window.visualViewport!.removeEventListener('resize', handleResize)
   }, [])
 
   // All levels advance sequentially through every word — stable ref, no deps
@@ -690,6 +701,10 @@ export function ProgressiveChunkEncoder({
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M6 16h4M14 16h4"/></svg>
           Tap to open keyboard
         </button>
+      )}
+
+      {keyboardOpen && hasStarted && !isLevelComplete && (
+        <div aria-hidden="true" className="h-48" />
       )}
 
       {/* Success Dialog between levels */}
