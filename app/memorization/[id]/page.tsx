@@ -1730,7 +1730,7 @@ export default function MemorizationDetailPage({ params }: MemorizationDetailPag
                   <span className="text-5xl font-extrabold leading-none text-primary tabular-nums">{overallCompletion}<span className="text-2xl font-bold">%</span></span>
                 </div>
                 <p className="text-xs text-muted-foreground pb-1">
-                  {overallCompletion === 0 ? "Just getting started" : overallCompletion < 40 ? "Building the foundation" : overallCompletion < 75 ? "Making solid progress" : overallCompletion < 100 ? "Almost there" : "Complete"}
+                  {overallCompletion === 0 ? "Just getting started" : overallCompletion < 40 ? "Squared Thought Memory System" : overallCompletion < 75 ? "Making solid progress" : overallCompletion < 100 ? "Almost there" : "Complete"}
                 </p>
               </div>
 

@@ -335,9 +335,18 @@ export function ProgressiveChunkEncoder({
     if (!activeWordEl) return
 
     requestAnimationFrame(() => {
-      activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
+      const vv = window.visualViewport
+      if (vv && keyboardOpen) {
+        // Scroll so the active word sits in the center of the visible area above the keyboard
+        const rect = activeWordEl.getBoundingClientRect()
+        const visibleCenterY = vv.offsetTop + vv.height / 2
+        const delta = rect.top + rect.height / 2 - visibleCenterY
+        window.scrollBy({ top: delta, behavior: 'smooth' })
+      } else {
+        activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
+      }
     })
-  }, [currentIndex, hasStarted, isLevelComplete, currentLevel])
+  }, [currentIndex, hasStarted, isLevelComplete, currentLevel, keyboardOpen])
 
   const persistLevelProgress = useCallback((level: Level, result: LevelResults) => {
     if (persistedLevelsRef.current.has(level)) return
