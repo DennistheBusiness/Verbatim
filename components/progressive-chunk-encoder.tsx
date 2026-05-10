@@ -26,6 +26,7 @@ interface ProgressiveChunkEncoderProps {
   onNextChunk?: () => void
   onContinueToTest?: () => void
   onBackToDetail?: () => void
+  onBackToChunkSelect?: () => void
   hasNextChunk?: boolean
 }
 
@@ -56,6 +57,7 @@ export function ProgressiveChunkEncoder({
   onNextChunk,
   onContinueToTest,
   onBackToDetail,
+  onBackToChunkSelect,
   hasNextChunk = false,
 }: ProgressiveChunkEncoderProps) {
   const { updateEncodeProgress } = useMemorization()
@@ -509,6 +511,11 @@ export function ProgressiveChunkEncoder({
             {onRetryChunk && (
               <Button onClick={onRetryChunk} variant="outline" size="lg">
                 Retry Chunk
+              </Button>
+            )}
+            {onBackToChunkSelect && (
+              <Button onClick={onBackToChunkSelect} variant={hasNextChunk ? "ghost" : "outline"} size="lg">
+                Back to Chunk Selection
               </Button>
             )}
             {onContinueToTest && (
