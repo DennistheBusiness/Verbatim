@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
+import { hapticError, hapticSuccess } from "@/lib/haptics"
 import { ResultsScreen } from "@/components/results-screen"
 import { Check, X, Keyboard } from "lucide-react"
 
@@ -122,6 +123,7 @@ export function ChunkEncoder({
         setCorrectCount((c) => c + 1)
         const nextIndex = idx + 1
         if (nextIndex >= wordsRef.current.length) {
+          hapticSuccess()
           setIsComplete(true)
           isCompleteRef.current = true
         } else {
@@ -140,6 +142,7 @@ export function ChunkEncoder({
           })
         )
       } else {
+        hapticError()
         lockedRef.current = true
         setIncorrectCount((c) => c + 1)
         setWords((prev) =>
@@ -163,6 +166,7 @@ export function ChunkEncoder({
           )
 
           if (nextIndex >= wordsRef.current.length) {
+            hapticSuccess()
             setIsComplete(true)
             isCompleteRef.current = true
           } else {

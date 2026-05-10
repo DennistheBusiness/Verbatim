@@ -8,6 +8,7 @@ import { Check, X, RotateCcw, Trophy, TrendingUp, BookOpen, FileText, Keyboard }
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { useMemorization } from "@/lib/memorization-context"
 import { toast } from "sonner"
+import { hapticError, hapticSuccess } from "@/lib/haptics"
 
 interface FullFirstLetterTestProps {
   setId: string
@@ -178,6 +179,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
           setCorrectCount((c) => c + 1)
           const next = idx + 1
           if (next >= wordsLengthRef.current) {
+            hapticSuccess()
             setIsComplete(true)
           } else {
             currentIndexRef.current = next
@@ -190,6 +192,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
           })
         } else {
           // Incorrect — lock input, show error, then advance after delay
+          hapticError()
           lockedRef.current = true
           setIncorrectCount((c) => c + 1)
 
@@ -203,6 +206,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
               })
             )
             if (next >= wordsLengthRef.current) {
+              hapticSuccess()
               setIsComplete(true)
             } else {
               currentIndexRef.current = next

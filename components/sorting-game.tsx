@@ -9,6 +9,7 @@ import { trackEvent } from '@/lib/analytics'
 import { SORTING_GAME_STARTED, SORTING_GAME_COMPLETED } from '@/lib/analytics-events'
 import type { ChunkMode } from '@/lib/memorization-context'
 import { cn } from '@/lib/utils'
+import { hapticSuccess } from '@/lib/haptics'
 
 interface Chunk {
   id: string
@@ -241,6 +242,7 @@ export function SortingGame({ setId, chunks, chunkMode, onChunkModeChange, onBac
       duration_seconds: durationSeconds,
     })
 
+    hapticSuccess()
     onScore?.(score)
     setResults({ correctCount, totalCount, score, itemResults })
     setSubmitted(true)

@@ -30,6 +30,7 @@ import {
 import { useMemorization, type Chunk } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { hapticError, hapticSuccess } from "@/lib/haptics"
 
 interface FinishPhraseTestProps {
   setId: string
@@ -357,6 +358,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
     const nextPos = chunkQueuePosRef.current + 1
     if (nextPos >= chunkQueueRef.current.length) {
       clearSavedState(setId)
+      hapticSuccess()
       setPhase("results")
     } else {
       setChunkQueuePos(nextPos)
@@ -425,6 +427,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
           return w
         })
       } else {
+        hapticError()
         lockedRef.current = true
         const newWrong = chunkWrongRef.current + 1
         chunkWrongRef.current = newWrong
