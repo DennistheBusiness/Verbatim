@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Plus, BookOpen, Search, X, Edit3, HelpCircle, CalendarClock,
-  Clock, Check, Sparkles, Target, Mic, ChevronRight, Loader2, Flame,
+  Clock, Check, Sparkles, Target, Mic, ChevronRight, Loader2, Flame, BarChart3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -454,12 +454,20 @@ export default function HomePage() {
                   {sets.length === 1 ? "Memorization Set" : "Memorization Sets"}
                 </span>
               </div>
-              <Button asChild className="gap-2 hidden md:flex">
-                <Link href="/create">
-                  <Plus className="size-4" />
-                  New Memorization
-                </Link>
-              </Button>
+              <div className="hidden md:flex items-center gap-2">
+                <Button asChild variant="outline" className="gap-2">
+                  <Link href="/analytics">
+                    <BarChart3 className="size-4" />
+                    View Analytics
+                  </Link>
+                </Button>
+                <Button asChild className="gap-2">
+                  <Link href="/create">
+                    <Plus className="size-4" />
+                    New Memorization
+                  </Link>
+                </Button>
+              </div>
             </div>
 
             {/* Search */}
