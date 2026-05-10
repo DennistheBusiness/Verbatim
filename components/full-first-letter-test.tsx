@@ -66,6 +66,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const lastInputRef = useRef<{ key: string; index: number; ts: number } | null>(null)
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([])
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const spacerRef = useRef<HTMLDivElement>(null)
   const [mobileValue, setMobileValue] = useState("")
   const [hasStarted, setHasStarted] = useState(false)
 
@@ -128,6 +129,23 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       }
     }, delay)
   }, [])
+
+  // Dynamically grow the bottom spacer to match the virtual keyboard height.
+  // On iOS, window.innerHeight stays fixed while visualViewport.height shrinks
+  // when the keyboard opens — the difference is the keyboard height. Growing
+  // the spacer by that amount guarantees the document has enough scroll room
+  // for window.scrollBy to move the active word above the keyboard.
+  useEffect(() => {
+    const updateSpacer = () => {
+      if (!spacerRef.current) return
+      const keyboardH = Math.max(0, window.innerHeight - (window.visualViewport?.height ?? window.innerHeight))
+      spacerRef.current.style.height = `${keyboardH + 200}px`
+      if (keyboardH > 0 && hasStartedRef.current) scrollActiveWordIntoView(100)
+    }
+    updateSpacer()
+    window.visualViewport?.addEventListener('resize', updateSpacer)
+    return () => window.visualViewport?.removeEventListener('resize', updateSpacer)
+  }, [scrollActiveWordIntoView])
 
   useEffect(() => {
     if (!isMobileRef.current || currentIndex === 0) return
@@ -444,10 +462,10 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
         </CardContent>
       </Card>
 
-      {/* Mobile-only scroll spacer — lives OUTSIDE the card so it adds real
-          document height below the last word, letting the user scroll the
-          final line above the virtual keyboard. aria-hidden, zero impact. */}
-      <div className="h-56 sm:hidden" aria-hidden="true" />
+      {/* Mobile-only scroll spacer — dynamically sized to match the virtual
+          keyboard height so the document always has enough scroll room for
+          window.scrollBy to reach the active word above the keyboard. */}
+      <div ref={spacerRef} style={{ height: '200px' }} className="sm:hidden" aria-hidden="true" />
     </div>
   )
 }
