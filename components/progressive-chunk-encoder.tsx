@@ -328,27 +328,28 @@ export function ProgressiveChunkEncoder({
     return () => observer.disconnect()
   }, [hasStarted, isLevelComplete])
 
-  // Keep the active word visible above the keyboard on mobile as the user progresses.
+  // Keep the active word visible as the user types through each word.
   useEffect(() => {
     if (!hasStarted || isLevelComplete || !isMobileRef.current) return
     const activeWordEl = activeWordRef.current
     if (!activeWordEl) return
-
     requestAnimationFrame(() => {
-      const vv = window.visualViewport
-      if (vv && keyboardOpen) {
-        // getBoundingClientRect is relative to the visual viewport top (above keyboard)
-        // so we just need to center the word within vv.height
-        const rect = activeWordEl.getBoundingClientRect()
-        const wordCenterY = rect.top + rect.height / 2
-        const targetY = vv.height / 2
-        const delta = wordCenterY - targetY
-        window.scrollBy({ top: delta, behavior: 'smooth' })
-      } else {
+      activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
+    })
+  }, [currentIndex, hasStarted, isLevelComplete, currentLevel])
+
+  // After the keyboard finishes animating open (resize: 'body' takes ~300ms),
+  // re-scroll the active word into view so it lands in the correct shrunk viewport.
+  useEffect(() => {
+    if (!keyboardOpen || !hasStarted || isLevelComplete) return
+    const timer = setTimeout(() => {
+      const activeWordEl = activeWordRef.current
+      if (activeWordEl) {
         activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
       }
-    })
-  }, [currentIndex, hasStarted, isLevelComplete, currentLevel, keyboardOpen])
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [keyboardOpen, hasStarted, isLevelComplete])
 
   const persistLevelProgress = useCallback((level: Level, result: LevelResults) => {
     if (persistedLevelsRef.current.has(level)) return
