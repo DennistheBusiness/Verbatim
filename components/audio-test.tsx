@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { compareTexts, type ComparisonResult, type WordComparisonStatus } from "@/lib/text-utils"
 import { Mic, Square, CheckCircle2, XCircle, AlertTriangle, Trophy, TrendingUp, BookOpen, FileText, Headphones, RefreshCcw, Eye, EyeOff, Loader2 } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
-import { useMemorization } from "@/lib/memorization-context"
+import { useSetActions } from "@/lib/memorization-context"
 import { toast } from "sonner"
 
 interface AudioTestProps {
@@ -59,7 +59,7 @@ function getFeedback(accuracy: number): { label: string; description: string; ic
 }
 
 export function AudioTest({ setId, content, chunks, chunkMode, onBack }: AudioTestProps) {
-  const { updateTestScore } = useMemorization()
+  const { updateTestScore } = useSetActions()
   
   // Selection state
   const [testMode, setTestMode] = useState<"full" | "chunks" | null>(null)

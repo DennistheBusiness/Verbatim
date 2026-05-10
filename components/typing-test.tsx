@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { compareTexts, type ComparisonResult, type WordComparisonStatus } from "@/lib/text-utils"
 import { CheckCircle2, XCircle, AlertTriangle, Plus, RotateCcw, ArrowLeft, Trophy, TrendingUp, BookOpen, FileText } from "lucide-react"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
-import { useMemorization } from "@/lib/memorization-context"
+import { useSetActions } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import { hapticSuccess } from "@/lib/haptics"
 
@@ -56,7 +56,7 @@ function getFeedback(accuracy: number): { label: string; description: string; ic
 }
 
 export function TypingTest({ setId, content, onBack }: TypingTestProps) {
-  const { updateTestScore } = useMemorization()
+  const { updateTestScore } = useSetActions()
   const [typedText, setTypedText] = useState("")
   const [result, setResult] = useState<ComparisonResult | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)

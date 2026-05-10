@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { useMemorization, type Chunk } from "@/lib/memorization-context"
+import { useSetActions, type Chunk } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { hapticError, hapticSuccess } from "@/lib/haptics"
@@ -200,7 +200,7 @@ function persistState(setId: string, state: SavedState) {
 }
 
 export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProps) {
-  const { updateTestScore } = useMemorization()
+  const { updateTestScore } = useSetActions()
 
   const [showIntro, setShowIntro] = useState(true)
   const [chunkOrder, setChunkOrder] = useState<ChunkOrder>("succession")

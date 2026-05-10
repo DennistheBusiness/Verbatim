@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { parseWords, type ParsedWord } from "@/lib/text-utils"
 import { hapticError, hapticSuccess, hapticLight } from "@/lib/haptics"
 import { Check, X, Trophy, ArrowRight, Sparkles, Target, Keyboard } from "lucide-react"
-import { useMemorization } from "@/lib/memorization-context"
+import { useSetActions } from "@/lib/memorization-context"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -61,7 +61,7 @@ export function ProgressiveChunkEncoder({
   onBackToChunkSelect,
   hasNextChunk = false,
 }: ProgressiveChunkEncoderProps) {
-  const { updateEncodeProgress } = useMemorization()
+  const { updateEncodeProgress } = useSetActions()
   const [currentLevel, setCurrentLevel] = useState<Level>(1)
   const [words, setWords] = useState<WordStatus[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
