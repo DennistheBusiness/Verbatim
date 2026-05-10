@@ -337,10 +337,12 @@ export function ProgressiveChunkEncoder({
     requestAnimationFrame(() => {
       const vv = window.visualViewport
       if (vv && keyboardOpen) {
-        // Scroll so the active word sits in the center of the visible area above the keyboard
+        // getBoundingClientRect is relative to the visual viewport top (above keyboard)
+        // so we just need to center the word within vv.height
         const rect = activeWordEl.getBoundingClientRect()
-        const visibleCenterY = vv.offsetTop + vv.height / 2
-        const delta = rect.top + rect.height / 2 - visibleCenterY
+        const wordCenterY = rect.top + rect.height / 2
+        const targetY = vv.height / 2
+        const delta = wordCenterY - targetY
         window.scrollBy({ top: delta, behavior: 'smooth' })
       } else {
         activeWordEl.scrollIntoView({ block: "center", behavior: "smooth" })
