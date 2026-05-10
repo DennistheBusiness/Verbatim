@@ -130,7 +130,7 @@ export function TodaysPracticeBanner() {
           onClick={() => router.push("/schedules")}
           className="shrink-0 gap-1.5"
         >
-          Set Up
+          Configure
           <ArrowRight className="size-3.5" />
         </Button>
       </div>
