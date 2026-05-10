@@ -1,4 +1,7 @@
 -- Restore RLS policies for production security
+-- Last updated: 2026-05-10
+-- Covers: profiles, memorization_sets, chunks, tags, set_tags,
+--         chunk_progress, test_attempts, encoding_attempts
 
 -- 1. Re-enable RLS on profiles table
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -184,7 +187,82 @@ CREATE POLICY "Users can delete set_tags for their sets"
     )
   );
 
--- 9. Verify all policies are in place
+-- 9. Ensure chunk_progress table has RLS
+ALTER TABLE chunk_progress ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users manage own chunk progress" ON chunk_progress;
+
+CREATE POLICY "Users manage own chunk progress"
+  ON chunk_progress FOR ALL
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+GRANT SELECT, INSERT, UPDATE ON chunk_progress TO authenticated;
+
+-- 10. Ensure test_attempts table has RLS
+ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own test attempts" ON test_attempts;
+DROP POLICY IF EXISTS "Users can insert their own test attempts" ON test_attempts;
+
+CREATE POLICY "Users can view their own test attempts"
+  ON test_attempts FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = test_attempts.set_id
+      AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert their own test attempts"
+  ON test_attempts FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = test_attempts.set_id
+      AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+-- No UPDATE/DELETE — attempts are immutable records
+GRANT SELECT, INSERT ON test_attempts TO authenticated;
+
+-- 11. Ensure encoding_attempts table has RLS
+ALTER TABLE encoding_attempts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own encoding attempts" ON encoding_attempts;
+DROP POLICY IF EXISTS "Users can insert their own encoding attempts" ON encoding_attempts;
+
+CREATE POLICY "Users can view their own encoding attempts"
+  ON encoding_attempts FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = encoding_attempts.set_id
+      AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert their own encoding attempts"
+  ON encoding_attempts FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = encoding_attempts.set_id
+      AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+-- No UPDATE/DELETE — attempts are immutable records
+GRANT SELECT, INSERT ON encoding_attempts TO authenticated;
+
+-- 12. Verify all policies are in place
 SELECT 
     schemaname,
     tablename,

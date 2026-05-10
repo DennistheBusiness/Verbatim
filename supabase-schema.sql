@@ -1,6 +1,6 @@
 -- Verbatim — Complete Database Schema
 -- Single source of truth. Run in Supabase SQL Editor to provision from scratch.
--- Last updated: 2026-05-02
+-- Last updated: 2026-05-10
 --
 -- Incorporates all migrations:
 --   supabase-migration-add-chunk-modes.sql
@@ -10,7 +10,11 @@
 --   supabase-add-transcript.sql
 --   supabase-migration-spaced-repetition.sql
 --   supabase-migration-test-attempts.sql
+--   supabase-migration-add-test-modes.sql
+--   supabase-migration-encoding-attempts.sql
 --   supabase-restore-rls.sql
+--   feat/per-set-streak-tracking (PR #84) — streak in progress JSONB + encode dual-write to test_attempts
+--   feat/analytics-improvements (PR #86/87) — analytics page, View Analytics CTAs
 
 -- =====================================================
 -- EXTENSIONS
@@ -123,6 +127,8 @@ CREATE TABLE memorization_sets (
   -- Learning progress
   progress          JSONB NOT NULL DEFAULT '{
     "familiarizeCompleted": false,
+    "reviewedChunks": [],
+    "markedChunks": [],
     "encode": {
       "stage1Completed": false,
       "stage2Completed": false,
@@ -130,9 +136,13 @@ CREATE TABLE memorization_sets (
       "lastScore": null
     },
     "tests": {
-      "firstLetter": { "bestScore": null, "lastScore": null },
-      "fullText":    { "bestScore": null, "lastScore": null }
-    }
+      "firstLetter":  { "bestScore": null, "lastScore": null },
+      "fullText":     { "bestScore": null, "lastScore": null },
+      "audioTest":    { "bestScore": null, "lastScore": null },
+      "finishPhrase": { "bestScore": null, "lastScore": null },
+      "sortingGame":  { "bestScore": null, "lastScore": null }
+    },
+    "streak": { "currentStreak": 0, "longestStreak": 0, "lastPracticeDate": null }
   }'::jsonb,
   session_state     JSONB NOT NULL DEFAULT '{
     "currentStep": null,
@@ -352,7 +362,15 @@ CREATE TABLE test_attempts (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   set_id        UUID NOT NULL REFERENCES memorization_sets(id) ON DELETE CASCADE,
   chunk_id      UUID REFERENCES chunks(id) ON DELETE SET NULL,
-  mode          TEXT NOT NULL CHECK (mode IN ('first_letter', 'full_text', 'audio', 'finish_phrase', 'sorting_game')),
+  -- step: 'test' for Test phase games; 'train' for Train phase games (finish_phrase, sorting_game, encode stages)
+  step          TEXT NOT NULL DEFAULT 'test' CHECK (step IN ('train', 'test')),
+  -- Test phase modes
+  -- Train phase modes added via PR #84: encode_l1, encode_l2, encode_l3 (dual-written by updateEncodeProgress)
+  mode          TEXT NOT NULL CHECK (mode IN (
+                  'first_letter', 'full_text', 'audio',
+                  'finish_phrase', 'sorting_game',
+                  'encode_l1', 'encode_l2', 'encode_l3'
+                )),
   score         INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
   total_words   INTEGER NOT NULL DEFAULT 0,
   correct_words INTEGER NOT NULL DEFAULT 0,
@@ -388,6 +406,54 @@ CREATE POLICY "Users can insert their own test attempts"
 -- No UPDATE/DELETE — attempts are immutable records
 
 GRANT SELECT, INSERT ON test_attempts TO authenticated;
+
+-- =====================================================
+-- ENCODING_ATTEMPTS  (append-only Train/Encode history)
+-- =====================================================
+
+CREATE TABLE encoding_attempts (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  set_id           UUID NOT NULL REFERENCES memorization_sets(id) ON DELETE CASCADE,
+  chunk_id         UUID REFERENCES chunks(id) ON DELETE SET NULL,
+  -- stage maps to encode stage: 'word' = Stage 1, 'sentence' = Stage 2, 'full' = Stage 3
+  stage            TEXT NOT NULL CHECK (stage IN ('word', 'sentence', 'full')),
+  score            INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
+  total_words      INTEGER NOT NULL DEFAULT 0,
+  correct_words    INTEGER NOT NULL DEFAULT 0,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_encoding_attempts_set_id ON encoding_attempts(set_id, created_at DESC);
+CREATE INDEX idx_encoding_attempts_set_stage ON encoding_attempts(set_id, stage, created_at DESC);
+CREATE INDEX idx_encoding_attempts_chunk_id ON encoding_attempts(chunk_id);
+
+ALTER TABLE encoding_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Ownership checked via memorization_sets (no direct user_id column)
+CREATE POLICY "Users can view their own encoding attempts"
+  ON encoding_attempts FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = encoding_attempts.set_id
+        AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert their own encoding attempts"
+  ON encoding_attempts FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM memorization_sets
+      WHERE memorization_sets.id = encoding_attempts.set_id
+        AND memorization_sets.user_id = auth.uid()
+    )
+  );
+
+-- No UPDATE/DELETE — attempts are immutable records
+
+GRANT SELECT, INSERT ON encoding_attempts TO authenticated;
 
 -- =====================================================
 -- STORAGE  (manage in Supabase Dashboard → Storage)
