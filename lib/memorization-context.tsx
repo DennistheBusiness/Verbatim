@@ -66,6 +66,10 @@ export interface Progress {
       bestScore: number | null
       lastScore: number | null
     }
+    sortingGame: {
+      bestScore: number | null
+      lastScore: number | null
+    }
   }
 }
 
@@ -133,7 +137,7 @@ interface SetActionsContextType {
   updateProgress: (id: string, updates: Partial<Progress>) => Promise<void>
   markFamiliarizeComplete: (id: string) => Promise<void>
   updateEncodeProgress: (id: string, stage: 1 | 2 | 3, score?: number, meta?: { chunkId?: string | null; totalWords?: number; correctWords?: number; durationSeconds?: number }) => Promise<void>
-  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest" | "finishPhrase", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => Promise<void>
+  updateTestScore: (id: string, testType: "firstLetter" | "fullText" | "audioTest" | "finishPhrase" | "sortingGame", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => Promise<void>
   updateReviewedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateMarkedChunks: (id: string, chunkIds: string[]) => Promise<void>
   updateTags: (id: string, tags: string[]) => Promise<void>
@@ -175,6 +179,7 @@ function createInitialProgress(): Progress {
       fullText: { bestScore: null, lastScore: null },
       audioTest: { bestScore: null, lastScore: null },
       finishPhrase: { bestScore: null, lastScore: null },
+      sortingGame: { bestScore: null, lastScore: null },
     },
   }
 }
@@ -860,6 +865,12 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
               audioTest: updates.tests.audioTest
                 ? { ...set.progress.tests.audioTest, ...updates.tests.audioTest }
                 : set.progress.tests.audioTest,
+              finishPhrase: updates.tests.finishPhrase
+                ? { ...set.progress.tests.finishPhrase, ...updates.tests.finishPhrase }
+                : set.progress.tests.finishPhrase,
+              sortingGame: updates.tests.sortingGame
+                ? { ...(set.progress.tests.sortingGame ?? { bestScore: null, lastScore: null }), ...updates.tests.sortingGame }
+                : (set.progress.tests.sortingGame ?? { bestScore: null, lastScore: null }),
             }
           : set.progress.tests,
       }
@@ -991,7 +1002,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase, patchSet])
 
-  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText" | "audioTest" | "finishPhrase", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => {
+  const updateTestScore = useCallback(async (id: string, testType: "firstLetter" | "fullText" | "audioTest" | "finishPhrase" | "sortingGame", score: number, meta?: { totalWords?: number; correctWords?: number; chunkId?: string | null }) => {
     try {
       const set = setsRef.current.find((s) => s.id === id)
       if (!set) throw new Error("Set not found")
@@ -1031,6 +1042,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         fullText: 'full_text',
         audioTest: 'audio',
         finishPhrase: 'finish_phrase',
+        sortingGame: 'sorting_game',
       }
       supabase
         .from('test_attempts')
@@ -1063,7 +1075,7 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
         : 0
       trackEvent(AnalyticsEvents.TEST_COMPLETED, {
         set_id: id,
-        test_type: testType === "firstLetter" ? "first_letter" : testType === "fullText" ? "full_text" : testType === "audioTest" ? "audio" : "finish_phrase",
+        test_type: modeMap[testType],
         score,
         duration_seconds: durationSeconds,
         is_best_score: isBestScore,
