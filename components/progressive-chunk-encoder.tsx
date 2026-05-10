@@ -715,8 +715,8 @@ export function ProgressiveChunkEncoder({
         </button>
       )}
 
-      {keyboardOpen && hasStarted && !isLevelComplete && (
-        <div aria-hidden="true" className="h-48" />
+      {hasStarted && !isLevelComplete && (
+        <div aria-hidden="true" className="h-[50vh]" />
       )}
 
       {/* Success Dialog between levels */}
