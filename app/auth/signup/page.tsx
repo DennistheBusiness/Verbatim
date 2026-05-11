@@ -207,6 +207,8 @@ function SignupContent() {
           </p>
         </div>
       </div>
+      {/* Keyboard scroll spacer — keeps form accessible when virtual keyboard opens */}
+      <div className="h-[50vh] shrink-0" aria-hidden="true" />
     </div>
   )
 }
