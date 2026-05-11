@@ -14,6 +14,10 @@ const config: CapacitorConfig = {
       'us.i.posthog.com',
       'us-assets.i.posthog.com',
       'api.groq.com',
+      '*.stripe.com',
+      'checkout.stripe.com',
+      'js.stripe.com',
+      'hooks.stripe.com',
     ],
   },
   plugins: {
