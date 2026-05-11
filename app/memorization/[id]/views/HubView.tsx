@@ -1,9 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import {
-  Flame, Type, Layers, Share2, Edit3, Trash2, HelpCircle, BarChart3,
+  Flame, Type, Layers, Share2, Edit3, Trash2, Info, BarChart3,
   BookOpenText, StickyNote, AudioLines, ALargeSmall, PenLine, ListOrdered,
   NotebookPen, Hash, Mic2,
 } from "lucide-react"
@@ -63,6 +64,10 @@ export function HubView({ state }: HubViewProps) {
     startTypingTest, startFirstLetterTest, startAudioTest,
     updateRepetitionMode,
   } = state
+
+  const [showTeachInfo, setShowTeachInfo] = useState(false)
+  const [showTrainInfo, setShowTrainInfo] = useState(false)
+  const [showTestInfo, setShowTestInfo] = useState(false)
 
   if (!set) return null
 
@@ -272,11 +277,11 @@ export function HubView({ state }: HubViewProps) {
           <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Teach</span>
             <button
-              onClick={() => setShowSystemInfo(true)}
+              onClick={() => setShowTeachInfo(true)}
               className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
               aria-label="About Teach methods"
             >
-              <HelpCircle className="size-3" />
+              <Info className="size-3" />
             </button>
           </div>
           <div className="flex justify-around px-4 py-6">
@@ -291,11 +296,11 @@ export function HubView({ state }: HubViewProps) {
           <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Train</span>
             <button
-              onClick={() => setShowSystemInfo(true)}
+              onClick={() => setShowTrainInfo(true)}
               className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
               aria-label="About Train methods"
             >
-              <HelpCircle className="size-3" />
+              <Info className="size-3" />
             </button>
           </div>
           <div className="flex justify-around px-4 py-6">
@@ -310,11 +315,11 @@ export function HubView({ state }: HubViewProps) {
           <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Test</span>
             <button
-              onClick={() => setShowSystemInfo(true)}
+              onClick={() => setShowTestInfo(true)}
               className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
               aria-label="About Test methods"
             >
-              <HelpCircle className="size-3" />
+              <Info className="size-3" />
             </button>
           </div>
           <div className="flex justify-around px-4 py-6">
@@ -391,6 +396,120 @@ export function HubView({ state }: HubViewProps) {
           </div>
         </div>
       </main>
+      {/* ── Teach Info Dialog ── */}
+      <Dialog open={showTeachInfo} onOpenChange={setShowTeachInfo}>
+        <DialogContent className="max-w-sm gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b">
+            <DialogTitle className="text-base font-semibold text-blue-500">Teach — Build Familiarity</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col divide-y divide-border/50 text-sm overflow-y-auto max-h-[70vh]">
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                <BookOpenText className="size-4 text-blue-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Read it yourself</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Read through your full content or scroll chunk-by-chunk at your own pace. This is your first contact with the material — let the words sink in without any pressure. The goal is recognition, not recall. Aim for 2–3 slow reads before moving to Train.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                <StickyNote className="size-4 text-blue-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Flashcards</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Flip through each chunk one at a time. Mark chunks you're unsure about to flag them for focused review. Flashcards build a mental map of the structure — you learn where each chunk sits in the overall piece so there are no surprises during recall.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
+                <AudioLines className="size-4 text-blue-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">AI Read it</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Listen to an AI voice read the text aloud while you follow along. Hearing the cadence, rhythm, and natural phrasing of the text activates a different memory pathway than reading silently. Especially effective for speeches, poetry, and content where delivery matters.</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Train Info Dialog ── */}
+      <Dialog open={showTrainInfo} onOpenChange={setShowTrainInfo}>
+        <DialogContent className="max-w-sm gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b">
+            <DialogTitle className="text-base font-semibold text-violet-500">Train — Engrave it in Memory</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col divide-y divide-border/50 text-sm overflow-y-auto max-h-[70vh]">
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500/10">
+                <ListOrdered className="size-4 text-violet-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Sorting Game</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">All your chunks are scrambled — drag and drop them back into their correct order. This forces your brain to recall the logical sequence and narrative flow of the content rather than just the words. If you can sort correctly from memory, you understand the structure at a deep level.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500/10">
+                <ALargeSmall className="size-4 text-violet-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">First Letter Method</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Only the first letter of each word is shown. You must recall the full word from that single letter cue. There are 3 progressive stages — Stage 1 shows letters word-by-word, Stage 2 shows a sentence at a time, Stage 3 reveals everything at once. Each stage strips away more scaffolding until you rely purely on memory.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500/10">
+                <PenLine className="size-4 text-violet-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Finish that Phrase</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">The first 20% of each chunk is shown as a prompt — type the rest entirely from memory against a countdown timer. This simulates real performance pressure, where someone else starts a sentence and you must complete it without any hesitation. The time limit prevents over-reliance on slow deliberate recall.</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Test Info Dialog ── */}
+      <Dialog open={showTestInfo} onOpenChange={setShowTestInfo}>
+        <DialogContent className="max-w-sm gap-0 p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-4 border-b">
+            <DialogTitle className="text-base font-semibold text-emerald-500">Test — Prove You Know It</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col divide-y divide-border/50 text-sm overflow-y-auto max-h-[70vh]">
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                <NotebookPen className="size-4 text-emerald-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Full Recall</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">A blank text field. No hints, no prompts, no first letters — type the entire passage from memory. This is the gold standard of memorization. Your score measures exact word-for-word accuracy. Aim for 95%+ before considering the material truly learned. Run this repeatedly over spaced sessions for the strongest long-term retention.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                <Hash className="size-4 text-emerald-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">1st Letter Recall</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Type only the first letter of every word in the correct order. This proves you know the full sequence of words without typing every character. It's faster than Full Recall and great for checking that you haven't dropped or swapped any words. A high score here usually means Full Recall is within reach.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                <Mic2 className="size-4 text-emerald-500" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold text-foreground">Audio Recall</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">Record yourself reciting the passage out loud from memory. This is the most realistic simulation of real-world performance — a speech, a presentation, an audition. Your recording is scored afterward for accuracy. Speaking forces a different kind of recall than typing and exposes gaps that written tests miss.</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <MobileMemoNav
         memoId={id}
         onFamiliarize={handleFamiliarize}

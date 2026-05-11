@@ -192,12 +192,6 @@ export default function BillingSuccessPage() {
 }
 
 
-function SuccessContent() {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const sessionId = searchParams.get('session_id')
-  const supabase = createClient()
-
   const [status, setStatus] = useState<'loading' | 'confirmed' | 'error'>('loading')
   const [planLabel, setPlanLabel] = useState<string>('')
 
