@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription
         const userId = sub.metadata?.userId
+        const planId = sub.metadata?.planId
         const customerId = sub.customer as string
 
         const status = sub.status === 'active' ? 'active'
@@ -100,20 +101,31 @@ export async function POST(request: NextRequest) {
           : sub.status === 'paused' ? 'paused'
           : 'trialing'
 
+        // Write full profile state so this event alone is sufficient to reconstruct
+        // the profile if checkout.session.completed was missed (e.g. tab closed mid-redirect).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const subPayload: any = {
+          subscription_status: status,
+          stripe_customer_id: customerId,
+          ...(planId ? { plan_type: planId } : {}),
+          ...(sub.status === 'trialing' && sub.trial_end
+            ? { trial_ends_at: new Date(sub.trial_end * 1000).toISOString() }
+            : {}),
+        }
+
         if (userId) {
           const { error } = await service
             .from('profiles')
-            .update({ subscription_status: status })
+            .update(subPayload)
             .eq('id', userId)
           if (error) {
             console.error('[webhook] subscription.updated failed (userId)', { userId, error })
             return NextResponse.json({ error: 'DB update failed' }, { status: 500 })
           }
         } else if (customerId) {
-          // Fallback: look up by stripe_customer_id if userId metadata is missing
           const { error } = await service
             .from('profiles')
-            .update({ subscription_status: status })
+            .update(subPayload)
             .eq('stripe_customer_id', customerId)
           if (error) {
             console.error('[webhook] subscription.updated failed (customerId)', { customerId, error })
@@ -122,6 +134,7 @@ export async function POST(request: NextRequest) {
         } else {
           console.error('[webhook] subscription.updated: no userId or customerId', { subId: sub.id })
         }
+        console.log('[webhook] subscription.updated profile', { userId, customerId, status, planId })
         break
       }
 

@@ -26,7 +26,10 @@ function SuccessContent() {
   useEffect(() => {
     if (!sessionId) { setStatus('error'); return }
 
-    async function sync() {
+    // Retry up to 3 times with 1.5s delay between attempts.
+    // Covers: Stripe propagation delay, Capacitor redirect timing, network blips.
+    // After all retries, show confirmed anyway — the webhook is the safety net.
+    async function sync(attempt = 1): Promise<void> {
       try {
         const res = await fetch('/api/billing/sync-session', {
           method: 'POST',
@@ -37,9 +40,15 @@ function SuccessContent() {
         if (!res.ok || !data.success) throw new Error(data.error ?? 'Sync failed')
         setResult(data as SyncResult)
         setStatus('confirmed')
-      } catch {
-        // Fallback — show success even if sync fails (webhook will eventually update)
-        setStatus('confirmed')
+      } catch (err) {
+        if (attempt < 3) {
+          setTimeout(() => sync(attempt + 1), 1500)
+        } else {
+          // All retries exhausted — the webhook will update the profile asynchronously.
+          // Do not block the user; they have a confirmed subscription in Stripe.
+          console.error('[billing/success] sync-session failed after 3 attempts:', err)
+          setStatus('confirmed')
+        }
       }
     }
 
