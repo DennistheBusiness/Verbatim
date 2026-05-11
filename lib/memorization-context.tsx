@@ -1320,6 +1320,8 @@ export function MemorizationProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await supabase
         .from("memorization_sets")
+        // RepetitionConfig is always { frequency: number, period: string } | {} — guaranteed JSON-serializable.
+        // The double cast is required because TypeScript cannot structurally verify the assignment to Json.
         .update({ repetition_mode: mode, repetition_config: (config ?? {}) as unknown as import('@/lib/supabase/types').Json })
         .eq("id", setId)
       if (error) throw error
