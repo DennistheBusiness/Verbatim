@@ -234,6 +234,9 @@ export default function PricingPage() {
           <Star className="size-4" />
           <span>Student? Your institution may provide access codes via your instructor.</span>
         </div>
+
+        {/* Keyboard scroll spacer — keeps promo code input visible when virtual keyboard opens */}
+        <div className="h-[50vh] w-full shrink-0" aria-hidden="true" />
       </main>
     </div>
   )
