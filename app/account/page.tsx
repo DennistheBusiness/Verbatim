@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Settings, User, Mail, LogOut, Trash2, AlertCircle, CheckCircle2, Download } from "lucide-react"
+import { Settings, User, Mail, LogOut, Trash2, AlertCircle, CheckCircle2, Download, CreditCard, Zap, ExternalLink } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { Spinner } from "@/components/ui/spinner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -35,11 +35,28 @@ export default function AccountPage() {
   const [newEmail, setNewEmail] = useState("")
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false)
   const [emailUpdateSuccess, setEmailUpdateSuccess] = useState(false)
+  const [billingProfile, setBillingProfile] = useState<{
+    plan_type: string
+    subscription_status: string
+    trial_ends_at: string | null
+    stripe_customer_id: string | null
+  } | null>(null)
+  const [portalLoading, setPortalLoading] = useState(false)
 
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('plan_type, subscription_status, trial_ends_at, stripe_customer_id')
+          .eq('id', user.id)
+          .single()
+        if (profile) setBillingProfile(profile)
+      }
+
       setIsLoading(false)
     }
     getUser()
@@ -48,6 +65,18 @@ export default function AccountPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/auth/login')
+  }
+
+  const handlePortal = async () => {
+    setPortalLoading(true)
+    const res = await fetch('/api/billing/portal', { method: 'POST' })
+    const { url, error } = await res.json()
+    setPortalLoading(false)
+    if (error) {
+      toast.error('Could not open billing portal: ' + error)
+      return
+    }
+    window.location.href = url
   }
 
   const handleUpdateEmail = async () => {
@@ -217,6 +246,67 @@ export default function AccountPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Subscription */}
+        {billingProfile && (
+          <Card>
+            <CardContent className="p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <CreditCard className="size-5" />
+                Subscription
+              </h2>
+
+              <div className="flex flex-col gap-4">
+                {/* Plan row */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <Zap className="size-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium capitalize">
+                        {billingProfile.plan_type === 'none' ? 'Free trial' : billingProfile.plan_type.replace('_', '-') + ' plan'}
+                      </p>
+                      <p className={`text-xs capitalize ${
+                        billingProfile.subscription_status === 'active' ? 'text-green-600 dark:text-green-400'
+                        : billingProfile.subscription_status === 'past_due' ? 'text-destructive'
+                        : 'text-muted-foreground'
+                      }`}>
+                        {billingProfile.subscription_status === 'trialing' && billingProfile.trial_ends_at
+                          ? `Trial ends ${new Date(billingProfile.trial_ends_at).toLocaleDateString()}`
+                          : billingProfile.subscription_status}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                {billingProfile.subscription_status === 'trialing' && (
+                  <Button asChild variant="default" className="w-full gap-2">
+                    <a href="/pricing">
+                      <Zap className="size-4" />
+                      Subscribe now
+                    </a>
+                  </Button>
+                )}
+
+                {billingProfile.stripe_customer_id && (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handlePortal}
+                    disabled={portalLoading}
+                  >
+                    <ExternalLink className="size-4" />
+                    {portalLoading ? 'Opening…' : 'Manage subscription'}
+                  </Button>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Change plan, update payment method, or cancel — all handled securely by Stripe.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Update Email */}
         <Card>
