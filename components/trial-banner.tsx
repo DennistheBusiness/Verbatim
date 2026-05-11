@@ -48,9 +48,7 @@ export function TrialBanner() {
 
       if (ent.isTrial && ent.trialEndsAt) {
         const days = trialDaysRemaining(ent.trialEndsAt)
-        if (days <= 3) {
-          setBanner({ type: 'trial', daysLeft: days })
-        }
+        setBanner({ type: 'trial', daysLeft: days })
       }
     }
 
@@ -84,8 +82,12 @@ export function TrialBanner() {
           {isPastDue
             ? 'Your payment failed. Please update your payment method to keep access.'
             : banner.daysLeft === 0
-            ? 'Your free trial ends today.'
-            : `Your free trial ends in ${banner.daysLeft} day${banner.daysLeft === 1 ? '' : 's'}.`}
+            ? 'Your free trial ends today — subscribe to keep access.'
+            : banner.daysLeft === 1
+            ? 'Last day of your free trial — subscribe to keep access.'
+            : banner.daysLeft! <= 3
+            ? `Free trial: ${banner.daysLeft} days left — subscribe to keep access.`
+            : `Free trial active — ${banner.daysLeft} day${banner.daysLeft === 1 ? '' : 's'} remaining.`}
         </span>
       </div>
 

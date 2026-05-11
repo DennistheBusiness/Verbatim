@@ -37,6 +37,7 @@ function OnboardingContent() {
   const [codeLoading, setCodeLoading] = useState(false)
   const [codeError, setCodeError] = useState<string | null>(null)
   const [codeSuccess, setCodeSuccess] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
 
   useEffect(() => {
     if (!importShare) return
@@ -66,11 +67,28 @@ function OnboardingContent() {
   }
 
   const handleComplete = () => navigateTo("/")
-  const handleSkip = () => navigateTo("/")
+  const handleSkip = () => navigateTo("/pricing")
   const handleCreateFirst = () => navigateTo("/create")
   const handleStartPracticing = () => {
     if (importedSetId) navigateTo(`/memorization/${importedSetId}`)
     else navigateTo("/")
+  }
+
+  const handlePlanCheckout = async (planId: string) => {
+    setCheckoutLoading(planId)
+    try {
+      const res = await fetch('/api/billing/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId }),
+      })
+      const { url, error } = await res.json()
+      if (error || !url) throw new Error(error ?? 'Unknown error')
+      localStorage.setItem('hasSeenOnboarding', 'true')
+      window.location.href = url
+    } catch {
+      setCheckoutLoading(null)
+    }
   }
 
   const handleContinue = () => {
@@ -466,10 +484,11 @@ function OnboardingContent() {
                   size="sm"
                   variant={plan.badge === 'Most Popular' ? 'default' : 'outline'}
                   className="gap-1"
-                  onClick={() => navigateTo(`/pricing`)}
+                  disabled={checkoutLoading !== null}
+                  onClick={() => handlePlanCheckout(plan.id)}
                 >
-                  Choose
-                  <ChevronRight className="size-3" />
+                  {checkoutLoading === plan.id ? <Loader2 className="size-3 animate-spin" /> : 'Choose'}
+                  {checkoutLoading !== plan.id && <ChevronRight className="size-3" />}
                 </Button>
               </div>
             </div>
@@ -493,7 +512,7 @@ function OnboardingContent() {
                   <Input
                     value={studentCode}
                     onChange={(e) => setStudentCode(e.target.value)}
-                    placeholder="VERBATIM-STU-XXXX"
+                    placeholder="VERB-4B2X-9WKQ"
                     className="h-10 uppercase"
                     disabled={codeLoading}
                   />

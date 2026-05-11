@@ -43,10 +43,26 @@ export async function POST(request: NextRequest) {
       const planId = session.metadata?.planId
       if (!userId || !planId) break
 
+      // Retrieve the subscription to check if it is in a trial period.
+      // If so, preserve the trial so users always get their 7 free days
+      // even after subscribing. The subscription.updated event will flip
+      // the status to 'active' once the trial ends.
+      let subscriptionStatus: string = 'active'
+      let trialEndsAt: string | undefined
+
+      if (session.subscription) {
+        const sub = await stripe.subscriptions.retrieve(session.subscription as string)
+        if (sub.status === 'trialing' && sub.trial_end) {
+          subscriptionStatus = 'trialing'
+          trialEndsAt = new Date(sub.trial_end * 1000).toISOString()
+        }
+      }
+
       await service.from('profiles').update({
         stripe_customer_id: session.customer as string,
         plan_type: planId,
-        subscription_status: 'active',
+        subscription_status: subscriptionStatus,
+        ...(trialEndsAt ? { trial_ends_at: trialEndsAt } : {}),
       }).eq('id', userId)
       break
     }

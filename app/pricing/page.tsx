@@ -180,7 +180,7 @@ export default function PricingPage() {
               </div>
               <div className="flex gap-2">
                 <Input
-                  placeholder="e.g. INTERNAL357"
+                  placeholder="Enter promo code"
                   value={promoCode}
                   onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoError(null) }}
                   className="font-mono uppercase"

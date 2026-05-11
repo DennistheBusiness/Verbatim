@@ -108,10 +108,6 @@ export function NavigationMenu({ user }: NavigationMenuProps) {
                 <BarChart3 className="mr-2 size-4" />
                 <span>Analytics</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleNavigate('/pricing')}>
-                <Zap className="mr-2 size-4" />
-                <span>Plans & Pricing</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleNavigate('/account')}>
                 <Settings className="mr-2 size-4" />
                 <span>Account Settings</span>
