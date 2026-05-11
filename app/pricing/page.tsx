@@ -14,7 +14,6 @@ const PLANS = [
     price: '$7',
     period: '/month',
     description: 'Full access, billed monthly. Cancel any time.',
-    priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID,
     badge: null,
     highlighted: false,
   },
@@ -25,7 +24,6 @@ const PLANS = [
     period: '/month',
     billedAs: 'Billed $60/year',
     description: 'Best value. Full access for the whole year.',
-    priceId: process.env.NEXT_PUBLIC_STRIPE_ANNUAL_PRICE_ID,
     badge: 'Most Popular',
     highlighted: true,
   },
@@ -36,7 +34,6 @@ const PLANS = [
     period: ' once',
     billedAs: 'One payment, 3 years of access',
     description: 'Pay once and lock in your access for three years.',
-    priceId: process.env.NEXT_PUBLIC_STRIPE_THREE_YEAR_PRICE_ID,
     badge: 'Best Deal',
     highlighted: false,
   },
@@ -56,17 +53,13 @@ const FEATURES = [
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null)
 
-  const handleSubscribe = async (planId: string, priceId: string | undefined) => {
-    if (!priceId) {
-      console.error('Missing price ID for plan:', planId)
-      return
-    }
+  const handleSubscribe = async (planId: string) => {
     setLoading(planId)
     try {
       const res = await fetch('/api/billing/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, priceId }),
+        body: JSON.stringify({ planId }),
       })
       const { url, error } = await res.json()
       if (error) throw new Error(error)
@@ -138,7 +131,7 @@ export default function PricingPage() {
                 className="w-full gap-2"
                 variant={plan.highlighted ? 'default' : 'outline'}
                 disabled={loading !== null}
-                onClick={() => handleSubscribe(plan.id, plan.priceId)}
+                onClick={() => handleSubscribe(plan.id)}
               >
                 {loading === plan.id ? 'Redirecting…' : 'Get started'}
                 <ChevronRight className="size-4" />
