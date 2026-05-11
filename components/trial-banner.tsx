@@ -161,4 +161,3 @@ export function TrialBanner() {
 
   return stripContent
 }
-}
