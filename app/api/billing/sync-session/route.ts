@@ -53,13 +53,13 @@ export async function POST(request: NextRequest) {
 
   // Update Supabase profile directly — this is idempotent and safe
   const service = createServiceClient()
-  const updatePayload: Record<string, unknown> = {
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatePayload: any = {
     stripe_customer_id: customerId,
     plan_type: planId,
     subscription_status: subscriptionStatus,
-  }
-  if (trialEndsAt) {
-    updatePayload.trial_ends_at = trialEndsAt
+    ...(trialEndsAt ? { trial_ends_at: trialEndsAt } : {}),
   }
 
   await service
