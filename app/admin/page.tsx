@@ -27,6 +27,8 @@ import {
   BookOpen,
   Plus,
   Key,
+  Tag,
+  ExternalLink,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
@@ -347,6 +349,10 @@ export default function AdminPage() {
               <Key className="size-4" />
               Student Codes
             </TabsTrigger>
+            <TabsTrigger value="promo-codes" className="gap-2">
+              <Tag className="size-4" />
+              Promo Codes
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Users tab ── */}
@@ -535,6 +541,53 @@ export default function AdminPage() {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          {/* ── Promo Codes tab ── */}
+          <TabsContent value="promo-codes" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Promo Codes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Promo codes are managed directly in the Stripe Dashboard. Create coupons (% or $ off) and attach promotion codes that users can enter at checkout.
+                </p>
+                <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold">To create a promo code:</span>
+                    <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
+                      <li>Go to <strong>Products → Coupons</strong> → Create coupon (set % or $ off, duration)</li>
+                      <li>Go to <strong>Promotion Codes</strong> → Create → set the code string and attach it to the coupon</li>
+                      <li>Users enter the code on the Subscribe or Pricing page before checkout</li>
+                    </ol>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href="https://dashboard.stripe.com/coupons"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <Tag className="size-4" />
+                        Manage Coupons
+                        <ExternalLink className="size-3" />
+                      </Button>
+                    </a>
+                    <a
+                      href="https://dashboard.stripe.com/promotion_codes"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <Tag className="size-4" />
+                        Manage Promotion Codes
+                        <ExternalLink className="size-3" />
+                      </Button>
+                    </a>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

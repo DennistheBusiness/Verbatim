@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Zap, ChevronRight, Loader2 } from 'lucide-react'
+import { Zap, ChevronRight, Loader2, Tag, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 import { resolveEntitlement, type BillingProfile } from '@/lib/entitlements'
 
@@ -40,6 +41,10 @@ export default function SubscribePage() {
   const supabase = createClient()
   const [loading, setLoading] = useState<string | null>(null)
   const [checking, setChecking] = useState(true)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [promoApplied, setPromoApplied] = useState(false)
 
   // If user already has access, send them home
   useEffect(() => {
@@ -64,18 +69,32 @@ export default function SubscribePage() {
 
   const handleSubscribe = async (planId: string) => {
     setLoading(planId)
+    setPromoError(null)
     try {
       const res = await fetch('/api/billing/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, promoCode: promoApplied ? promoCode.trim() : undefined }),
       })
       const { url, error } = await res.json()
-      if (error) throw new Error(error)
+      if (error) {
+        if (error.toLowerCase().includes('promo')) {
+          setPromoError(error)
+          setPromoApplied(false)
+        }
+        setLoading(null)
+        return
+      }
       window.location.href = url
     } catch {
       setLoading(null)
     }
+  }
+
+  const handleApplyPromo = () => {
+    if (!promoCode.trim()) return
+    setPromoApplied(true)
+    setPromoError(null)
   }
 
   if (checking) {
@@ -136,6 +155,46 @@ export default function SubscribePage() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Promo code */}
+        <div>
+          {!promoOpen ? (
+            <button
+              onClick={() => setPromoOpen(true)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mx-auto w-full justify-center"
+            >
+              <Tag className="size-3.5" />
+              Have a promo code?
+            </button>
+          ) : (
+            <div className="rounded-xl border bg-card p-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Promo code</span>
+                <button onClick={() => { setPromoOpen(false); setPromoCode(''); setPromoApplied(false); setPromoError(null) }}>
+                  <X className="size-4 text-muted-foreground hover:text-foreground" />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. INTERNAL357"
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoError(null) }}
+                  className="font-mono uppercase"
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                />
+                <Button variant="outline" onClick={handleApplyPromo} disabled={!promoCode.trim()}>
+                  Apply
+                </Button>
+              </div>
+              {promoApplied && !promoError && (
+                <p className="text-xs text-green-600 font-medium">✓ Code applied — discount shown at checkout</p>
+              )}
+              {promoError && (
+                <p className="text-xs text-destructive">{promoError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-muted-foreground">

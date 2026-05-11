@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Check, Zap, Star, ChevronRight } from 'lucide-react'
+import { Check, Zap, Star, ChevronRight, Tag, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 const PLANS = [
@@ -52,23 +53,42 @@ const FEATURES = [
 
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [promoApplied, setPromoApplied] = useState(false)
 
   const handleSubscribe = async (planId: string) => {
     setLoading(planId)
+    setPromoError(null)
     try {
       const res = await fetch('/api/billing/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, promoCode: promoApplied ? promoCode.trim() : undefined }),
       })
       const { url, error } = await res.json()
-      if (error) throw new Error(error)
+      if (error) {
+        if (error.toLowerCase().includes('promo')) {
+          setPromoError(error)
+          setPromoApplied(false)
+        } else {
+          console.error('Checkout error:', error)
+        }
+        return
+      }
       window.location.href = url
     } catch (err) {
       console.error('Checkout error:', err)
     } finally {
       setLoading(null)
     }
+  }
+
+  const handleApplyPromo = () => {
+    if (!promoCode.trim()) return
+    setPromoApplied(true)
+    setPromoError(null)
   }
 
   return (
@@ -138,6 +158,46 @@ export default function PricingPage() {
               </Button>
             </div>
           ))}
+        </div>
+
+        {/* Promo code */}
+        <div className="w-full max-w-md">
+          {!promoOpen ? (
+            <button
+              onClick={() => setPromoOpen(true)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mx-auto"
+            >
+              <Tag className="size-3.5" />
+              Have a promo code?
+            </button>
+          ) : (
+            <div className="rounded-xl border bg-card p-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Promo code</span>
+                <button onClick={() => { setPromoOpen(false); setPromoCode(''); setPromoApplied(false); setPromoError(null) }}>
+                  <X className="size-4 text-muted-foreground hover:text-foreground" />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. INTERNAL357"
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoError(null) }}
+                  className="font-mono uppercase"
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
+                />
+                <Button variant="outline" onClick={handleApplyPromo} disabled={!promoCode.trim()}>
+                  Apply
+                </Button>
+              </div>
+              {promoApplied && !promoError && (
+                <p className="text-xs text-green-600 font-medium">✓ Code applied — discount shown at checkout</p>
+              )}
+              {promoError && (
+                <p className="text-xs text-destructive">{promoError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Feature list */}

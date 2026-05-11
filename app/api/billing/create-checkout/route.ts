@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { planId } = body as { planId: string }
+  const { planId, promoCode } = body as { planId: string; promoCode?: string }
 
   const priceId = PRICE_IDS[planId]
   if (!priceId) {
@@ -28,6 +28,20 @@ export async function POST(request: NextRequest) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+  // Resolve promo code to a Stripe Promotion Code ID if provided
+  let resolvedPromoId: string | undefined
+  if (promoCode?.trim()) {
+    const promos = await stripe.promotionCodes.list({
+      code: promoCode.trim().toUpperCase(),
+      active: true,
+      limit: 1,
+    })
+    if (promos.data.length === 0) {
+      return NextResponse.json({ error: 'Invalid or expired promo code.' }, { status: 400 })
+    }
+    resolvedPromoId = promos.data[0].id
+  }
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -37,6 +51,10 @@ export async function POST(request: NextRequest) {
       trial_period_days: 7,
       metadata: { userId: user.id, planId },
     },
+    // If a promo code was supplied, apply it directly; otherwise let users enter one at Stripe checkout
+    ...(resolvedPromoId
+      ? { discounts: [{ promotion_code: resolvedPromoId }] }
+      : { allow_promotion_codes: true }),
     success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/subscribe`,
     metadata: { userId: user.id, planId },
