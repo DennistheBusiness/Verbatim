@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import Stripe from 'stripe'
 
 /**
  * POST /api/billing/webhook
@@ -24,54 +25,65 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 })
   }
 
-  // TODO: Install Stripe and uncomment the verification + handling below.
-  // import Stripe from 'stripe'
-  // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-  //
-  // let event: Stripe.Event
-  // try {
-  //   event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!)
-  // } catch {
-  //   return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
-  // }
-  //
-  // const service = createServiceClient()
-  //
-  // switch (event.type) {
-  //   case 'checkout.session.completed': {
-  //     const session = event.data.object as Stripe.Checkout.Session
-  //     const userId = session.metadata?.userId
-  //     const planId = session.metadata?.planId
-  //     if (!userId || !planId) break
-  //
-  //     await service.from('profiles').update({
-  //       stripe_customer_id: session.customer as string,
-  //       plan_type: planId,
-  //       subscription_status: planId === 'three_year' ? 'active' : 'active',
-  //       plan_expires_at: planId === 'three_year'
-  //         ? new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000).toISOString()
-  //         : null,
-  //       user_role: 'general', // upgrade student/general to general with access
-  //     }).eq('id', userId)
-  //     break
-  //   }
-  //
-  //   case 'customer.subscription.updated': {
-  //     const sub = event.data.object as Stripe.Subscription
-  //     // update status based on sub.status
-  //     break
-  //   }
-  //
-  //   case 'customer.subscription.deleted': {
-  //     // mark as canceled
-  //     break
-  //   }
-  //
-  //   case 'invoice.payment_failed': {
-  //     // mark as past_due
-  //     break
-  //   }
-  // }
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+  } catch {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
+  const service = createServiceClient()
+
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session
+      const userId = session.metadata?.userId
+      const planId = session.metadata?.planId
+      if (!userId || !planId) break
+
+      await service.from('profiles').update({
+        stripe_customer_id: session.customer as string,
+        plan_type: planId,
+        subscription_status: 'active',
+      }).eq('id', userId)
+      break
+    }
+
+    case 'customer.subscription.updated': {
+      const sub = event.data.object as Stripe.Subscription
+      const userId = sub.metadata?.userId
+      if (!userId) break
+      const status = sub.status === 'active' ? 'active'
+        : sub.status === 'past_due' ? 'past_due'
+        : sub.status === 'canceled' ? 'canceled'
+        : sub.status === 'paused' ? 'paused'
+        : 'trialing'
+      await service.from('profiles').update({ subscription_status: status }).eq('id', userId)
+      break
+    }
+
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object as Stripe.Subscription
+      const userId = sub.metadata?.userId
+      if (!userId) break
+      await service.from('profiles').update({
+        subscription_status: 'canceled',
+        plan_type: 'none',
+      }).eq('id', userId)
+      break
+    }
+
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object as Stripe.Invoice
+      const customerId = invoice.customer as string
+      if (!customerId) break
+      await service.from('profiles').update({ subscription_status: 'past_due' })
+        .eq('stripe_customer_id', customerId)
+      break
+    }
+  }
 
   return NextResponse.json({ received: true })
 }

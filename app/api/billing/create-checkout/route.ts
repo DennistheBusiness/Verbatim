@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import Stripe from 'stripe'
 
-// Price IDs by plan — set these in .env.local
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+
+// Price IDs by plan — set in Vercel environment variables
 const PRICE_IDS: Record<string, string> = {
   monthly:    process.env.STRIPE_MONTHLY_PRICE_ID    ?? '',
   annual:     process.env.STRIPE_ANNUAL_PRICE_ID     ?? '',
@@ -24,23 +27,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Unknown plan: ${planId}` }, { status: 400 })
   }
 
-  // Lazy-load Stripe (not installed yet — install with: pnpm add stripe)
-  // import Stripe from 'stripe'
-  // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-  //
-  // const session = await stripe.checkout.sessions.create({
-  //   mode: planId === 'three_year' ? 'payment' : 'subscription',
-  //   line_items: [{ price: priceId, quantity: 1 }],
-  //   customer_email: user.email,
-  //   success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-  //   cancel_url:  `${process.env.NEXT_PUBLIC_APP_URL}/subscribe`,
-  //   metadata: { userId: user.id, planId },
-  // })
-  // return NextResponse.json({ url: session.url })
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-  // TODO: Install Stripe and uncomment above. Placeholder response:
-  return NextResponse.json(
-    { error: 'Stripe not yet configured. Add STRIPE_SECRET_KEY to .env.local and install the stripe package.' },
-    { status: 501 }
-  )
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    line_items: [{ price: priceId, quantity: 1 }],
+    customer_email: user.email ?? undefined,
+    subscription_data: {
+      trial_period_days: 7,
+      metadata: { userId: user.id, planId },
+    },
+    success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/subscribe`,
+    metadata: { userId: user.id, planId },
+  })
+
+  return NextResponse.json({ url: session.url })
 }
