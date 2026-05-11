@@ -74,14 +74,6 @@ export function HubView({ state }: HubViewProps) {
         action={
           <div className="flex items-center gap-2">
             <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setShowSystemInfo(true)}
-              aria-label="How the system works"
-            >
-              <HelpCircle className="size-5" />
-            </Button>
-            <Button
               variant="outline"
               size="sm"
               className="gap-1.5"
@@ -274,18 +266,18 @@ export function HubView({ state }: HubViewProps) {
         <div className="-mx-4 flex flex-col">
           <div className="px-4 pb-3 flex items-center gap-1.5">
             <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Learning Steps</h2>
-            <button
-              onClick={() => setShowSystemInfo(true)}
-              className="flex items-center justify-center size-5 rounded-full text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-              aria-label="About learning methods"
-            >
-              <HelpCircle className="size-4" />
-            </button>
           </div>
 
           {/* TEACH */}
-          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Teach</span>
+            <button
+              onClick={() => setShowSystemInfo(true)}
+              className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
+              aria-label="About Teach methods"
+            >
+              <HelpCircle className="size-3" />
+            </button>
           </div>
           <div className="flex justify-around px-4 py-6">
             <CircleBtn Icon={BookOpenText} label="Read it yourself" onClick={startFamiliarizeReader} color="blue"
@@ -296,8 +288,15 @@ export function HubView({ state }: HubViewProps) {
           </div>
 
           {/* TRAIN */}
-          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Train</span>
+            <button
+              onClick={() => setShowSystemInfo(true)}
+              className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
+              aria-label="About Train methods"
+            >
+              <HelpCircle className="size-3" />
+            </button>
           </div>
           <div className="flex justify-around px-4 py-6">
             <CircleBtn Icon={ListOrdered} label="Sorting Game" onClick={startSortingGame} color="violet" progress={(set.progress.tests.sortingGame?.bestScore ?? 0) / 100} />
@@ -308,8 +307,15 @@ export function HubView({ state }: HubViewProps) {
           </div>
 
           {/* TEST */}
-          <div className="border-y border-border/40 bg-muted/40 px-4 py-2">
+          <div className="border-y border-border/40 bg-muted/40 px-4 py-2 flex items-center gap-2">
             <span className="text-[13px] font-semibold text-foreground/60">Test</span>
+            <button
+              onClick={() => setShowSystemInfo(true)}
+              className="flex items-center justify-center size-[18px] rounded-full bg-muted-foreground/20 text-muted-foreground/60 hover:bg-muted-foreground/30 hover:text-muted-foreground transition-colors"
+              aria-label="About Test methods"
+            >
+              <HelpCircle className="size-3" />
+            </button>
           </div>
           <div className="flex justify-around px-4 py-6">
             <CircleBtn Icon={NotebookPen} label="Full Recall" onClick={startTypingTest} color="emerald"
