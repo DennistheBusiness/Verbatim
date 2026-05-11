@@ -5,6 +5,7 @@ import { MemorizationProvider } from '@/lib/memorization-context'
 import { PostHogProvider } from '@/components/posthog-provider'
 import { SessionHandler } from '@/components/session-handler'
 import { Toaster } from '@/components/ui/sonner'
+import { TrialBanner } from '@/components/trial-banner'
 import './globals.css'
 
 const montserrat = Montserrat({
@@ -45,6 +46,7 @@ export default function RootLayout({
         <PostHogProvider>
           <SessionHandler />
           <MemorizationProvider>
+            <TrialBanner />
             {children}
           </MemorizationProvider>
         </PostHogProvider>
