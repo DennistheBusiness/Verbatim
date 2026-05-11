@@ -105,10 +105,11 @@ export default function PricingPage() {
         <div className="text-center flex flex-col gap-3 max-w-xl">
           <Badge variant="outline" className="mx-auto w-fit">Plans & Pricing</Badge>
           <h1 className="text-4xl font-bold tracking-tight">
-            Simple pricing, every feature included
+            Remember anything.<br />Master it forever.
           </h1>
           <p className="text-muted-foreground text-lg leading-relaxed">
-            No feature tiers. No seat limits. Every plan includes everything Verbatim offers.
+            Verbatim uses encoding science to turn any text into long-term memory.
+            Every plan includes every feature — no limits, no upsells.
           </p>
         </div>
 
