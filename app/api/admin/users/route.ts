@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data, error } = await service
     .from('profiles')
-    .select('id, email, full_name, user_role, created_at, avatar_url')
+    .select('id, email, full_name, user_role, created_at, avatar_url, plan_type, subscription_status, trial_ends_at')
     .order('created_at', { ascending: false })
 
   if (error) {

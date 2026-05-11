@@ -2,9 +2,10 @@
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, Loader2, Mic, Share2, Star, Upload, XCircle, Zap } from "lucide-react"
+import { ArrowRight, BookOpen, Brain, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Mic, Share2, Star, Upload, XCircle, Zap } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 export default function OnboardingPage() {
   return (
@@ -28,7 +29,14 @@ function OnboardingContent() {
   // Ref keeps the promise so we can await it from any exit path (skip, back, etc.)
   const importPromise = useRef<Promise<void> | null>(null)
 
-  const totalSteps = 3 // 0–3 = 4 screens; last screen differs for share users
+  const totalSteps = 4 // 0–4 = 5 screens; step 3 = plan selection, last screen differs for share users
+
+  // Student code state (step 3)
+  const [showCodeInput, setShowCodeInput] = useState(false)
+  const [studentCode, setStudentCode] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [codeSuccess, setCodeSuccess] = useState(false)
 
   useEffect(() => {
     if (!importShare) return
@@ -399,7 +407,133 @@ function OnboardingContent() {
     )
   }
 
-  // ── Step 3 — share-link users: show their imported set ─────────────────────
+  // ── Step 3 — plan selection + student code ─────────────────────────────────
+  if (step === 3) {
+    const handleRedeemCode = async () => {
+      setCodeLoading(true)
+      setCodeError(null)
+      const res = await fetch('/api/billing/redeem-student-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: studentCode }),
+      })
+      const data = await res.json()
+      setCodeLoading(false)
+      if (!res.ok) {
+        setCodeError(data.error ?? 'Invalid code')
+      } else {
+        setCodeSuccess(true)
+      }
+    }
+
+    return (
+      <ScreenShell maxWidth="max-w-lg">
+        <div className="flex flex-col gap-3 text-center">
+          <p className="text-sm font-medium text-primary">Start your journey</p>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Try Verbatim free for 7 days
+          </h2>
+          <p className="text-muted-foreground text-base">
+            No credit card required. Start practicing right away.
+          </p>
+        </div>
+
+        {/* Plan cards */}
+        <div className="flex flex-col gap-3">
+          {[
+            { id: 'monthly',    label: 'Monthly',  price: '$7/mo',  detail: 'Billed monthly',       badge: null         },
+            { id: 'annual',     label: 'Annual',   price: '$5/mo',  detail: 'Billed $60/year',      badge: 'Most Popular' },
+            { id: 'three_year', label: '3-Year',   price: '$100',   detail: 'One payment, 3 years', badge: 'Best Deal'    },
+          ].map((plan) => (
+            <div
+              key={plan.id}
+              className={`flex items-center justify-between rounded-xl border px-5 py-4 ${
+                plan.badge === 'Most Popular' ? 'border-primary bg-primary/5' : 'bg-card'
+              }`}
+            >
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{plan.label}</span>
+                  {plan.badge && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">{plan.badge}</span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">{plan.detail}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-bold">{plan.price}</span>
+                <Button
+                  size="sm"
+                  variant={plan.badge === 'Most Popular' ? 'default' : 'outline'}
+                  className="gap-1"
+                  onClick={() => navigateTo(`/pricing`)}
+                >
+                  Choose
+                  <ChevronRight className="size-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Student code */}
+        {!codeSuccess ? (
+          <div className="flex flex-col gap-3">
+            {!showCodeInput ? (
+              <button
+                className="text-sm text-muted-foreground underline underline-offset-4 text-center"
+                onClick={() => setShowCodeInput(true)}
+              >
+                Have a student access code?
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Enter student code</p>
+                <div className="flex gap-2">
+                  <Input
+                    value={studentCode}
+                    onChange={(e) => setStudentCode(e.target.value)}
+                    placeholder="VERBATIM-STU-XXXX"
+                    className="h-10 uppercase"
+                    disabled={codeLoading}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!studentCode.trim() || codeLoading}
+                    onClick={handleRedeemCode}
+                    className="shrink-0"
+                  >
+                    {codeLoading ? <Loader2 className="size-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
+                {codeError && (
+                  <p className="text-sm text-destructive">{codeError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+            <CheckCircle2 className="size-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Student code applied!</p>
+              <p className="text-xs text-muted-foreground">Your trial has been extended to 60 days.</p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 pt-1">
+          <Button size="lg" className="w-full gap-2" onClick={handleContinue}>
+            Start my free trial
+            <ArrowRight className="size-4" />
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">No card required. Choose a plan later.</p>
+        </div>
+      </ScreenShell>
+    )
+  }
+
+  // ── Step 4 — share-link users: show their imported set ─────────────────────
   if (importShare) {
     return (
       <ScreenShell maxWidth="max-w-md">
@@ -512,7 +646,7 @@ function OnboardingContent() {
     )
   }
 
-  // ── Step 3 — standard users: create first set ──────────────────────────────
+  // ── Step 4 — standard users: create first set ──────────────────────────────
   return (
     <ScreenShell maxWidth="max-w-md">
       <div className="flex justify-center">

@@ -244,6 +244,12 @@ export type Database = {
           id: string
           updated_at: string
           user_role: string
+          plan_type: string
+          subscription_status: string
+          trial_ends_at: string | null
+          plan_expires_at: string | null
+          revenuecat_id: string | null
+          stripe_customer_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -253,6 +259,12 @@ export type Database = {
           id: string
           updated_at?: string
           user_role?: string
+          plan_type?: string
+          subscription_status?: string
+          trial_ends_at?: string | null
+          plan_expires_at?: string | null
+          revenuecat_id?: string | null
+          stripe_customer_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -262,6 +274,42 @@ export type Database = {
           id?: string
           updated_at?: string
           user_role?: string
+          plan_type?: string
+          subscription_status?: string
+          trial_ends_at?: string | null
+          plan_expires_at?: string | null
+          revenuecat_id?: string | null
+          stripe_customer_id?: string | null
+        }
+        Relationships: []
+      }
+      student_codes: {
+        Row: {
+          id: string
+          code: string
+          max_uses: number
+          use_count: number
+          created_by: string | null
+          created_at: string
+          expires_at: string | null
+        }
+        Insert: {
+          id?: string
+          code: string
+          max_uses?: number
+          use_count?: number
+          created_by?: string | null
+          created_at?: string
+          expires_at?: string | null
+        }
+        Update: {
+          id?: string
+          code?: string
+          max_uses?: number
+          use_count?: number
+          created_by?: string | null
+          created_at?: string
+          expires_at?: string | null
         }
         Relationships: []
       }

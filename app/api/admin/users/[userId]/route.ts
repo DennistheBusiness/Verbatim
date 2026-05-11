@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { requireAdmin } from '@/lib/admin-auth'
 
 const updateRoleSchema = z.object({
-  user_role: z.enum(['admin', 'vip', 'general']),
+  user_role: z.enum(['admin', 'vip', 'general', 'student']),
 })
 
 /** PATCH /api/admin/users/[userId] — update user role */

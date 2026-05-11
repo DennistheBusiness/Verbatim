@@ -24,7 +24,11 @@ import {
   User,
   Database,
   Activity,
+  BookOpen,
+  Plus,
+  Key,
 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -48,6 +52,18 @@ interface Profile {
   user_role: string
   created_at: string
   avatar_url: string | null
+  plan_type?: string
+  subscription_status?: string
+  trial_ends_at?: string | null
+}
+
+interface StudentCode {
+  id: string
+  code: string
+  max_uses: number
+  use_count: number
+  created_at: string
+  expires_at: string | null
 }
 
 interface Stats {
@@ -84,6 +100,12 @@ export default function AdminPage() {
   const [viewSets, setViewSets] = useState<UserSet[]>([])
   const [viewSetsLoading, setViewSetsLoading] = useState(false)
 
+  // Student codes state
+  const [studentCodes, setStudentCodes] = useState<StudentCode[]>([])
+  const [newCodeMaxUses, setNewCodeMaxUses] = useState("1")
+  const [newCodeExpiry, setNewCodeExpiry] = useState("")
+  const [creatingCode, setCreatingCode] = useState(false)
+
   useEffect(() => {
     initPage()
   }, [])
@@ -107,7 +129,7 @@ export default function AdminPage() {
   }
 
   const loadAdminData = async () => {
-    await Promise.all([loadUsers(), loadStats()])
+    await Promise.all([loadUsers(), loadStats(), loadStudentCodes()])
   }
 
   /** Fetch all users via server-validated API route */
@@ -173,6 +195,45 @@ export default function AdminPage() {
     setViewSets(data)
   }
 
+  const loadStudentCodes = async () => {
+    const res = await fetch("/api/admin/student-codes")
+    if (!res.ok) return
+    const data: StudentCode[] = await res.json()
+    setStudentCodes(data)
+  }
+
+  const handleCreateCode = async () => {
+    setCreatingCode(true)
+    const res = await fetch("/api/admin/student-codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        max_uses: parseInt(newCodeMaxUses) || 1,
+        expires_at: newCodeExpiry || null,
+      }),
+    })
+    setCreatingCode(false)
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Unknown error" }))
+      toast.error("Failed to create code: " + error)
+      return
+    }
+    toast.success("Student code created")
+    setNewCodeMaxUses("1")
+    setNewCodeExpiry("")
+    await loadStudentCodes()
+  }
+
+  const handleRevokeCode = async (codeId: string) => {
+    const res = await fetch(`/api/admin/student-codes/${codeId}`, { method: "DELETE" })
+    if (!res.ok) {
+      toast.error("Failed to revoke code")
+      return
+    }
+    toast.success("Code revoked")
+    await loadStudentCodes()
+  }
+
   const filteredUsers = users.filter(
     (user) =>
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -181,9 +242,10 @@ export default function AdminPage() {
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case "admin": return "bg-red-500/10 text-red-600 border-red-500/20"
-      case "vip": return "bg-purple-500/10 text-purple-600 border-purple-500/20"
-      default: return "bg-gray-500/10 text-gray-600 border-gray-500/20"
+      case "admin":   return "bg-red-500/10 text-red-600 border-red-500/20"
+      case "vip":     return "bg-purple-500/10 text-purple-600 border-purple-500/20"
+      case "student": return "bg-blue-500/10 text-blue-600 border-blue-500/20"
+      default:        return "bg-gray-500/10 text-gray-600 border-gray-500/20"
     }
   }
 
@@ -274,107 +336,209 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        {/* Users */}
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search users by email or name…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+        {/* Tabbed content: Users + Student Codes */}
+        <Tabs defaultValue="users">
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="size-4" />
+              Users
+            </TabsTrigger>
+            <TabsTrigger value="student-codes" className="gap-2">
+              <Key className="size-4" />
+              Student Codes
+            </TabsTrigger>
+          </TabsList>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>All Users ({filteredUsers.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {filteredUsers.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No users found</p>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
-                          <User className="size-5 text-primary" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium truncate">{user.email}</span>
-                            {user.id === currentUser?.id && (
-                              <Badge variant="outline" className="text-xs">You</Badge>
-                            )}
+          {/* ── Users tab ── */}
+          <TabsContent value="users" className="space-y-4 mt-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users by email or name…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>All Users ({filteredUsers.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {filteredUsers.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No users found</p>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
+                            <User className="size-5 text-primary" />
                           </div>
-                          {user.full_name && (
-                            <span className="text-sm text-muted-foreground truncate">{user.full_name}</span>
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium truncate">{user.email}</span>
+                              {user.id === currentUser?.id && (
+                                <Badge variant="outline" className="text-xs">You</Badge>
+                              )}
+                            </div>
+                            {user.full_name && (
+                              <span className="text-sm text-muted-foreground truncate">{user.full_name}</span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              Joined {new Date(user.created_at).toLocaleDateString()}
+                              {user.plan_type && ` · ${user.plan_type}`}
+                              {user.subscription_status && ` · ${user.subscription_status}`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <select
+                            value={user.user_role}
+                            onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                            disabled={user.id === currentUser?.id}
+                            className={`px-2 py-1 text-xs font-medium rounded-md border ${getRoleBadgeColor(user.user_role)} disabled:opacity-50`}
+                          >
+                            <option value="general">General</option>
+                            <option value="student">Student</option>
+                            <option value="vip">VIP</option>
+                            <option value="admin">Admin</option>
+                          </select>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewSets(user)}
+                          >
+                            <Eye className="size-3 mr-1" />
+                            View Sets
+                          </Button>
+
+                          {user.id !== currentUser?.id && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="destructive">
+                                  <Trash2 className="size-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete <strong>{user.email}</strong> and all their data. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteUser(user.id, user.email)}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                  >
+                                    Delete User
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Student Codes tab ── */}
+          <TabsContent value="student-codes" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create Student Code</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Max uses</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="w-24"
+                      value={newCodeMaxUses}
+                      onChange={(e) => setNewCodeMaxUses(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Expires (optional)</label>
+                    <Input
+                      type="date"
+                      className="w-40"
+                      value={newCodeExpiry}
+                      onChange={(e) => setNewCodeExpiry(e.target.value)}
+                    />
+                  </div>
+                  <Button onClick={handleCreateCode} disabled={creatingCode} className="gap-2">
+                    <Plus className="size-4" />
+                    {creatingCode ? "Creating…" : "Create Code"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Active Codes ({studentCodes.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {studentCodes.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No student codes yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {studentCodes.map((sc) => (
+                      <div key={sc.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex flex-col gap-0.5">
+                          <code className="font-mono text-sm font-semibold">{sc.code}</code>
                           <span className="text-xs text-muted-foreground">
-                            Joined {new Date(user.created_at).toLocaleDateString()}
+                            Used {sc.use_count}/{sc.max_uses}
+                            {sc.expires_at && ` · Expires ${new Date(sc.expires_at).toLocaleDateString()}`}
                           </span>
                         </div>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="destructive">
+                              <Trash2 className="size-3" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Revoke Code?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete the code <strong>{sc.code}</strong>.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleRevokeCode(sc.id)}
+                                className="bg-destructive hover:bg-destructive/90"
+                              >
+                                Revoke
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <select
-                          value={user.user_role}
-                          onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                          disabled={user.id === currentUser?.id}
-                          className={`px-2 py-1 text-xs font-medium rounded-md border ${getRoleBadgeColor(user.user_role)} disabled:opacity-50`}
-                        >
-                          <option value="general">General</option>
-                          <option value="vip">VIP</option>
-                          <option value="admin">Admin</option>
-                        </select>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewSets(user)}
-                        >
-                          <Eye className="size-3 mr-1" />
-                          View Sets
-                        </Button>
-
-                        {user.id !== currentUser?.id && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="destructive">
-                                <Trash2 className="size-3" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete User?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete <strong>{user.email}</strong> and all their data. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDeleteUser(user.id, user.email)}
-                                  className="bg-destructive hover:bg-destructive/90"
-                                >
-                                  Delete User
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* View Sets Dialog — server-fetched, no impersonation */}

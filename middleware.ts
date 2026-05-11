@@ -68,8 +68,13 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // Public share preview pages — no auth required
-  if (pathname.startsWith('/share/')) {
+  // Public pages — no auth required
+  if (
+    pathname.startsWith('/share/') ||
+    pathname.startsWith('/pricing') ||
+    pathname.startsWith('/subscribe') ||
+    pathname.startsWith('/auth/student-signup')
+  ) {
     return supabaseResponse
   }
 
@@ -107,6 +112,39 @@ export async function middleware(request: NextRequest) {
     redirectUrl.pathname = '/auth/login'
     redirectUrl.searchParams.set('redirectedFrom', pathname)
     return NextResponse.redirect(redirectUrl)
+  }
+
+  // Paywall gate — check billing status for authenticated users on app routes
+  if (isProtectedPath && user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_role, plan_type, subscription_status, trial_ends_at, plan_expires_at')
+      .eq('id', user.id)
+      .single()
+
+    if (profile) {
+      const role = profile.user_role as string
+      const status = profile.subscription_status as string
+      const planType = profile.plan_type as string
+
+      // Admins and free plans always pass
+      const alwaysPass = role === 'admin' || planType === 'free'
+
+      if (!alwaysPass) {
+        const needsSubscription =
+          status === 'canceled' ||
+          status === 'paused' ||
+          (status === 'trialing' &&
+            profile.trial_ends_at &&
+            new Date(profile.trial_ends_at) < new Date())
+
+        if (needsSubscription) {
+          const redirectUrl = request.nextUrl.clone()
+          redirectUrl.pathname = '/subscribe'
+          return NextResponse.redirect(redirectUrl)
+        }
+      }
+    }
   }
 
   return supabaseResponse
