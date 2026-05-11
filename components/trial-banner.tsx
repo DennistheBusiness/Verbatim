@@ -1,28 +1,43 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Zap, X, AlertTriangle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Zap, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { resolveEntitlement, trialDaysRemaining, type BillingProfile } from '@/lib/entitlements'
 
+const PLAN_LABELS: Record<string, string> = {
+  monthly:    'Monthly Plan',
+  annual:     'Annual Plan',
+  three_year: '3-Year Plan',
+}
+
+type BannerType = 'trial' | 'subscribed_trial' | 'past_due'
+
+interface BannerState {
+  type: BannerType
+  daysLeft?: number
+  planLabel?: string
+}
+
 /**
- * TrialBanner — shown at the top of the app when:
- *   - User is in trial with ≤ 3 days remaining
- *   - User is past_due
+ * HomeBillingBanner — shown only on the library/home page.
  *
- * Dismisses for the current session only (stores in sessionStorage).
+ * Three states:
+ *  - trial          : amber strip, user is in free trial, not yet subscribed → links to /pricing
+ *  - subscribed_trial: green strip, user subscribed but trial days still running
+ *  - past_due       : red strip, payment failed
+ *
+ * Dismissed per-session (sessionStorage). Auto-hides when no longer relevant.
  */
 export function TrialBanner() {
   const supabase = createClient()
-  const [banner, setBanner] = useState<{
-    type: 'trial' | 'past_due'
-    daysLeft?: number
-  } | null>(null)
+  const router = useRouter()
+  const [banner, setBanner] = useState<BannerState | null>(null)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    if (sessionStorage.getItem('trialBannerDismissed')) {
+    if (sessionStorage.getItem('billingBannerDismissed')) {
       setDismissed(true)
       return
     }
@@ -48,7 +63,19 @@ export function TrialBanner() {
 
       if (ent.isTrial && ent.trialEndsAt) {
         const days = trialDaysRemaining(ent.trialEndsAt)
-        setBanner({ type: 'trial', daysLeft: days })
+        // No more trial days — don't show banner
+        if (days < 0) return
+
+        const hasRealPlan = ['monthly', 'annual', 'three_year'].includes(profile.plan_type)
+        const planLabel = PLAN_LABELS[profile.plan_type] ?? undefined
+
+        if (hasRealPlan) {
+          // Subscribed but trial is still running — green banner
+          setBanner({ type: 'subscribed_trial', daysLeft: days, planLabel })
+        } else {
+          // Free trial, not yet subscribed — amber banner
+          setBanner({ type: 'trial', daysLeft: days })
+        }
       }
     }
 
@@ -56,51 +83,61 @@ export function TrialBanner() {
   }, [supabase])
 
   const dismiss = () => {
-    sessionStorage.setItem('trialBannerDismissed', '1')
+    sessionStorage.setItem('billingBannerDismissed', '1')
     setDismissed(true)
   }
 
   if (!banner || dismissed) return null
 
+  const isSubscribedTrial = banner.type === 'subscribed_trial'
   const isPastDue = banner.type === 'past_due'
 
-  return (
-    <div
-      className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${
-        isPastDue
-          ? 'bg-destructive/10 border-b border-destructive/20 text-destructive'
-          : 'bg-amber-500/10 border-b border-amber-500/20 text-amber-700 dark:text-amber-400'
-      }`}
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        {isPastDue ? (
-          <AlertTriangle className="size-4 shrink-0" />
-        ) : (
-          <Zap className="size-4 shrink-0" />
-        )}
-        <span className="truncate">
-          {isPastDue
-            ? 'Your payment failed. Please update your payment method to keep access.'
-            : banner.daysLeft === 0
-            ? 'Your free trial ends today — subscribe to keep access.'
-            : banner.daysLeft === 1
-            ? 'Last day of your free trial — subscribe to keep access.'
-            : banner.daysLeft! <= 3
-            ? `Free trial: ${banner.daysLeft} days left — subscribe to keep access.`
-            : `Free trial active — ${banner.daysLeft} day${banner.daysLeft === 1 ? '' : 's'} remaining.`}
-        </span>
-      </div>
+  const dayText = banner.daysLeft === 0
+    ? 'today'
+    : banner.daysLeft === 1
+    ? '1 free day'
+    : `${banner.daysLeft} free days`
 
-      <div className="flex items-center gap-2 shrink-0">
-        <Link
-          href={isPastDue ? '/account' : '/pricing'}
-          className="font-semibold underline underline-offset-4 whitespace-nowrap hover:opacity-80 transition-opacity"
-        >
-          {isPastDue ? 'Update payment' : 'Subscribe now'}
-        </Link>
+  const message = (() => {
+    if (isPastDue) return 'Your payment failed. Please update your payment method to keep access.'
+    if (isSubscribedTrial) {
+      return banner.daysLeft === 0
+        ? `${banner.planLabel ?? 'Plan'} · Your free trial ends today`
+        : `${banner.planLabel ?? 'Plan'} · ${dayText} left in your free trial`
+    }
+    // trial (unsubscribed)
+    if (banner.daysLeft === 0) return 'Your free trial ends today — subscribe to keep access.'
+    if (banner.daysLeft === 1) return 'Last day of your free trial — subscribe to keep access.'
+    if ((banner.daysLeft ?? 8) <= 3) return `Free trial: ${banner.daysLeft} days left — subscribe to keep access.`
+    return `Free trial active — ${banner.daysLeft} days remaining`
+  })()
+
+  const accentClass = isPastDue
+    ? 'bg-destructive/10 border-b border-destructive/20 text-destructive'
+    : isSubscribedTrial
+    ? 'bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+    : 'bg-amber-500/10 border-b border-amber-500/20 text-amber-700 dark:text-amber-400'
+
+  const Icon = isPastDue ? AlertTriangle : isSubscribedTrial ? CheckCircle2 : Zap
+
+  const stripContent = (
+    <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${accentClass}`}>
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon className="size-4 shrink-0" />
+        <span className="truncate font-medium">{message}</span>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {isPastDue && (
+          <button
+            onClick={() => router.push('/account')}
+            className="font-semibold underline underline-offset-4 whitespace-nowrap hover:opacity-80 transition-opacity text-sm"
+          >
+            Update payment
+          </button>
+        )}
         <button
           onClick={dismiss}
-          aria-label="Dismiss"
+          aria-label="Dismiss banner"
           className="opacity-60 hover:opacity-100 transition-opacity"
         >
           <X className="size-4" />
@@ -108,4 +145,20 @@ export function TrialBanner() {
       </div>
     </div>
   )
+
+  // Trial banner (unsubscribed) is fully clickable → /pricing
+  if (!isSubscribedTrial && !isPastDue) {
+    return (
+      <button
+        className="block w-full text-left"
+        onClick={() => router.push('/pricing')}
+        aria-label="View pricing"
+      >
+        {stripContent}
+      </button>
+    )
+  }
+
+  return stripContent
+}
 }

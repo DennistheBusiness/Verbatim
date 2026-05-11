@@ -17,8 +17,7 @@ import { Header } from "@/components/header"
 import { SplashScreen } from "@/components/splash-screen"
 import { MobileLibraryNav } from "@/components/mobile-library-nav"
 import { LibrarySkeletons } from "@/components/loading-skeletons"
-import { TodaysPracticeBanner } from "@/components/todays-practice-banner"
-import { useSetList, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
+import { TodaysPracticeBanner } from "@/components/todays-practice-banner"import { TrialBanner } from '@/components/trial-banner'import { useSetList, countWords, type MemorizationSet, type RecommendedStep } from "@/lib/memorization-context"
 import { trackEvent } from "@/lib/analytics"
 import * as AnalyticsEvents from "@/lib/analytics-events"
 import { cn } from "@/lib/utils"
@@ -416,6 +415,7 @@ export default function HomePage() {
           </div>
         }
       />
+      <TrialBanner />
 
       <main className="flex flex-1 flex-col gap-5 p-4 pb-24 md:pb-8">
         {sets.length === 0 ? (
