@@ -125,7 +125,7 @@ function SignupContent() {
       </div>
 
       {/* Right panel — form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 overflow-y-auto">
+      <div className="flex-1 flex flex-col items-center justify-start pt-10 p-6 sm:p-12 overflow-y-auto">
         {/* Mobile branding */}
         <div className="flex lg:hidden flex-col items-center gap-2 mb-10">
           <Image src="/verbatim-logo-icon.png" alt="Verbatim" width={160} height={160} className="-mb-5" style={{ width: 160, height: 160 }} />
@@ -206,9 +206,9 @@ function SignupContent() {
             </Link>
           </p>
         </div>
+        {/* Keyboard scroll spacer — keeps password field visible when virtual keyboard opens */}
+        <div className="h-[50vh] w-full shrink-0" aria-hidden="true" />
       </div>
-      {/* Keyboard scroll spacer — keeps form accessible when virtual keyboard opens */}
-      <div className="h-[50vh] shrink-0" aria-hidden="true" />
     </div>
   )
 }
