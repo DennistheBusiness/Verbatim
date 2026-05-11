@@ -6,9 +6,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 // Price IDs by plan — set in Vercel environment variables
 const PRICE_IDS: Record<string, string> = {
-  monthly:    process.env.STRIPE_MONTHLY_PRICE_ID    ?? '',
-  annual:     process.env.STRIPE_ANNUAL_PRICE_ID     ?? '',
-  three_year: process.env.STRIPE_THREE_YEAR_PRICE_ID ?? '',
+  monthly:    process.env.STRIPE_PRICE_MONTHLY ?? '',
+  annual:     process.env.STRIPE_PRICE_ANNUAL  ?? '',
+  three_year: process.env.STRIPE_PRICE_3YEAR   ?? '',
 }
 
 export async function POST(request: NextRequest) {
