@@ -268,10 +268,14 @@ export default function AccountPage() {
                       <p className={`text-xs capitalize ${
                         billingProfile.subscription_status === 'active' ? 'text-green-600 dark:text-green-400'
                         : billingProfile.subscription_status === 'past_due' ? 'text-destructive'
+                        : billingProfile.subscription_status === 'canceling' ? 'text-orange-600 dark:text-orange-400'
+                        : billingProfile.subscription_status === 'canceled' ? 'text-destructive'
                         : 'text-muted-foreground'
                       }`}>
                         {billingProfile.subscription_status === 'trialing' && billingProfile.trial_ends_at
                           ? `Trial ends ${new Date(billingProfile.trial_ends_at).toLocaleDateString()}`
+                          : billingProfile.subscription_status === 'canceling'
+                          ? 'Cancels at period end'
                           : billingProfile.subscription_status}
                       </p>
                     </div>
@@ -284,6 +288,14 @@ export default function AccountPage() {
                     <a href="/pricing">
                       <Zap className="size-4" />
                       Subscribe now
+                    </a>
+                  </Button>
+                )}
+                {(billingProfile.subscription_status === 'canceled' || billingProfile.subscription_status === 'canceling') && (
+                  <Button asChild variant="default" className="w-full gap-2">
+                    <a href="/pricing">
+                      <Zap className="size-4" />
+                      Resubscribe
                     </a>
                   </Button>
                 )}

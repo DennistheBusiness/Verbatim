@@ -95,7 +95,10 @@ export async function POST(request: NextRequest) {
         const planId = sub.metadata?.planId
         const customerId = sub.customer as string
 
-        const status = sub.status === 'active' ? 'active'
+        // cancel_at_period_end = user cancelled but retains access until period ends.
+        // We surface this as 'canceling' so the UI can show a warning without locking them out.
+        const status = sub.cancel_at_period_end ? 'canceling'
+          : sub.status === 'active' ? 'active'
           : sub.status === 'past_due' ? 'past_due'
           : sub.status === 'canceled' ? 'canceled'
           : sub.status === 'paused' ? 'paused'

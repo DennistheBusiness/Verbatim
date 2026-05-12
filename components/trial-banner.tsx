@@ -12,7 +12,7 @@ const PLAN_LABELS: Record<string, string> = {
   three_year: '3-Year Plan',
 }
 
-type BannerType = 'trial' | 'subscribed_trial' | 'past_due'
+type BannerType = 'trial' | 'subscribed_trial' | 'past_due' | 'canceling'
 
 interface BannerState {
   type: BannerType
@@ -61,6 +61,11 @@ export function TrialBanner() {
         return
       }
 
+      if (profile.subscription_status === 'canceling') {
+        setBanner({ type: 'canceling' })
+        return
+      }
+
       if (ent.isTrial && ent.trialEndsAt) {
         const days = trialDaysRemaining(ent.trialEndsAt)
         // No more trial days — don't show banner
@@ -91,6 +96,7 @@ export function TrialBanner() {
 
   const isSubscribedTrial = banner.type === 'subscribed_trial'
   const isPastDue = banner.type === 'past_due'
+  const isCanceling = banner.type === 'canceling'
 
   const dayText = banner.daysLeft === 0
     ? 'today'
@@ -100,6 +106,7 @@ export function TrialBanner() {
 
   const message = (() => {
     if (isPastDue) return 'Your payment failed. Please update your payment method to keep access.'
+    if (isCanceling) return 'Your subscription is cancelled — you keep access until the end of your billing period.'
     if (isSubscribedTrial) {
       return banner.daysLeft === 0
         ? `${banner.planLabel ?? 'Plan'} · Your free trial ends today`
@@ -114,11 +121,13 @@ export function TrialBanner() {
 
   const accentClass = isPastDue
     ? 'bg-destructive/10 border-b border-destructive/20 text-destructive'
+    : isCanceling
+    ? 'bg-orange-500/10 border-b border-orange-500/20 text-orange-700 dark:text-orange-400'
     : isSubscribedTrial
     ? 'bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
     : 'bg-amber-500/10 border-b border-amber-500/20 text-amber-700 dark:text-amber-400'
 
-  const Icon = isPastDue ? AlertTriangle : isSubscribedTrial ? CheckCircle2 : Zap
+  const Icon = isPastDue ? AlertTriangle : isCanceling ? AlertTriangle : isSubscribedTrial ? CheckCircle2 : Zap
 
   const stripContent = (
     <div className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${accentClass}`}>
@@ -135,6 +144,14 @@ export function TrialBanner() {
             Update payment
           </button>
         )}
+        {isCanceling && (
+          <button
+            onClick={() => router.push('/pricing')}
+            className="font-semibold underline underline-offset-4 whitespace-nowrap hover:opacity-80 transition-opacity text-sm"
+          >
+            Resubscribe
+          </button>
+        )}
         <button
           onClick={dismiss}
           aria-label="Dismiss banner"
@@ -147,7 +164,7 @@ export function TrialBanner() {
   )
 
   // Trial banner (unsubscribed) is fully clickable → /pricing
-  if (!isSubscribedTrial && !isPastDue) {
+  if (!isSubscribedTrial && !isPastDue && !isCanceling) {
     return (
       <button
         className="block w-full text-left"
