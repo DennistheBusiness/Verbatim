@@ -38,7 +38,7 @@ export interface ParsedWord {
 
 /**
  * Parses text into an array of words with their first letters.
- * Only includes words that contain at least one letter.
+ * Letters: first letter (lowercased). Numbers: first digit. & standalone: '&'.
  */
 export function parseWords(text: string): ParsedWord[] {
   return text
@@ -47,8 +47,11 @@ export function parseWords(text: string): ParsedWord[] {
     .map((word) => {
       // & is a valid standalone word — user must type '&' to advance
       if (word.startsWith('&')) return { word, firstLetter: '&' }
-      const match = word.match(/[a-zA-Z]/)
-      if (match) return { word, firstLetter: match[0].toLowerCase() }
+      const letterMatch = word.match(/[a-zA-Z]/)
+      if (letterMatch) return { word, firstLetter: letterMatch[0].toLowerCase() }
+      // Pure-numeric token (digits, commas, periods, hyphens) — first digit is required
+      const digitMatch = word.match(/[0-9]/)
+      if (digitMatch) return { word, firstLetter: digitMatch[0] }
       return null
     })
     .filter((item): item is ParsedWord => item !== null)

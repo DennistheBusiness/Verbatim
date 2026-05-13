@@ -142,7 +142,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       if (isMobileRef.current && !hasStartedRef.current) return
 
       const key = rawKey.toLowerCase()
-      if (!/^[a-z&]$/.test(key)) return
+      if (!/^[a-z&0-9]$/.test(key)) return
 
       const idx = currentIndexRef.current
       const now = Date.now()
@@ -230,7 +230,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     if (val.length > 0) {
-      const firstLetter = val.toLowerCase().match(/[a-z&]/)?.[0]
+      const firstLetter = val.toLowerCase().match(/[a-z&0-9]/)?.[0]
       if (firstLetter) processLetterInput(firstLetter)
     }
     e.target.value = ""
@@ -367,7 +367,7 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       {/* Progress Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
-          Type the first letter of each word
+          Type the first letter (or digit) of each word
         </span>
         <div className="flex items-center gap-3 text-sm">
           <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
@@ -394,10 +394,19 @@ export function FullFirstLetterTest({ setId, content, onRetry, onBack }: FullFir
       </p>
 
       {/* Hidden input captures keyboard input on mobile.
-          Fixed + bottom-0 means iOS focuses it in-place and never scrolls to it. */}
+          Fixed + bottom-0 means iOS focuses it in-place and never scrolls to it.
+          onBeforeInput reads e.data before value commits — more reliable for & and digits on iOS. */}
       <input
         ref={inputRef}
         value={mobileValue}
+        onBeforeInput={(e: React.FormEvent<HTMLInputElement> & { data?: string }) => {
+          if (!isMobileRef.current) return
+          const ch = e.data?.toLowerCase().match(/[a-z&0-9]/)?.[0]
+          if (ch) {
+            e.preventDefault()
+            processLetterInput(ch)
+          }
+        }}
         onChange={handleMobileChange}
         maxLength={1}
         inputMode="text"

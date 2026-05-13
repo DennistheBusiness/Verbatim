@@ -133,6 +133,25 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
+function parseContentChunks(content: string, mode: string): string[] {
+  const normalized = content.replace(/\r\n/g, '\n')
+  let texts: string[]
+  switch (mode) {
+    case 'line':
+      texts = normalized.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+      break
+    case 'sentence':
+      texts = normalized.replace(/\n+/g, ' ').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0)
+      break
+    case 'custom':
+      texts = normalized.split(/\/+/).map(c => c.trim()).filter(c => c.length > 0)
+      break
+    default:
+      texts = normalized.split(/\n\s*\n+/).map(p => p.trim()).filter(p => p.length > 0)
+  }
+  return texts.length > 0 ? texts : [content.trim()]
+}
+
 export default async function SharePreviewPage({ params }: PageProps) {
   await logShareRpcHealthOnce()
 
@@ -156,18 +175,21 @@ export default async function SharePreviewPage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
   const creatorMeta = await getCreatorMeta(token, set.user_id)
 
+  const allChunks = parseContentChunks(set.content, set.chunk_mode ?? 'paragraph')
   const wordCount = set.content.trim().split(/\s+/).filter((w: string) => w.length > 0).length
-  const sharedContentChunk = set.content.trim()
+  const PREVIEW_LIMIT = 2
+  const previewChunks = allChunks.slice(0, PREVIEW_LIMIT)
+  const hiddenCount = Math.max(0, allChunks.length - PREVIEW_LIMIT)
 
   return (
     <SharePreviewClient
       token={token}
       title={set.title}
       content={set.content}
-      chunkCount={1}
+      chunkCount={allChunks.length}
       wordCount={wordCount}
-      previewChunks={[sharedContentChunk]}
-      hiddenCount={0}
+      previewChunks={previewChunks}
+      hiddenCount={hiddenCount}
       creatorName={creatorMeta.name}
       groupName={creatorMeta.groupName}
       isLoggedIn={!!user}
