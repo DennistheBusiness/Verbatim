@@ -208,6 +208,8 @@ export function ChunkEncoder({
   }
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Desktop uses the window keydown handler exclusively — bail out to avoid double-processing.
+    if (!isMobileRef.current) { e.target.value = ""; return }
     const val = e.target.value
     if (val.length > 0) {
       const firstLetter = val.toLowerCase().match(/[a-z&0-9]/)?.[0]
