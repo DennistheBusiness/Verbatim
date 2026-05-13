@@ -2,102 +2,32 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Zap, ChevronRight, Loader2, Tag, X } from 'lucide-react'
+import { CheckCircle2, Loader2, Zap, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { createClient } from '@/lib/supabase/client'
-import { resolveEntitlement, type BillingProfile } from '@/lib/entitlements'
+import { Card, CardContent } from '@/components/ui/card'
+import { toast } from 'sonner'
+import type { PurchasesPackage } from '@revenuecat/purchases-capacitor'
 
-const PLANS = [
-  {
-    id: 'monthly',
-    name: 'Monthly',
-    price: '$7/mo',
-    detail: 'Billed monthly',
-    highlighted: false,
-  },
-  {
-    id: 'annual',
-    name: 'Annual',
-    price: '$5/mo',
-    detail: 'Billed $60/year',
-    highlighted: true,
-    badge: 'Most Popular',
-  },
-  {
-    id: 'three_year',
-    name: '3-Year',
-    price: '$100',
-    detail: 'One payment, 3 years',
-    highlighted: false,
-    badge: 'Best Deal',
-  },
-] as const
+type ViewState = 'loading' | 'ready' | 'purchasing' | 'restoring' | 'error'
 
 export default function SubscribePage() {
   const router = useRouter()
-  const supabase = createClient()
-  const [loading, setLoading] = useState<string | null>(null)
-  const [checking, setChecking] = useState(true)
-  const [promoCode, setPromoCode] = useState('')
-  const [promoOpen, setPromoOpen] = useState(false)
-  const [promoError, setPromoError] = useState<string | null>(null)
-  const [promoApplied, setPromoApplied] = useState(false)
+  const [isNative, setIsNative] = useState<boolean | null>(null)
 
-  // If user already has access, send them home
+  // Detect platform on mount, redirect web users to pricing
   useEffect(() => {
-    async function check() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/auth/login'); return }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('user_role, plan_type, subscription_status, trial_ends_at, plan_expires_at')
-        .eq('id', user.id)
-        .single()
-
-      if (profile) {
-        const ent = resolveEntitlement(profile as BillingProfile)
-        if (ent.hasAccess) { router.replace('/'); return }
-      }
-      setChecking(false)
-    }
-    check()
-  }, [supabase, router])
-
-  const handleSubscribe = async (planId: string) => {
-    setLoading(planId)
-    setPromoError(null)
-    try {
-      const res = await fetch('/api/billing/create-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId, promoCode: promoApplied ? promoCode.trim() : undefined }),
-      })
-      const { url, error } = await res.json()
-      if (error) {
-        if (error.toLowerCase().includes('promo')) {
-          setPromoError(error)
-          setPromoApplied(false)
-        }
-        setLoading(null)
+    async function detect() {
+      const { Capacitor } = await import('@capacitor/core')
+      if (!Capacitor.isNativePlatform()) {
+        router.replace('/pricing')
         return
       }
-      window.location.href = url
-    } catch {
-      setLoading(null)
+      setIsNative(true)
     }
-  }
+    detect()
+  }, [router])
 
-  const handleApplyPromo = () => {
-    if (!promoCode.trim()) return
-    setPromoApplied(true)
-    setPromoError(null)
-  }
-
-  if (checking) {
+  if (isNative === null) {
     return (
       <div className="flex min-h-svh items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -105,104 +35,181 @@ export default function SubscribePage() {
     )
   }
 
+  return <NativeSubscribeScreen />
+}
+
+function NativeSubscribeScreen() {
+  const router = useRouter()
+  const [viewState, setViewState] = useState<ViewState>('loading')
+  const [packages, setPackages] = useState<PurchasesPackage[]>([])
+
+  useEffect(() => {
+    async function loadOfferings() {
+      try {
+        const { Purchases } = await import('@revenuecat/purchases-capacitor')
+        const offerings = await Purchases.getOfferings()
+        const pkgs = offerings.current?.availablePackages ?? []
+        setPackages(pkgs)
+        setViewState(pkgs.length > 0 ? 'ready' : 'error')
+      } catch (err) {
+        console.error('Failed to load offerings:', err)
+        setViewState('error')
+      }
+    }
+    loadOfferings()
+  }, [])
+
+  async function handlePurchase(pkg: PurchasesPackage) {
+    setViewState('purchasing')
+    try {
+      const { Purchases } = await import('@revenuecat/purchases-capacitor')
+      await Purchases.purchasePackage({ aPackage: pkg })
+      toast.success('Subscription activated!')
+      router.replace('/')
+    } catch (err: unknown) {
+      // User cancelled is not an error
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!msg.includes('userCancelled') && !msg.includes('1')) {
+        toast.error('Purchase failed. Please try again.')
+      }
+      setViewState('ready')
+    }
+  }
+
+  async function handleRestore() {
+    setViewState('restoring')
+    try {
+      const { Purchases } = await import('@revenuecat/purchases-capacitor')
+      const { customerInfo } = await Purchases.restorePurchases()
+      if ('pro' in customerInfo.entitlements.active) {
+        toast.success('Purchases restored!')
+        router.replace('/')
+      } else {
+        toast.info('No active subscription found.')
+        setViewState('ready')
+      }
+    } catch {
+      toast.error('Restore failed. Please try again.')
+      setViewState('ready')
+    }
+  }
+
+  const isBusy = viewState === 'purchasing' || viewState === 'restoring'
+
+  // Sort: annual first, then monthly
+  const sorted = [...packages].sort((a, b) => {
+    const rank = (id: string) => id.includes('annual') ? 0 : 1
+    return rank(a.identifier) - rank(b.identifier)
+  })
+
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center px-4 py-12 bg-background">
-      <div className="w-full max-w-md flex flex-col gap-8">
-        {/* Icon + heading */}
-        <div className="flex flex-col items-center gap-4 text-center">
+    <div className="flex min-h-svh flex-col items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm flex flex-col gap-8">
+
+        {/* Header */}
+        <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
-            <Zap className="size-8 text-primary" />
+            <Zap className="size-8 text-primary" strokeWidth={1.5} />
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Your trial has ended</h1>
-            <p className="mt-2 text-muted-foreground">
-              Subscribe to continue using Verbatim — all features included in every plan.
-            </p>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Verbatim Premium</h1>
+          <p className="text-sm text-muted-foreground">
+            Memorize anything. Unlock full access to all learning modes.
+          </p>
         </div>
 
-        {/* Plan cards */}
-        <div className="flex flex-col gap-3">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.id}
-              className={`flex items-center justify-between rounded-xl border px-5 py-4 ${
-                plan.highlighted ? 'border-primary bg-primary/5' : 'bg-card'
-              }`}
+        {/* Feature list */}
+        <ul className="flex flex-col gap-2">
+          {[
+            'Unlimited memorization sets',
+            'All encoding methods',
+            'Audio record & playback',
+            'First Letter Recall tests',
+            'Spaced repetition scheduling',
+          ].map((item) => (
+            <li key={item} className="flex items-center gap-3 text-sm">
+              <CheckCircle2 className="size-4 shrink-0 text-primary" />
+              {item}
+            </li>
+          ))}
+        </ul>
+
+        {/* Packages */}
+        {viewState === 'loading' && (
+          <div className="flex justify-center py-4">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {viewState === 'error' && (
+          <p className="text-center text-sm text-destructive">
+            Unable to load plans. Check your connection and try again.
+          </p>
+        )}
+
+        {(viewState === 'ready' || isBusy) && sorted.map((pkg) => {
+          const isAnnual = pkg.identifier.includes('annual')
+          return (
+            <Card
+              key={pkg.identifier}
+              className={isAnnual ? 'border-primary/40 bg-primary/5' : undefined}
             >
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{plan.name}</span>
-                  {'badge' in plan && plan.badge && (
-                    <Badge className="text-xs">{plan.badge}</Badge>
-                  )}
+              <CardContent className="flex items-center justify-between py-4">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">
+                      {isAnnual ? 'Annual' : 'Monthly'}
+                    </span>
+                    {isAnnual && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        Best value
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {pkg.product.priceString}{isAnnual ? '/year' : '/month'}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground">{plan.detail}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-bold">{plan.price}</span>
                 <Button
                   size="sm"
-                  variant={plan.highlighted ? 'default' : 'outline'}
-                  disabled={loading !== null}
-                  onClick={() => handleSubscribe(plan.id)}
-                  className="gap-1"
+                  variant={isAnnual ? 'default' : 'outline'}
+                  disabled={isBusy}
+                  onClick={() => handlePurchase(pkg)}
                 >
-                  {loading === plan.id ? <Loader2 className="size-3 animate-spin" /> : null}
-                  Choose
-                  <ChevronRight className="size-3" />
+                  {viewState === 'purchasing' ? <Loader2 className="size-4 animate-spin" /> : 'Subscribe'}
                 </Button>
-              </div>
-            </div>
-          ))}
+              </CardContent>
+            </Card>
+          )
+        })}
+
+        {/* Restore + legal */}
+        <div className="flex flex-col items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isBusy}
+            onClick={handleRestore}
+            className="gap-2 text-muted-foreground"
+          >
+            {viewState === 'restoring'
+              ? <Loader2 className="size-4 animate-spin" />
+              : <RefreshCw className="size-4" />}
+            Restore Purchases
+          </Button>
+          <p className="text-center text-xs text-muted-foreground px-4">
+            Payment will be charged to your Apple ID account at confirmation of purchase.
+            Subscriptions automatically renew unless canceled at least 24 hours before the end of the current period.
+          </p>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <a href="https://verbatim.squaredthought.com/privacy" className="underline underline-offset-2">
+              Privacy Policy
+            </a>
+            <a href="https://verbatim.squaredthought.com/terms" className="underline underline-offset-2">
+              Terms of Use
+            </a>
+          </div>
         </div>
 
-        {/* Promo code */}
-        <div>
-          {!promoOpen ? (
-            <button
-              onClick={() => setPromoOpen(true)}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mx-auto w-full justify-center"
-            >
-              <Tag className="size-3.5" />
-              Have a promo code?
-            </button>
-          ) : (
-            <div className="rounded-xl border bg-card p-4 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Promo code</span>
-                <button onClick={() => { setPromoOpen(false); setPromoCode(''); setPromoApplied(false); setPromoError(null) }}>
-                  <X className="size-4 text-muted-foreground hover:text-foreground" />
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter promo code"
-                  value={promoCode}
-                  onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoApplied(false); setPromoError(null) }}
-                  className="font-mono uppercase"
-                  onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
-                />
-                <Button variant="outline" onClick={handleApplyPromo} disabled={!promoCode.trim()}>
-                  Apply
-                </Button>
-              </div>
-              {promoApplied && !promoError && (
-                <p className="text-xs text-green-600 font-medium">✓ Code applied — discount shown at checkout</p>
-              )}
-              {promoError && (
-                <p className="text-xs text-destructive">{promoError}</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <p className="text-center text-xs text-muted-foreground">
-          By subscribing you agree to our{' '}
-          <Link href="/terms" className="underline">Terms of Service</Link>{' '}
-          and{' '}
-          <Link href="/privacy" className="underline">Privacy Policy</Link>.
-        </p>
       </div>
     </div>
   )

@@ -2,79 +2,66 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { resolveEntitlement, type Entitlement, type BillingProfile } from '@/lib/entitlements'
-import { FEATURE_FLAGS, roleHasAccess, type FeatureFlagKey } from '@/lib/feature-flags'
 
-const DEFAULT_ENTITLEMENT: Entitlement = {
-  hasAccess: true,      // optimistic while loading — middleware catches real access
-  tier: 'general',
-  isTrial: true,
-  trialEndsAt: null,
-  isActive: false,
-  needsSubscription: false,
-  planType: 'none',
-  status: 'trialing',
+interface Entitlements {
+  isPro: boolean
+  isTrialing: boolean
+  isLoading: boolean
 }
 
-/**
- * Fetches the current user's billing profile and resolves their entitlement.
- * Refreshes automatically when the Supabase session changes.
- */
-export function useEntitlements() {
-  const supabase = createClient()
-  const [entitlement, setEntitlement] = useState<Entitlement>(DEFAULT_ENTITLEMENT)
-  const [loading, setLoading] = useState(true)
+export function useEntitlements(): Entitlements {
+  const [isPro, setIsPro] = useState(false)
+  const [isTrialing, setIsTrialing] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
+    let cancelled = false
 
-    async function fetchEntitlement() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || !mounted) {
-        setLoading(false)
-        return
+    async function check() {
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+
+        if (Capacitor.isNativePlatform()) {
+          // iOS: check RevenueCat CustomerInfo for 'pro' entitlement
+          const { Purchases } = await import('@revenuecat/purchases-capacitor')
+          const { customerInfo } = await Purchases.getCustomerInfo()
+          if (!cancelled) {
+            setIsPro('pro' in customerInfo.entitlements.active)
+            setIsTrialing(false)
+          }
+        } else {
+          // Web: check Supabase profile subscription_status
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) { setIsLoading(false); return }
+
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('subscription_status, trial_ends_at, plan_type, user_role')
+            .eq('id', user.id)
+            .single()
+
+          if (!cancelled && profile) {
+            const role = profile.user_role as string
+            const status = profile.subscription_status as string
+            const trialing = status === 'trialing' &&
+              !!profile.trial_ends_at &&
+              new Date(profile.trial_ends_at) > new Date()
+
+            setIsPro(role === 'admin' || status === 'active' || trialing)
+            setIsTrialing(trialing)
+          }
+        }
+      } catch (err) {
+        console.error('useEntitlements error:', err)
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('user_role, plan_type, subscription_status, trial_ends_at, plan_expires_at')
-        .eq('id', user.id)
-        .single()
-
-      if (!mounted) return
-
-      if (profile) {
-        setEntitlement(resolveEntitlement(profile as BillingProfile))
-      }
-      setLoading(false)
     }
 
-    fetchEntitlement()
+    check()
+    return () => { cancelled = true }
+  }, [])
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchEntitlement()
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [supabase])
-
-  /** Returns true if the user has access to the named feature */
-  function canUse(flag: FeatureFlagKey): boolean {
-    const def = FEATURE_FLAGS[flag]
-    return roleHasAccess(entitlement.tier, def.access)
-  }
-
-  return { entitlement, loading, canUse }
-}
-
-/**
- * Lightweight hook — only returns whether the user has app access.
- * Useful for paywall checks without the full entitlement object.
- */
-export function useHasAccess(): { hasAccess: boolean; loading: boolean } {
-  const { entitlement, loading } = useEntitlements()
-  return { hasAccess: entitlement.hasAccess, loading }
+  return { isPro, isTrialing, isLoading }
 }
