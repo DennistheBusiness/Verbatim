@@ -41,6 +41,9 @@ export function useMemorizationPage(id: string): MemorizationPageState {
   const [showSystemInfo, setShowSystemInfo] = useState(false)
   const [showSharePanel, setShowSharePanel] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  // Tracks whether the user revoked the token this session so handleShare
+  // generates a fresh link instead of re-using the stale context value.
+  const [shareTokenRevoked, setShareTokenRevoked] = useState(false)
   const [ttsVisited, setTtsVisited] = useState(false)
   const [readerVisited, setReaderVisited] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
@@ -67,7 +70,7 @@ export function useMemorizationPage(id: string): MemorizationPageState {
 
   const handleShare = useCallback(async () => {
     if (!set) return
-    if (set.shareToken) {
+    if (set.shareToken && !shareTokenRevoked) {
       setShareUrl(`${window.location.origin}/share/${set.shareToken}`)
       setShowSharePanel(true)
       return
@@ -82,6 +85,7 @@ export function useMemorizationPage(id: string): MemorizationPageState {
       const data = await res.json()
       if (res.ok) {
         setShareUrl(data.url)
+        setShareTokenRevoked(false)
         setShowSharePanel(true)
       } else {
         toast.error(data.error || "Failed to generate share link")
@@ -91,7 +95,7 @@ export function useMemorizationPage(id: string): MemorizationPageState {
     } finally {
       setShareLoading(false)
     }
-  }, [set])
+  }, [set, shareTokenRevoked])
 
   const handleCopyShareUrl = useCallback(() => {
     if (!shareUrl) return
@@ -110,6 +114,7 @@ export function useMemorizationPage(id: string): MemorizationPageState {
         body: JSON.stringify({ setId: set.id }),
       })
       setShareUrl(null)
+      setShareTokenRevoked(true)
       setShowSharePanel(false)
       toast.success("Share link disabled")
     } catch {
