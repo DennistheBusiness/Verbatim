@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { identifyUser, resetUser } from '@/lib/analytics'
 import { useDeepLinks } from '@/hooks/use-deep-links'
-import { initCapacitorPlugins } from '@/lib/capacitor'
+import { initCapacitorPlugins, identifyRevenueCatUser, resetRevenueCatUser } from '@/lib/capacitor'
 
 /**
  * SessionHandler component
@@ -60,6 +60,7 @@ export function SessionHandler() {
       switch (event) {
         case 'SIGNED_OUT':
           resetUser()
+          resetRevenueCatUser().catch(console.error)
           if (pathname !== '/auth/login') {
             toast.info('You have been signed out')
           }
@@ -80,6 +81,7 @@ export function SessionHandler() {
           // Covers Google OAuth — email login identifies in the login page handler
           if (session?.user) {
             identifyUser(session.user.id, { email: session.user.email ?? undefined })
+            identifyRevenueCatUser(session.user.id).catch(console.error)
           }
           if (pathname.startsWith('/auth/') && pathname !== '/auth/reset-password') {
             router.push('/')

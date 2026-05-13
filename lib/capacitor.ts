@@ -36,4 +36,29 @@ export async function initCapacitorPlugins() {
   Keyboard.addListener('keyboardWillHide', () => {
     document.documentElement.style.paddingBottom = ''
   })
+
+  // Initialize RevenueCat — must run on native before any entitlement checks
+  const { Purchases } = await import('@revenuecat/purchases-capacitor')
+  await Purchases.configure({
+    apiKey: process.env.NEXT_PUBLIC_REVENUECAT_IOS_API_KEY!,
+  })
 }
+
+// Call after Supabase user is confirmed — ties RC customer to our user ID
+export async function identifyRevenueCatUser(userId: string) {
+  if (typeof window === 'undefined') return
+  const { Capacitor } = await import('@capacitor/core')
+  if (!Capacitor.isNativePlatform()) return
+  const { Purchases } = await import('@revenuecat/purchases-capacitor')
+  await Purchases.logIn({ appUserID: userId })
+}
+
+// Call on sign-out — resets RC to anonymous customer
+export async function resetRevenueCatUser() {
+  if (typeof window === 'undefined') return
+  const { Capacitor } = await import('@capacitor/core')
+  if (!Capacitor.isNativePlatform()) return
+  const { Purchases } = await import('@revenuecat/purchases-capacitor')
+  await Purchases.logOut()
+}
+
