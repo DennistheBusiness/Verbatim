@@ -42,6 +42,13 @@ export default function AccountPage() {
     stripe_customer_id: string | null
   } | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [isNative, setIsNative] = useState(false)
+
+  useEffect(() => {
+    import('@capacitor/core').then(({ Capacitor }) => {
+      setIsNative(Capacitor.isNativePlatform())
+    })
+  }, [])
 
   useEffect(() => {
     const getUser = async () => {
@@ -283,9 +290,17 @@ export default function AccountPage() {
                 </div>
 
                 {/* Actions */}
+                {billingProfile.plan_type === 'free' && (
+                  <Button asChild variant="default" className="w-full gap-2">
+                    <a href={isNative ? '/subscribe' : '/pricing'}>
+                      <Zap className="size-4" />
+                      Upgrade to Premium
+                    </a>
+                  </Button>
+                )}
                 {billingProfile.subscription_status === 'trialing' && (
                   <Button asChild variant="default" className="w-full gap-2">
-                    <a href="/pricing">
+                    <a href={isNative ? '/subscribe' : '/pricing'}>
                       <Zap className="size-4" />
                       Subscribe now
                     </a>
@@ -293,14 +308,14 @@ export default function AccountPage() {
                 )}
                 {(billingProfile.subscription_status === 'canceled' || billingProfile.subscription_status === 'canceling') && (
                   <Button asChild variant="default" className="w-full gap-2">
-                    <a href="/pricing">
+                    <a href={isNative ? '/subscribe' : '/pricing'}>
                       <Zap className="size-4" />
                       Resubscribe
                     </a>
                   </Button>
                 )}
 
-                {billingProfile.stripe_customer_id && (
+                {!isNative && billingProfile.stripe_customer_id && (
                   <Button
                     variant="outline"
                     className="w-full gap-2"
@@ -313,7 +328,9 @@ export default function AccountPage() {
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  Change plan, update payment method, or cancel — all handled securely by Stripe.
+                  {isNative
+                    ? 'Manage your subscription in iOS Settings → Apple ID → Subscriptions.'
+                    : 'Change plan, update payment method, or cancel — all handled securely by Stripe.'}
                 </p>
               </div>
             </CardContent>
