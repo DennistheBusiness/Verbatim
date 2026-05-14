@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, Zap, Star, ChevronRight, Tag, X } from 'lucide-react'
+import { Check, Zap, Star, ChevronRight, Tag, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -52,11 +53,31 @@ const FEATURES = [
 ]
 
 export default function PricingPage() {
+  const router = useRouter()
+  const [isNativeChecked, setIsNativeChecked] = useState(false)
   const [loading, setLoading] = useState<string | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoOpen, setPromoOpen] = useState(false)
   const [promoError, setPromoError] = useState<string | null>(null)
   const [promoApplied, setPromoApplied] = useState(false)
+
+  useEffect(() => {
+    import('@capacitor/core').then(({ Capacitor }) => {
+      if (Capacitor.isNativePlatform()) {
+        router.replace('/subscribe')
+      } else {
+        setIsNativeChecked(true)
+      }
+    })
+  }, [router])
+
+  if (!isNativeChecked) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   const handleSubscribe = async (planId: string) => {
     setLoading(planId)
