@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import type { PurchasesPackage } from '@revenuecat/purchases-capacitor'
+import { initCapacitorPlugins } from '@/lib/capacitor'
 
 type ViewState = 'loading' | 'ready' | 'purchasing' | 'restoring' | 'error'
 
@@ -46,6 +47,7 @@ function NativeSubscribeScreen() {
   useEffect(() => {
     async function loadOfferings() {
       try {
+        await initCapacitorPlugins()
         const { Purchases } = await import('@revenuecat/purchases-capacitor')
         const offerings = await Purchases.getOfferings()
         const pkgs = offerings.current?.availablePackages ?? []
