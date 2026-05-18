@@ -39,9 +39,11 @@ export async function initCapacitorPlugins() {
 
   // Initialize RevenueCat — must run on native before any entitlement checks
   const { Purchases } = await import('@revenuecat/purchases-capacitor')
-  await Purchases.configure({
-    apiKey: process.env.NEXT_PUBLIC_REVENUECAT_IOS_API_KEY!,
-  })
+  const platform = Capacitor.getPlatform()
+  const rcApiKey = platform === 'android'
+    ? process.env.NEXT_PUBLIC_REVENUECAT_ANDROID_API_KEY!
+    : process.env.NEXT_PUBLIC_REVENUECAT_IOS_API_KEY!
+  await Purchases.configure({ apiKey: rcApiKey })
 }
 
 // Call after Supabase user is confirmed — ties RC customer to our user ID
