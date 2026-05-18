@@ -47,8 +47,12 @@ function NativeSubscribeScreen() {
   useEffect(() => {
     async function loadOfferings() {
       try {
+        // Ensure RC is initialized (session-handler runs it at startup, but guard here
+        // for direct navigation to /subscribe before session-handler has mounted)
         await initCapacitorPlugins()
         const { Purchases } = await import('@revenuecat/purchases-capacitor')
+        // Small delay so any in-flight configure() call from session-handler settles
+        await new Promise(resolve => setTimeout(resolve, 300))
         const offerings = await Purchases.getOfferings()
         const pkgs = offerings.current?.availablePackages ?? []
         setPackages(pkgs)
@@ -61,11 +65,25 @@ function NativeSubscribeScreen() {
     loadOfferings()
   }, [])
 
+  async function syncToDatabase(productId?: string, expirationDate?: string | null) {
+    try {
+      await fetch('/api/billing/revenuecat-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, expirationDate }),
+      })
+    } catch (err) {
+      console.error('[subscribe] revenuecat-sync failed', err)
+    }
+  }
+
   async function handlePurchase(pkg: PurchasesPackage) {
     setViewState('purchasing')
     try {
       const { Purchases } = await import('@revenuecat/purchases-capacitor')
-      await Purchases.purchasePackage({ aPackage: pkg })
+      const { customerInfo } = await Purchases.purchasePackage({ aPackage: pkg })
+      await syncToDatabase(pkg.product.identifier, customerInfo.latestExpirationDate)
+      sessionStorage.setItem('billingBannerDismissed', '1')
       toast.success('Subscription activated!')
       router.replace('/')
     } catch (err: unknown) {
@@ -84,6 +102,9 @@ function NativeSubscribeScreen() {
       const { Purchases } = await import('@revenuecat/purchases-capacitor')
       const { customerInfo } = await Purchases.restorePurchases()
       if ('pro' in customerInfo.entitlements.active) {
+        const activeEntitlement = customerInfo.entitlements.active['pro']
+        await syncToDatabase(activeEntitlement?.productIdentifier, customerInfo.latestExpirationDate)
+        sessionStorage.setItem('billingBannerDismissed', '1')
         toast.success('Purchases restored!')
         router.replace('/')
       } else {

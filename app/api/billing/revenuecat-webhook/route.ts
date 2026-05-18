@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 
 // RC sends the Authorization header value you configured in the dashboard
 function isAuthorized(request: NextRequest): boolean {
@@ -20,8 +20,8 @@ interface RCWebhookEvent {
 
 function planTypeFromProductId(productId?: string): string {
   if (!productId) return 'pro'
-  if (productId.includes('annual')) return 'annual'
-  if (productId.includes('monthly')) return 'monthly'
+  if (productId.includes('annual') || productId.includes('vyear')) return 'annual'
+  if (productId.includes('monthly') || productId.includes('vmonth')) return 'monthly'
   return 'pro'
 }
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing app_user_id' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   switch (type) {
     case 'INITIAL_PURCHASE':
