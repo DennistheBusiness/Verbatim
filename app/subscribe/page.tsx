@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { CheckCircle2, Loader2, Zap, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -191,6 +192,9 @@ function NativeSubscribeScreen() {
                   <span className="text-sm text-muted-foreground">
                     {pkg.product.priceString}{isAnnual ? '/year' : '/month'}
                   </span>
+                  <span className="text-xs text-muted-foreground">
+                    {isAnnual ? 'Billed every 12 months' : 'Billed every month'}
+                  </span>
                 </div>
                 <Button
                   size="sm"
@@ -224,12 +228,12 @@ function NativeSubscribeScreen() {
             Subscriptions automatically renew unless canceled at least 24 hours before the end of the current period.
           </p>
           <div className="flex gap-4 text-xs text-muted-foreground">
-            <a href="https://verbatim.squaredthought.com/privacy" className="underline underline-offset-2">
+            <Link href="/privacy" className="underline underline-offset-2">
               Privacy Policy
-            </a>
-            <a href="https://verbatim.squaredthought.com/terms" className="underline underline-offset-2">
+            </Link>
+            <Link href="/terms" className="underline underline-offset-2">
               Terms of Use
-            </a>
+            </Link>
           </div>
         </div>
 
