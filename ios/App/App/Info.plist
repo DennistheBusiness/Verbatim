@@ -49,5 +49,9 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Verbatim uses the microphone to record audio for memorization sets.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Verbatim uses the camera to photograph text for extraction into memorization sets.</string>
 </dict>
 </plist>
