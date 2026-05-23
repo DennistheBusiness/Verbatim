@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useRef } from 'react'
+import { Suspense, useState, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -37,10 +37,16 @@ function LoginContent() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [isIos, setIsIos] = useState(false)
   const turnstileRef = useRef<TurnstileInstance>(null)
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
   const supabase = createClient()
+
+  useEffect(() => {
+    const cap = (window as any).Capacitor
+    if (cap?.isNativePlatform?.() && cap.getPlatform?.() === 'ios') setIsIos(true)
+  }, [])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -352,7 +358,8 @@ function LoginContent() {
             Continue with Google
           </Button>
 
-          {/* Apple */}
+          {/* Apple — iOS only */}
+          {isIos && (
           <Button
             type="button"
             size="lg"
@@ -365,6 +372,7 @@ function LoginContent() {
             </svg>
             Continue with Apple
           </Button>
+          )}
 
           <p className="text-[14px] text-muted-foreground text-center">
             Don&apos;t have an account?{' '}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useRef } from 'react'
+import { Suspense, useState, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -35,11 +35,17 @@ function SignupContent() {
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [isIos, setIsIos] = useState(false)
   const turnstileRef = useRef<TurnstileInstance>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const importShare = searchParams.get('importShare')
   const supabase = createClient()
+
+  useEffect(() => {
+    const cap = (window as any).Capacitor
+    if (cap?.isNativePlatform?.() && cap.getPlatform?.() === 'ios') setIsIos(true)
+  }, [])
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -213,7 +219,8 @@ function SignupContent() {
             Continue with Google
           </Button>
 
-          {/* Apple */}
+          {/* Apple — iOS only */}
+          {isIos && (
           <Button
             type="button"
             size="lg"
@@ -226,6 +233,7 @@ function SignupContent() {
             </svg>
             Continue with Apple
           </Button>
+          )}
 
           <div className="relative flex items-center gap-3">
             <div className="flex-1 border-t" />
