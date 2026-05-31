@@ -50,7 +50,8 @@ function SignupContent() {
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) { toast.error('Passwords do not match'); return }
-    if (password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    if (password.length < 12) { toast.error('Password must be at least 12 characters'); return }
+    if (!/[^a-zA-Z0-9]/.test(password)) { toast.error('Password must contain at least one special character'); return }
     if (!captchaToken) { toast.error('Please complete the security check'); return }
     setLoading(true)
     try {
@@ -252,7 +253,7 @@ function SignupContent() {
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Min. 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} className="h-11" />
+              <Input id="password" type="password" placeholder="Min. 12 chars, 1 special character" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} className="h-11" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
