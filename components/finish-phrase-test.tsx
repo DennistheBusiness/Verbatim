@@ -259,13 +259,6 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
   useEffect(() => { totalWrongRef.current = totalWrong }, [totalWrong])
   useEffect(() => { chunkOrderRef.current = chunkOrder }, [chunkOrder])
 
-  // Scroll bottom into view on mobile whenever active word advances
-  useEffect(() => {
-    if (isMobileRef.current && hasStartedRef.current) {
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50)
-    }
-  }, [activeIndex])
-
   const initChunk = useCallback((queue: number[], pos: number, autoStart = false) => {
     const realIdx = queue[pos]
     if (realIdx === undefined || realIdx >= chunks.length) return
@@ -853,7 +846,7 @@ export function FinishPhraseTest({ setId, chunks, onBack }: FinishPhraseTestProp
 
       <input
         ref={inputRef}
-        className="sr-only"
+        className="fixed bottom-0 left-0 w-px h-px opacity-0 pointer-events-none"
         value={mobileValue}
         onChange={handleMobileChange}
         onFocus={() => {
